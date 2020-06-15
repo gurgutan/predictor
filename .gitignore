@@ -1,0 +1,23 @@
+__pycache__/*
+*.pyc
+# файлы данных
+*.npy
+*.npz
+*.csv
+*.7z
+# папка с данными
+data/*
+# локальные настройки vs code
+.vscode/*
+# временные
+tmp*
+# логи
+logs/*
+results/.fuse_*
+# модели
+results/*
+*.h5
+*.tf 
+*.ckpt.*
+checkpoint
+

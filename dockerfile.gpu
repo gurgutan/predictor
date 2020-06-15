@@ -1,0 +1,13 @@
+FROM tensorflow/tensorflow:latest-gpu-py3
+
+WORKDIR /StockMonitoring/
+
+RUN pip3 install --upgrade pip
+RUN pip3 install --upgrade setuptools
+RUN pip3 install --upgrade pandas pydot 
+RUN pip3 install --upgrade graphviz tqdm matplotlib
+
+EXPOSE 1979/tcp
+
+ENTRYPOINT /bin/bash -c "python3 ./predictor.py --train"
+#/mnt/12C2DF64C2DF4B1D/Dev/python/sm/StockMonitoring/dockerfile.gpu
