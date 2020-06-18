@@ -2,12 +2,12 @@
 # FROM docker.io/intelaipg/intel-optimized-tensorflow:2.0.0-mkl-py3
 FROM docker.io/intelaipg/intel-optimized-tensorflow:latest
 
-WORKDIR /StockMonitoring/
+RUN pip3 install --upgrade pip
+RUN pip3 install --upgrade setuptools
+RUN pip3 install --upgrade pandas pydot 
+RUN pip3 install --upgrade graphviz tqdm matplotlib
 
-RUN pip3 install --upgrade pip && \
-    pip3 install --upgrade setuptools pandas pydot graphviz tqdm
-
-# перенести из trainer.py сюда все переменные окружения
+# Переменные окружения для настройки параллелизма intel cpu
 ENV KMP_ABORT_DELAY 0
 ENV KMP_ADAPTIVE_LOCK_PROPS 1,1024
 ENV KMP_ALIGN_ALLOC 64

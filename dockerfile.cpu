@@ -1,11 +1,9 @@
 FROM tensorflow/tensorflow:latest-py3
-# При использовании оптимизированного Intel образа производительность деградирует более чем в 2 раза
-# FROM docker.io/intelaipg/intel-optimized-tensorflow:2.0.0-mkl-py3
 
-WORKDIR /StockMonitoring/
-
-RUN pip3 install --upgrade pip && \
-    pip3 install --upgrade setuptools pandas pydot graphviz tqdm
+RUN pip3 install --upgrade pip
+RUN pip3 install --upgrade setuptools
+RUN pip3 install --upgrade pandas pydot 
+RUN pip3 install --upgrade graphviz tqdm matplotlib
 
 
 EXPOSE 1979/tcp

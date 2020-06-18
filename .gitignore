@@ -20,4 +20,8 @@ results/*
 *.tf 
 *.ckpt.*
 checkpoint
-
+*.pb
+variables.*
+# архивы
+*.zip
+*.gz
