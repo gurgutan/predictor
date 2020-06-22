@@ -224,7 +224,7 @@ class Predictor(object):
             log_dir=log_dir, histogram_freq=1, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
-            monitor="loss", patience=32, min_delta=1e-4, restore_best_weights=False
+            monitor="val_loss", patience=8, min_delta=1e-3, restore_best_weights=False
         )
         cp_save = keras.callbacks.ModelCheckpoint(filepath=ckpt, save_weights_only=True)
         history = self.model.fit(
