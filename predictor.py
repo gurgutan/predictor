@@ -16,7 +16,7 @@ from datainfo import DatasetInfo
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = '2'
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 def roll(a, size, dx=1):
@@ -39,7 +39,7 @@ def embed(v, min_v, max_v, dim):
 
 def unembed(n, min_v, max_v, dim):
     step_size = (dim - 1) / (max_v - min_v)
-    v = min_v + n*step_size
+    v = min_v + n * step_size
     return v
 
 
@@ -130,9 +130,11 @@ class Predictor(object):
                     self.datainfo.input_shape[2],
                 )
             )
-        closes = np.array(close_list[-in_size - 1:])
+        closes = np.array(close_list[-in_size - 1 :])
         d = np.nan_to_num(
-            np.diff(closes) / self.datainfo.x_std, posinf=self.datainfo._x_inf(), neginf=-self.datainfo._x_inf()
+            np.diff(closes) / self.datainfo.x_std,
+            posinf=self.datainfo._x_inf(),
+            neginf=-self.datainfo._x_inf(),
         )
         x = np.reshape(
             d,
@@ -154,15 +156,14 @@ class Predictor(object):
         Возврат:
         x, y - размеченные данные типа numpy.array, сохранные на диск файл dataset_file"""
 
-        stride = 4  # шаг "нарезки" входных данных
+        stride = 1  # шаг "нарезки" входных данных
         in_shape = self.datainfo.input_shape
         out_shape = self.datainfo.output_shape
         future = self.datainfo.future
         in_size = self.datainfo._in_size()
         out_size = self.datainfo._out_size()  # out_shape[0]
         if not path.exists(csv_file):
-            print('Отсутствует файл "' + csv_file +
-                  '"\nЗагрузка данных неуспешна')
+            print('Отсутствует файл "' + csv_file + '"\nЗагрузка данных неуспешна')
             return None, None
         print("Чтение файла", csv_file, "и создание обучающей выборки")
         data = pd.read_csv(
@@ -194,12 +195,12 @@ class Predictor(object):
         elif count == 0:
             closes = data["close"][:-skip]
         else:
-            closes = data["close"][-count - skip: -skip]
+            closes = data["close"][-count - skip : -skip]
         # получим серию с разницами цен закрытия
         d = np.diff(np.array(closes), n=1)
         # нормируем серию стандартным отклонением
         x_std = d.std()
-        y_std = x_std*future
+        y_std = x_std * future
         infinity = x_std * 4
         d = np.nan_to_num(d / x_std, posinf=infinity, neginf=-infinity)
         x_data = roll(d[:-future], in_size, stride)
@@ -208,8 +209,7 @@ class Predictor(object):
         # в качестве рассматриваемого диапазона берем [-3*std, 3*std]
         y_min = -y_std * 3
         y_max = y_std * 3
-        x = np.reshape(
-            x_data, (x_data.shape[0], in_shape[0], in_shape[1], in_shape[2]))
+        x = np.reshape(x_data, (x_data.shape[0], in_shape[0], in_shape[1], in_shape[2]))
         y = np.zeros((y_data.shape[0], out_shape[0]))
         for i in range(y.shape[0]):
             y[i] = embed(y_data[i], y_min, y_max, out_shape[0])
@@ -235,8 +235,7 @@ class Predictor(object):
         early_stop = keras.callbacks.EarlyStopping(
             monitor="val_loss", patience=8, min_delta=1e-3, restore_best_weights=False
         )
-        cp_save = keras.callbacks.ModelCheckpoint(
-            filepath=ckpt, save_weights_only=True)
+        cp_save = keras.callbacks.ModelCheckpoint(filepath=ckpt, save_weights_only=True)
         history = self.model.fit(
             x,
             y,
@@ -263,15 +262,14 @@ class Predictor(object):
         n = np.argmax(y)
         y_n = y[n]
         low = unembed(
-            n,
-            self.datainfo._y_min(),
-            self.datainfo._y_max(),
-            self.datainfo._out_size())
+            n, self.datainfo._y_min(), self.datainfo._y_max(), self.datainfo._out_size()
+        )
         high = unembed(
-            n+1,
+            n + 1,
             self.datainfo._y_min(),
             self.datainfo._y_max(),
-            self.datainfo._out_size())
+            self.datainfo._out_size(),
+        )
         result = (low, high, y_n)
         return result
 
@@ -302,6 +300,6 @@ def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/7", batch_size=2 ** 8, epochs=2 ** 11)
+            train("models/7", batch_size=2 ** 14, epochs=2 ** 11)
 # Debug
 # Тест загрузки предиктора
