@@ -10,8 +10,13 @@ import time
 import datetime
 import sys
 
+
 from patterns import conv2D
 from datainfo import DatasetInfo
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = '2'
 
 
 def roll(a, size, dx=1):
@@ -32,6 +37,12 @@ def embed(v, min_v, max_v, dim):
     return result
 
 
+def unembed(n, min_v, max_v, dim):
+    step_size = (dim - 1) / (max_v - min_v)
+    v = min_v + n*step_size
+    return v
+
+
 class Predictor(object):
     def __init__(
         self,
@@ -43,6 +54,7 @@ class Predictor(object):
         kernel_size=4,
         dense_size=8,
     ):
+        self.trained = False
         if modelname == None:
             self.name = "default"
         else:
@@ -57,13 +69,14 @@ class Predictor(object):
             )
         else:
             self.model = keras.models.load_model(self.name)
+            self.trained = True
         if not os.path.isfile(self.name + ".cfg"):
             self.datainfo = self.create_datainfo(
                 input_shape=input_shape,
                 output_shape=output_shape,
                 predict_size=predict_size,
-                x_std=0.0004,
-                y_std=0.0004 * 16,
+                x_std=0.0005,
+                y_std=0.33,
             )
         else:
             self.datainfo = DatasetInfo().load(self.name + ".cfg")
@@ -72,7 +85,7 @@ class Predictor(object):
         self.datainfo = DatasetInfo(
             input_shape=input_shape,
             output_shape=output_shape,
-            predict_size=predict_size,
+            future=predict_size,
             x_std=x_std,
             y_std=y_std,
         )
@@ -101,17 +114,13 @@ class Predictor(object):
         """Возвращает входной вектор для сети по списку цен x_data.
         Размер x_data должен быть не менее чем input_size+1.
         Если len(x_data) больше, то беруться последние input_size+1 значений"""
-        input_size = (
-            self.datainfo.input_shape[0]
-            * self.datainfo.input_shape[1]
-            * self.datainfo.input_shape[2]
-        )
-        if len(close_list) < input_size + 1:
+        in_size = self.datainfo._in_size()
+        if len(close_list) < in_size + 1:
             print(
                 "Ошибка размерности input_data: "
                 + str(len(close_list))
                 + "<"
-                + str(input_size + 1)
+                + str(in_size + 1)
             )
             return np.zeros(
                 (
@@ -121,10 +130,9 @@ class Predictor(object):
                     self.datainfo.input_shape[2],
                 )
             )
-        infinity = self.datainfo.x_std * 4
-        closes = np.array(close_list[-input_size - 1 :])
+        closes = np.array(close_list[-in_size - 1:])
         d = np.nan_to_num(
-            np.diff(closes) / self.datainfo.x_std, posinf=infinity, neginf=-infinity
+            np.diff(closes) / self.datainfo.x_std, posinf=self.datainfo._x_inf(), neginf=-self.datainfo._x_inf()
         )
         x = np.reshape(
             d,
@@ -146,15 +154,15 @@ class Predictor(object):
         Возврат:
         x, y - размеченные данные типа numpy.array, сохранные на диск файл dataset_file"""
 
+        stride = 4  # шаг "нарезки" входных данных
         in_shape = self.datainfo.input_shape
         out_shape = self.datainfo.output_shape
-        predict_size = self.datainfo.predict_size
-        stride = 4  # шаг "нарезки" входных данных
-        in_size = in_shape[0] * in_shape[1] * in_shape[2]
-        out_size = out_shape[0]
-
+        future = self.datainfo.future
+        in_size = self.datainfo._in_size()
+        out_size = self.datainfo._out_size()  # out_shape[0]
         if not path.exists(csv_file):
-            print('Отсутствует файл "' + csv_file + '"\nЗагрузка данных неуспешна')
+            print('Отсутствует файл "' + csv_file +
+                  '"\nЗагрузка данных неуспешна')
             return None, None
         print("Чтение файла", csv_file, "и создание обучающей выборки")
         data = pd.read_csv(
@@ -186,24 +194,25 @@ class Predictor(object):
         elif count == 0:
             closes = data["close"][:-skip]
         else:
-            closes = data["close"][-count - skip : -skip]
+            closes = data["close"][-count - skip: -skip]
         # получим серию с разницами цен закрытия
         d = np.diff(np.array(closes), n=1)
         # нормируем серию стандартным отклонением
         x_std = d.std()
+        y_std = x_std*future
         infinity = x_std * 4
         d = np.nan_to_num(d / x_std, posinf=infinity, neginf=-infinity)
-        x_data = roll(d[:-predict_size], in_size, stride)
-        x_forward = roll(d[in_size:], predict_size, stride)
+        x_data = roll(d[:-future], in_size, stride)
+        x_forward = roll(d[in_size:], future, stride)
         y_data = np.sum(x_forward, axis=1)
-        y_std = y_data.std()
         # в качестве рассматриваемого диапазона берем [-3*std, 3*std]
-        min_v = -y_std * 3
-        max_v = y_std * 3
-        x = np.reshape(x_data, (x_data.shape[0], in_shape[0], in_shape[1], in_shape[2]))
+        y_min = -y_std * 3
+        y_max = y_std * 3
+        x = np.reshape(
+            x_data, (x_data.shape[0], in_shape[0], in_shape[1], in_shape[2]))
         y = np.zeros((y_data.shape[0], out_shape[0]))
         for i in range(y.shape[0]):
-            y[i] = embed(y_data[i], min_v, max_v, out_shape[0])
+            y[i] = embed(y_data[i], y_min, y_max, out_shape[0])
         # изменим datainfo
         self.datainfo.x_std = float(x_std)
         self.datainfo.y_std = float(y_std)
@@ -226,7 +235,8 @@ class Predictor(object):
         early_stop = keras.callbacks.EarlyStopping(
             monitor="val_loss", patience=8, min_delta=1e-3, restore_best_weights=False
         )
-        cp_save = keras.callbacks.ModelCheckpoint(filepath=ckpt, save_weights_only=True)
+        cp_save = keras.callbacks.ModelCheckpoint(
+            filepath=ckpt, save_weights_only=True)
         history = self.model.fit(
             x,
             y,
@@ -242,21 +252,28 @@ class Predictor(object):
 
     def infer(self, close_list):
         """
-        Возвращает число float32 с прогнозом цены
+        Возвращает (y_low, y_high, prob) с прогнозом цены
         Параметры:
         close_list - список текущих цен закрытия
         """
         x = self.get_single_input(close_list)
         if not x.any():
             return None
-        # возвращаем денормализованный результат
         y = self.model(x, training=False)[0].numpy()
-        y_str = ""
-        for v in y:
-            if y_str != "":
-                y_str += " "
-            y_str += str(v.round(6))
-        return y_str
+        n = np.argmax(y)
+        y_n = y[n]
+        low = unembed(
+            n,
+            self.datainfo._y_min(),
+            self.datainfo._y_max(),
+            self.datainfo._out_size())
+        high = unembed(
+            n+1,
+            self.datainfo._y_min(),
+            self.datainfo._y_max(),
+            self.datainfo._out_size())
+        result = (low, high, y_n)
+        return result
 
 
 def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
@@ -282,11 +299,9 @@ def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
         print("Выполнение прервано из-за ошибки входных данных")
 
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
-for param in sys.argv:
-    if param == "--train":
-        train("models/7", batch_size=2 ** 8, epochs=2 ** 11)
+if __name__ == "__main__":
+    for param in sys.argv:
+        if param == "--train":
+            train("models/7", batch_size=2 ** 8, epochs=2 ** 11)
 # Debug
 # Тест загрузки предиктора
-

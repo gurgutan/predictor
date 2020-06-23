@@ -1,0 +1,7 @@
+{
+    "dbname": "./db/predictions.sqlite",
+    "initialdate": "2020-06-01T00:00:00",
+    "modelname": "./models/7",
+    "symbol": "EURUSD",
+    "timeframe": "TIMEFRAME_M5"
+}

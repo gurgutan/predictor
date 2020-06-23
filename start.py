@@ -4,19 +4,15 @@ from server import Server
 
 
 def main():
-    try:
-        opts, args = getopt.getopt(sys.argv[1:], "h", ["help"])
-    except getopt.error as msg:
-        print(msg)
-        print("Для справки используйте --help")
-        sys.exit(2)
-    # process options
-    for o, a in opts:
-        if o in ("-h", "--help"):
+    if(len(sys.argv) == 1):
+        print("Для справки используйте '-h'")
+        return 0
+    for param in sys.argv:
+        if param in ("-h", "--help"):
             print(__doc__)
             sys.exit(0)
-        if o in ("-r", "--run"):
-            server = Server("/db/predictions.sqlite")
+        if param in ("-r", "--run"):
+            server = Server()
             if server.ready:
                 print("Сервер запущен")
                 server.start()

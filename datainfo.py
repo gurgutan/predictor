@@ -1,15 +1,17 @@
 import io
 import json
+import functools
+import operator
 
 
 class DatasetInfo(object):
     def __init__(
         self,
         input_shape=(16, 16, 1),
-        output_shape=(16, 1),
-        predict_size=16,
-        x_std=0.0004,
-        y_std=0.00064,
+        output_shape=(8, 1),
+        future=16,
+        x_std=0.00047,
+        y_std=0.33,
     ):
         """input_shape - формат входа
         output_shape - формат выхода
@@ -17,7 +19,7 @@ class DatasetInfo(object):
         time_unit - размер в секндах одного интервала"""
         self.input_shape = input_shape
         self.output_shape = output_shape
-        self.predict_size = predict_size
+        self.future = future
         self.x_std = x_std
         self.y_std = y_std
 
@@ -28,7 +30,7 @@ class DatasetInfo(object):
         copy = json.loads(jsonstr)
         self.input_shape = tuple(copy["input_shape"])
         self.output_shape = tuple(copy["output_shape"])
-        self.predict_size = int(copy["predict_size"])
+        self.future = int(copy["future"])
         self.x_std = float(copy["x_std"])
         self.y_std = float(copy["y_std"])
         return self
@@ -41,3 +43,20 @@ class DatasetInfo(object):
     def save(self, filename):
         with io.open(filename, "w") as file:
             file.write(self.toJson())
+
+    def _in_size(self):
+        return functools.reduce(
+            operator.mul, self.input_shape)
+
+    def _out_size(self):
+        return functools.reduce(
+            operator.mul, self.output_shape)
+
+    def _y_min(self):
+        return -self.y_std*3
+
+    def _y_max(self):
+        return self.y_std*3
+
+    def _x_inf(self):
+        return self.x_std*4
