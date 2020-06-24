@@ -73,8 +73,16 @@ class Server(object):
             pmodel = self.p.name
             pdate = rdate + 60 * 5 * self.p.datainfo.future  # секунды*M5*future
             plow, phigh, prob = self.p.infer(input_data)
-            db_row = (rdate, rprice, pmodel, pdate, rprice + plow, rprice + phigh, prob)
-            results += db_row
+            db_row = (
+                rdate,
+                round(rprice, 6),
+                pmodel,
+                pdate,
+                round(rprice + plow, 6),
+                round(rprice + phigh, 6),
+                round(prob, 6),
+            )
+            results.append(db_row)
             if DEBUG:
                 print(db_row)
         dbcommon.db_replace(self.db, results)

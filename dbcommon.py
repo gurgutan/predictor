@@ -8,9 +8,9 @@ def db_open(dbname):
         cursor = db.cursor()
         cursor.execute(
             "CREATE TABLE IF NOT EXISTS pdata("
-            + "rdate integer PRIMARY KEY, "
+            + "rdate UNSIGNED BIG INT PRIMARY KEY, "
             + "rprice real, "
-            + "pmodel integer, "
+            + "pmodel TEXT, "
             + "pdate integer, "
             + "plow real, "
             + "phigh real, "
@@ -27,14 +27,15 @@ def db_replace(db, data):
     cursor = db.cursor()
     cursor.executemany(
         "INSERT OR REPLACE INTO pdata("
-        + "rdate integer, "
-        + "rprice real, "
-        + "pmodel text, "
-        + "pdate integer, "
-        + "plow real, "
-        + "phigh real, "
-        + "prob real) VALUES(?,?,?,?,?,?,?)",
-        data)
+        + "rdate, "
+        + "rprice, "
+        + "pmodel, "
+        + "pdate, "
+        + "plow, "
+        + "phigh, "
+        + "prob) VALUES(?,?,?,?,?,?,?)",
+        data,
+    )
     db.commit()
 
 
@@ -45,18 +46,15 @@ def db_update_real_prices(db, data):
     """
     cursor = db.cursor()
     cursor.executemany(
-        "INSERT OR REPLACE INTO pdata("
-        + "rdate integer, "
-        + "rprice real) VALUES(?,?)",
-        data)
+        "INSERT OR REPLACE INTO pdata(rdate, rprice) VALUES(?,?)", data,
+    )
     db.commit()
 
 
 def db_select(db, from_date, to_date):
     cursor = db.cursor()
     cursor.execute(
-        "SELECT * FROM pdata WHERE rdate BETWEEN ? and ?",
-        (from_date, to_date)
+        "SELECT * FROM pdata WHERE rdate BETWEEN ? and ?", (from_date, to_date)
     )
     return cursor.fetchall()
 
