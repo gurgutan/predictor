@@ -38,7 +38,7 @@ def embed(v, min_v, max_v, dim):
 
 
 def unembed(n, min_v, max_v, dim):
-    step_size = (dim - 1) / (max_v - min_v)
+    step_size = (max_v - min_v) / (dim - 1)
     v = min_v + n * step_size
     return v
 
@@ -261,14 +261,26 @@ class Predictor(object):
         y = self.model(x, training=False)[0].numpy()
         n = np.argmax(y)
         y_n = y[n]
-        low = unembed(
-            n, self.datainfo._y_min(), self.datainfo._y_max(), self.datainfo._out_size()
+        # DEBUG {
+        # print(y)
+        # }
+        low = (
+            unembed(
+                n,
+                self.datainfo._y_min(),
+                self.datainfo._y_max(),
+                self.datainfo._out_size(),
+            )
+            * self.datainfo.y_std
         )
-        high = unembed(
-            n + 1,
-            self.datainfo._y_min(),
-            self.datainfo._y_max(),
-            self.datainfo._out_size(),
+        high = (
+            unembed(
+                n + 1,
+                self.datainfo._y_min(),
+                self.datainfo._y_max(),
+                self.datainfo._out_size(),
+            )
+            * self.datainfo.y_std
         )
         result = (low, high, y_n)
         return result

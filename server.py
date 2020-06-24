@@ -29,7 +29,7 @@ class Server(object):
 
     def __init_db__(self):
         self.db = dbcommon.db_open(self.dbname)
-        if(self.db is None):
+        if self.db is None:
             print("Ошибка открытия БД '%s':" % self.dbname)
             return False
         return True
@@ -46,7 +46,7 @@ class Server(object):
 
     def __init_predictor__(self):
         self.p = Predictor(modelname=self.modelname)
-        if(not self.p.trained):
+        if not self.p.trained:
             print("Ошибка инициализации модели '%s'" % self.modelname)
             return False
         print("Модель '%s' загружена" % self.modelname)
@@ -54,35 +54,35 @@ class Server(object):
 
     def request_data(self):
         rates = pd.DataFrame(
-            mtcommon.get_rates(
-                self.mt, self.lowdate, dt.datetime.utcnow()))
-        print("Получено "+str(len(rates))+" котировок")
+            mtcommon.get_rates(self.mt, self.lowdate, dt.datetime.utcnow())
+        )
+        print("Получено " + str(len(rates)) + " котировок")
         return rates
 
     def compute(self, rates):
         in_size = self.p.datainfo._in_size()
-        closes = rates[in_size+1:]['close'].array
-        times = rates[in_size+1:]['time'].array
-        last_idx = len(closes)-in_size-1
+        closes = rates[in_size + 1 :]["close"].array
+        times = rates[in_size + 1 :]["time"].array
+        last_idx = len(closes) - in_size - 1
         results = []
         for i in range(last_idx):
-            input_data = closes[i:i+in_size+1]
+            input_data = closes[i : i + in_size + 1]
             output_data = self.p.infer(input_data)
-            rdate = times[i+in_size]
-            rprice = closes[i+in_size]
+            rdate = times[i + in_size]
+            rprice = closes[i + in_size]
             pmodel = self.p.name
-            pdate = rdate + 60*5*self.p.datainfo.future  # секунды*M5*future
+            pdate = rdate + 60 * 5 * self.p.datainfo.future  # секунды*M5*future
             plow, phigh, prob = self.p.infer(input_data)
-            db_row = (rdate, rprice, pmodel, pdate, plow, phigh, prob)
+            db_row = (rdate, rprice, pmodel, pdate, rprice + plow, rprice + phigh, prob)
             results += db_row
-            if(DEBUG):
+            if DEBUG:
                 print(db_row)
         dbcommon.db_replace(self.db, results)
 
     def start(self):
         # подготовка данных
         self.lowdate = dbcommon.db_get_lowdate(self.db)[0]
-        if(self.lowdate is None):
+        if self.lowdate is None:
             self.lowdate = self.initialdate
         while True:
             self.compute(self.request_data())
