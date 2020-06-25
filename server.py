@@ -64,17 +64,18 @@ class Server(object):
         closes = rates["close"]
         times = rates["time"]
         last_idx = len(closes)
+        shift = in_size + 1
         results = []
         input_data = []
-        for i in range(in_size + 1, last_idx):
-            x = closes[i - in_size - 1 : i].to_numpy()
+        for i in range(shift, last_idx):
+            x = closes[i - shift : i].to_numpy()
             input_data.append(x)
         output_data = self.p.predict(input_data)
 
-        for i in range(in_size + 1, last_idx):
-            plow, phigh, prob = output_data[i - in_size - 1]
-            rdate = int(times[i])
-            rprice = closes[i]
+        for i in range(shift, last_idx):
+            plow, phigh, prob = output_data[i - shift]
+            rdate = int(times[i - 1])
+            rprice = closes[i - 1]
             pmodel = self.p.name
             pdate = int(rdate + 60 * 5 * self.p.datainfo.future)  # секунды*M5*future
             db_row = (
@@ -84,28 +85,11 @@ class Server(object):
                 pdate,
                 round(rprice + plow, 6),
                 round(rprice + phigh, 6),
-                round(prob, 6),
+                round(prob, 8),
             )
             results.append(db_row)
             if DEBUG:
                 print(db_row)
-            # rdate = int(times[i + in_size])
-            # rprice = closes[i + in_size]
-            # pmodel = self.p.name
-            # pdate = int(rdate + 60 * 5 * self.p.datainfo.future)  # секунды*M5*future
-            # plow, phigh, prob = self.p.infer(input_data)
-            # db_row = (
-            #     rdate,
-            #     round(rprice, 6),
-            #     pmodel,
-            #     pdate,
-            #     round(rprice + plow, 6),
-            #     round(rprice + phigh, 6),
-            #     round(prob, 6),
-            # )
-            # results.append(db_row)
-            # if DEBUG:
-            #     print(db_row)
         return results
 
     def start(self):

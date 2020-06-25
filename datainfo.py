@@ -8,7 +8,7 @@ class DatasetInfo(object):
     def __init__(
         self,
         input_shape=(16, 16, 1),
-        output_shape=(8, 1),
+        output_shape=(8,),
         future=16,
         x_std=0.00047,
         y_std=0.33,
@@ -51,10 +51,10 @@ class DatasetInfo(object):
         return functools.reduce(operator.mul, self.output_shape)
 
     def _y_min(self):
-        return -self.y_std * 3
+        return -self.y_std * 2
 
     def _y_max(self):
-        return self.y_std * 3
+        return self.y_std * 2
 
     def _x_inf(self):
-        return self.x_std * 4
+        return self.x_std * 8

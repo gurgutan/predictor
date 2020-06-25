@@ -110,47 +110,11 @@ class Predictor(object):
         )
         return self.model
 
-    def get_single_input(self, close_list):
-        """Возвращает входной вектор для сети по списку цен x_data.
-        Размер x_data должен быть не менее чем input_size+1.
-        Если len(x_data) больше, то беруться последние input_size+1 значений"""
-        in_size = self.datainfo._in_size()
-        if len(close_list) < in_size + 1:
-            print(
-                "Ошибка размерности input_data: "
-                + str(len(close_list))
-                + "<"
-                + str(in_size + 1)
-            )
-            return np.zeros(
-                (
-                    1,
-                    self.datainfo.input_shape[0],
-                    self.datainfo.input_shape[1],
-                    self.datainfo.input_shape[2],
-                )
-            )
-        closes = np.array(close_list[-in_size - 1 :])
-        d = np.nan_to_num(
-            np.diff(closes) / self.datainfo.x_std,
-            posinf=self.datainfo._x_inf(),
-            neginf=-self.datainfo._x_inf(),
-        )
-        x = np.reshape(
-            d,
-            (
-                1,
-                self.datainfo.input_shape[0],
-                self.datainfo.input_shape[1],
-                self.datainfo.input_shape[2],
-            ),
-        )
-        return x
-
     def get_input(self, close_list):
-        """Возвращает входной вектор для сети по списку цен x_data.
-        Размер x_data должен быть не менее чем input_size+1.
-        Если len(x_data) больше, то беруться последние input_size+1 значений"""
+        """
+        Возвращает входной вектор для сети по массиву close_list.
+        Размерность close_list: (любая, input_size+1)
+        """
         result = []
         in_size = self.datainfo._in_size()
         for c in close_list:
@@ -193,7 +157,7 @@ class Predictor(object):
         Возврат:
         x, y - размеченные данные типа numpy.array, сохранные на диск файл dataset_file"""
 
-        stride = 1  # шаг "нарезки" входных данных
+        stride = 2  # шаг "нарезки" входных данных
         in_shape = self.datainfo.input_shape
         out_shape = self.datainfo.output_shape
         future = self.datainfo.future
@@ -238,22 +202,22 @@ class Predictor(object):
         # нормируем серию стандартным отклонением
         x_std = d.std()
         y_std = x_std * future
+        # изменим datainfo
+        self.datainfo.x_std = float(x_std)
+        self.datainfo.y_std = float(y_std)
+        self.datainfo.save(self.name + ".cfg")
         infinity = x_std * 4
         d = np.nan_to_num(d / x_std, posinf=infinity, neginf=-infinity)
         x_data = roll(d[:-future], in_size, stride)
         x_forward = roll(d[in_size:], future, stride)
         y_data = np.sum(x_forward, axis=1)
-        # в качестве рассматриваемого диапазона берем [-3*std, 3*std]
-        y_min = -y_std * 3
-        y_max = y_std * 3
         x = np.reshape(x_data, (x_data.shape[0], in_shape[0], in_shape[1], in_shape[2]))
         y = np.zeros((y_data.shape[0], out_shape[0]))
         for i in range(y.shape[0]):
-            y[i] = embed(y_data[i], y_min, y_max, out_shape[0])
-        # изменим datainfo
-        self.datainfo.x_std = float(x_std)
-        self.datainfo.y_std = float(y_std)
-        self.datainfo.save(self.name + ".cfg")
+            y[i] = embed(
+                y_data[i], self.datainfo._y_min(), self.datainfo._y_max(), out_shape[0]
+            )
+
         return x.astype("float32"), y.astype("float32")
 
     def train(self, x, y, batch_size=64, epochs=1024):
