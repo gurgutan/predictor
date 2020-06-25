@@ -45,18 +45,16 @@ class DatasetInfo(object):
             file.write(self.toJson())
 
     def _in_size(self):
-        return functools.reduce(
-            operator.mul, self.input_shape)
+        return functools.reduce(operator.mul, self.input_shape)
 
     def _out_size(self):
-        return functools.reduce(
-            operator.mul, self.output_shape)
+        return functools.reduce(operator.mul, self.output_shape)
 
     def _y_min(self):
-        return -self.y_std*3
+        return -self.y_std * 3
 
     def _y_max(self):
-        return self.y_std*3
+        return self.y_std * 3
 
     def _x_inf(self):
-        return self.x_std*4
+        return self.x_std * 4

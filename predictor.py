@@ -147,6 +147,43 @@ class Predictor(object):
         )
         return x
 
+    def get_input(self, close_list):
+        """Возвращает входной вектор для сети по списку цен x_data.
+        Размер x_data должен быть не менее чем input_size+1.
+        Если len(x_data) больше, то беруться последние input_size+1 значений"""
+        result = []
+        in_size = self.datainfo._in_size()
+        for c in close_list:
+            if len(c) < in_size + 1:
+                print(
+                    "Ошибка размерности input_data: "
+                    + str(len(c))
+                    + "<"
+                    + str(in_size + 1)
+                )
+                x = np.zeros(
+                    self.datainfo.input_shape[0],
+                    self.datainfo.input_shape[1],
+                    self.datainfo.input_shape[2],
+                )
+            else:
+                closes = np.array(c[-in_size - 1 :])
+                d = np.nan_to_num(
+                    np.diff(closes) / self.datainfo.x_std,
+                    posinf=self.datainfo._x_inf(),
+                    neginf=-self.datainfo._x_inf(),
+                )
+                x = np.reshape(
+                    d,
+                    (
+                        self.datainfo.input_shape[0],
+                        self.datainfo.input_shape[1],
+                        self.datainfo.input_shape[2],
+                    ),
+                )
+            result.append(x)
+        return np.stack(result, axis=0)
+
     def load_dataset(self, csv_file, count=0, skip=0):
         """Подготовка обучающей выборки (x,y). Тип x и y - numpy.ndarray.
         Аргументы:
@@ -260,13 +297,11 @@ class Predictor(object):
             return None
         y = self.model(x, training=False)[0].numpy()
         n = np.argmax(y)
-        y_n = y[n]
-        # DEBUG {
-        # print(y)
-        # }
+        y_n = float(y[n])
+
         low = (
             unembed(
-                n,
+                n[i],
                 self.datainfo._y_min(),
                 self.datainfo._y_max(),
                 self.datainfo._out_size(),
@@ -275,7 +310,7 @@ class Predictor(object):
         )
         high = (
             unembed(
-                n + 1,
+                n[i] + 1,
                 self.datainfo._y_min(),
                 self.datainfo._y_max(),
                 self.datainfo._out_size(),
@@ -283,6 +318,34 @@ class Predictor(object):
             * self.datainfo.y_std
         )
         result = (low, high, y_n)
+        return result
+
+    def predict(self, close_list):
+        x = self.get_input(close_list)
+        y = self.model.predict(x, use_multiprocessing=True, verbose=1)
+        n = np.argmax(y, axis=1)
+        y_n = y[np.arange(len(y)), n]
+        result = []
+        for i in range(len(y_n)):
+            low = (
+                unembed(
+                    n[i],
+                    self.datainfo._y_min(),
+                    self.datainfo._y_max(),
+                    self.datainfo._out_size(),
+                )
+                * self.datainfo.y_std
+            )
+            high = (
+                unembed(
+                    n[i] + 1,
+                    self.datainfo._y_min(),
+                    self.datainfo._y_max(),
+                    self.datainfo._out_size(),
+                )
+                * self.datainfo.y_std
+            )
+            result.append((low, high, float(y_n[n[i]])))
         return result
 
 

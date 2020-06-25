@@ -54,25 +54,29 @@ class Server(object):
 
     def request_data(self):
         rates = pd.DataFrame(
-            mtcommon.get_rates(self.mt, self.lowdate, dt.datetime.utcnow())
+            mtcommon.get_rates(self.mt, self.lowdate, dt.datetime.now())
         )
         print("Получено " + str(len(rates)) + " котировок")
         return rates
 
     def compute(self, rates):
         in_size = self.p.datainfo._in_size()
-        closes = rates[in_size + 1 :]["close"].array
-        times = rates[in_size + 1 :]["time"].array
-        last_idx = len(closes) - in_size - 1
+        closes = rates["close"]
+        times = rates["time"]
+        last_idx = len(closes)
         results = []
-        for i in range(last_idx):
-            input_data = closes[i : i + in_size + 1]
-            output_data = self.p.infer(input_data)
-            rdate = times[i + in_size]
-            rprice = closes[i + in_size]
+        input_data = []
+        for i in range(in_size + 1, last_idx):
+            x = closes[i - in_size - 1 : i].to_numpy()
+            input_data.append(x)
+        output_data = self.p.predict(input_data)
+
+        for i in range(in_size + 1, last_idx):
+            plow, phigh, prob = output_data[i - in_size - 1]
+            rdate = int(times[i])
+            rprice = closes[i]
             pmodel = self.p.name
-            pdate = rdate + 60 * 5 * self.p.datainfo.future  # секунды*M5*future
-            plow, phigh, prob = self.p.infer(input_data)
+            pdate = int(rdate + 60 * 5 * self.p.datainfo.future)  # секунды*M5*future
             db_row = (
                 rdate,
                 round(rprice, 6),
@@ -85,15 +89,36 @@ class Server(object):
             results.append(db_row)
             if DEBUG:
                 print(db_row)
-        dbcommon.db_replace(self.db, results)
+            # rdate = int(times[i + in_size])
+            # rprice = closes[i + in_size]
+            # pmodel = self.p.name
+            # pdate = int(rdate + 60 * 5 * self.p.datainfo.future)  # секунды*M5*future
+            # plow, phigh, prob = self.p.infer(input_data)
+            # db_row = (
+            #     rdate,
+            #     round(rprice, 6),
+            #     pmodel,
+            #     pdate,
+            #     round(rprice + plow, 6),
+            #     round(rprice + phigh, 6),
+            #     round(prob, 6),
+            # )
+            # results.append(db_row)
+            # if DEBUG:
+            #     print(db_row)
+        return results
 
     def start(self):
         # подготовка данных
-        self.lowdate = dbcommon.db_get_lowdate(self.db)[0]
-        if self.lowdate is None:
+        dbvalue = dbcommon.db_get_lowdate(self.db)[0]
+        if not dbvalue is None:
+            self.lowdate = dt.datetime.fromtimestamp(int(dbvalue))
+        else:
             self.lowdate = self.initialdate
         while True:
-            self.compute(self.request_data())
+            rates = self.request_data()
+            results = self.compute(rates)
+            dbcommon.db_replace(self.db, results)
             if DEBUG:
                 return 0
 

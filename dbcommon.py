@@ -8,7 +8,8 @@ def db_open(dbname):
         cursor = db.cursor()
         cursor.execute(
             "CREATE TABLE IF NOT EXISTS pdata("
-            + "rdate UNSIGNED BIG INT PRIMARY KEY, "
+            + "id INTEGER PRIMARY KEY, "
+            + "rdate integer, "
             + "rprice real, "
             + "pmodel TEXT, "
             + "pdate integer, "
