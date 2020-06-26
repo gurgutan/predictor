@@ -25,3 +25,5 @@ variables.*
 # архивы
 *.zip
 *.gz
+# БД
+*.sqlite

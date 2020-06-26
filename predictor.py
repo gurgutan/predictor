@@ -14,9 +14,9 @@ import sys
 from patterns import conv2D
 from datainfo import DatasetInfo
 
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+# os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 def roll(a, size, dx=1):
@@ -27,7 +27,7 @@ def roll(a, size, dx=1):
 
 def embed(v, min_v, max_v, dim):
     """Возвращает бинарный вектор, длины dim"""
-    step_size = (dim - 1) / (max_v - min_v)
+    step_size = dim / (max_v - min_v)
     v = min(max_v, v)
     v = max(min_v, v)
     n = int((v - min_v) * step_size)
@@ -38,7 +38,7 @@ def embed(v, min_v, max_v, dim):
 
 
 def unembed(n, min_v, max_v, dim):
-    step_size = (max_v - min_v) / (dim - 1)
+    step_size = (max_v - min_v) / dim
     v = min_v + n * step_size
     return v
 
@@ -339,6 +339,6 @@ def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/7", batch_size=2 ** 14, epochs=2 ** 11)
+            train("models/8", batch_size=2 ** 8, epochs=2 ** 11)
 # Debug
 # Тест загрузки предиктора
