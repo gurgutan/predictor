@@ -56,7 +56,7 @@ def conv2D_aka_inception(
 
 
 def conv2D(input_shape, output_shape, filters=32, kernel_size=4, dense_size=8):
-    max_kernel_size = 2048
+    max_kernel_size = 1024
     l1_reg = keras.regularizers.l1(l=1e-4)
     l2_reg = keras.regularizers.l2(l=1e-4)
     inputs = keras.Input(shape=input_shape)
