@@ -56,7 +56,7 @@ def conv2D_aka_inception(
 
 
 def conv2D(input_shape, output_shape, filters=32, kernel_size=4, dense_size=8):
-    max_kernel_size = 1024
+    max_filters = 1024
     l1_reg = keras.regularizers.l1(l=1e-4)
     l2_reg = keras.regularizers.l2(l=1e-4)
     inputs = keras.Input(shape=input_shape)
@@ -65,7 +65,7 @@ def conv2D(input_shape, output_shape, filters=32, kernel_size=4, dense_size=8):
     for i in range(15):
         ksize = min([x.shape[1], x.shape[2], kernel_size])
         x = layers.SeparableConv2D(
-            min(max_kernel_size, filters * 2 ** i),  # min(512, filters * 2**i),
+            min(max_filters, filters + 2 ** i),  # min(512, filters * 2**i),
             ksize,
             padding="valid",
             bias_initializer=keras.initializers.RandomNormal(),
@@ -101,8 +101,8 @@ def conv2D(input_shape, output_shape, filters=32, kernel_size=4, dense_size=8):
 
     model.compile(
         # loss=keras.losses.MeanSquaredError(),
-        loss=keras.losses.KLDivergence(),
-        optimizer=keras.optimizers.SGD(),
+        loss=keras.losses.CategoricalCrossentropy(),  # keras.losses.KLDivergence(),
+        optimizer=keras.optimizers.SGD(nesterov=True),
         metrics=["accuracy", "AUC"],
     )
     print(model.summary())
