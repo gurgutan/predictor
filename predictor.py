@@ -25,7 +25,7 @@ def roll(a, size, dx=1):
 
 def embed(v, min_v, max_v, dim):
     """Возвращает бинарный вектор, длины dim"""
-    step_size = dim / (max_v - min_v)
+    step_size = (dim - 1) / (max_v - min_v)
     # v = max(min_v, min(max_v, v))
     n = int(max(0, min(7, (v - min_v) * step_size)))
     result = np.zeros(dim, dtype="float32")
@@ -35,7 +35,7 @@ def embed(v, min_v, max_v, dim):
 
 
 def unembed(n, min_v, max_v, dim):
-    step_size = (max_v - min_v) / dim
+    step_size = (max_v - min_v) / (dim - 1)
     v = min_v + n * step_size
     return v
 
@@ -212,7 +212,7 @@ class Predictor(object):
         y = np.zeros((y_data.shape[0], out_shape[0]))
         for i in range(y.shape[0]):
             y[i] = embed(
-                y_data[i], self.datainfo._y_min(), self.datainfo._y_max(), out_shape[0]
+                y_data[i], self.datainfo._y_min(), self.datainfo._y_max(), out_size
             )
         self.datainfo.save(self.name + ".cfg")
         return x.astype("float32"), y.astype("float32")

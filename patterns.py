@@ -77,7 +77,7 @@ def conv2D(input_shape, output_shape, filters=32, kernel_size=4, dense_size=8):
         x = layers.BatchNormalization()(x)
         # x = layers.MaxPool2D(pool_size=(2, 2), strides=(1, 1))(x)
 
-    x = layers.Dropout(0.2)(x)
+    x = layers.Dropout(0.1)(x)
     x = layers.Flatten()(x)
     x = layers.Dense(
         dense_size,
