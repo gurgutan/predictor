@@ -56,7 +56,7 @@ def conv2D_aka_inception(
 
 
 def conv2D(input_shape, output_shape, filters=32, kernel_size=4, dense_size=8):
-
+    max_kernel_size = 1024
     l1_reg = keras.regularizers.l1(l=1e-4)
     l2_reg = keras.regularizers.l2(l=1e-4)
     inputs = keras.Input(shape=input_shape)
@@ -65,7 +65,7 @@ def conv2D(input_shape, output_shape, filters=32, kernel_size=4, dense_size=8):
     for i in range(15):
         ksize = min([x.shape[1], x.shape[2], kernel_size])
         x = layers.SeparableConv2D(
-            min(512, filters * 2 ** i),  # min(512, filters * 2**i),
+            min(max_kernel_size, filters * 2 ** i),  # min(512, filters * 2**i),
             ksize,
             padding="valid",
             bias_initializer=keras.initializers.RandomNormal(),
@@ -73,11 +73,11 @@ def conv2D(input_shape, output_shape, filters=32, kernel_size=4, dense_size=8):
             kernel_initializer=keras.initializers.RandomNormal(),
             kernel_regularizer=l1_reg,
         )(x)
-        x = layers.BatchNormalization()(x)
         x = layers.Activation("relu")(x)
+        x = layers.BatchNormalization()(x)
         # x = layers.MaxPool2D(pool_size=(2, 2), strides=(1, 1))(x)
 
-    x = layers.Dropout(0.5)(x)  # x = layers.Dropout(0.25)(x)
+    x = layers.Dropout(0.2)(x)
     x = layers.Flatten()(x)
     x = layers.Dense(
         dense_size,

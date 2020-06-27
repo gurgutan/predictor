@@ -25,4 +25,5 @@ variables.*
 # архивы
 *.zip
 *.gz
-db/predictions.sqlite
+# БД
+*.sqlite

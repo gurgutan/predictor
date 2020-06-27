@@ -9,14 +9,12 @@ import os
 import time
 import datetime
 import sys
-
-
 from patterns import conv2D
 from datainfo import DatasetInfo
 
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+# os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 def roll(a, size, dx=1):
@@ -27,10 +25,9 @@ def roll(a, size, dx=1):
 
 def embed(v, min_v, max_v, dim):
     """Возвращает бинарный вектор, длины dim"""
-    step_size = (dim - 1) / (max_v - min_v)
-    v = min(max_v, v)
-    v = max(min_v, v)
-    n = int((v - min_v) * step_size)
+    step_size = dim / (max_v - min_v)
+    # v = max(min_v, min(max_v, v))
+    n = int(max(0, min(7, (v - min_v) * step_size)))
     result = np.zeros(dim, dtype="float32")
     # result = np.full(dim, -1, dtype='float32')
     result[n] = 1
@@ -38,7 +35,7 @@ def embed(v, min_v, max_v, dim):
 
 
 def unembed(n, min_v, max_v, dim):
-    step_size = (max_v - min_v) / (dim - 1)
+    step_size = (max_v - min_v) / dim
     v = min_v + n * step_size
     return v
 
@@ -75,8 +72,8 @@ class Predictor(object):
                 input_shape=input_shape,
                 output_shape=output_shape,
                 predict_size=predict_size,
-                x_std=0.0005,
-                y_std=0.33,
+                x_std=0.0004,
+                y_std=0.0074,
             )
         else:
             self.datainfo = DatasetInfo().load(self.name + ".cfg")
@@ -201,23 +198,21 @@ class Predictor(object):
         d = np.diff(np.array(closes), n=1)
         # нормируем серию стандартным отклонением
         x_std = d.std()
-        y_std = x_std * future
         # изменим datainfo
         self.datainfo.x_std = float(x_std)
-        self.datainfo.y_std = float(y_std)
-        self.datainfo.save(self.name + ".cfg")
         infinity = x_std * 4
         d = np.nan_to_num(d / x_std, posinf=infinity, neginf=-infinity)
         x_data = roll(d[:-future], in_size, stride)
         x_forward = roll(d[in_size:], future, stride)
         y_data = np.sum(x_forward, axis=1)
+        self.datainfo.y_std = float(y_data.std() * self.datainfo.x_std)
         x = np.reshape(x_data, (x_data.shape[0], in_shape[0], in_shape[1], in_shape[2]))
         y = np.zeros((y_data.shape[0], out_shape[0]))
         for i in range(y.shape[0]):
             y[i] = embed(
                 y_data[i], self.datainfo._y_min(), self.datainfo._y_max(), out_shape[0]
             )
-
+        self.datainfo.save(self.name + ".cfg")
         return x.astype("float32"), y.astype("float32")
 
     def train(self, x, y, batch_size=64, epochs=1024):
@@ -250,39 +245,38 @@ class Predictor(object):
         print("Модель " + self.name + " сохранена")
         return history
 
-    def infer(self, close_list):
-        """
-        Возвращает (y_low, y_high, prob) с прогнозом цены
-        Параметры:
-        close_list - список текущих цен закрытия
-        """
-        x = self.get_single_input(close_list)
-        if not x.any():
-            return None
-        y = self.model(x, training=False)[0].numpy()
-        n = np.argmax(y)
-        y_n = float(y[n])
-
-        low = (
-            unembed(
-                n[i],
-                self.datainfo._y_min(),
-                self.datainfo._y_max(),
-                self.datainfo._out_size(),
-            )
-            * self.datainfo.y_std
-        )
-        high = (
-            unembed(
-                n[i] + 1,
-                self.datainfo._y_min(),
-                self.datainfo._y_max(),
-                self.datainfo._out_size(),
-            )
-            * self.datainfo.y_std
-        )
-        result = (low, high, y_n)
-        return result
+    # def infer(self, close_list):
+    #     """
+    #     Возвращает (y_low, y_high, prob) с прогнозом цены
+    #     Параметры:
+    #     close_list - список текущих цен закрытия
+    #     """
+    #     x = self.get_single_input(close_list)
+    #     if not x.any():
+    #         return None
+    #     y = self.model(x, training=False)[0].numpy()
+    #     n = np.argmax(y)
+    #     y_n = float(y[n])
+    #     low = (
+    #         unembed(
+    #             n[i],
+    #             self.datainfo._y_min(),
+    #             self.datainfo._y_max(),
+    #             self.datainfo._out_size(),
+    #         )
+    #         * self.datainfo.y_std
+    #     )
+    #     high = (
+    #         unembed(
+    #             n[i] + 1,
+    #             self.datainfo._y_min(),
+    #             self.datainfo._y_max(),
+    #             self.datainfo._out_size(),
+    #         )
+    #         * self.datainfo.y_std
+    #     )
+    #     result = (low, high, y_n)
+    #     return result
 
     def predict(self, close_list):
         x = self.get_input(close_list)
@@ -339,6 +333,6 @@ def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/7", batch_size=2 ** 14, epochs=2 ** 11)
+            train("models/8", batch_size=2 ** 13, epochs=2 ** 11)
 # Debug
 # Тест загрузки предиктора
