@@ -143,6 +143,8 @@ class Predictor(object):
                     ),
                 )
             result.append(x)
+        if len(result) == 0:
+            return None
         return np.stack(result, axis=0)
 
     def load_dataset(self, csv_file, count=0, skip=0):
@@ -245,63 +247,26 @@ class Predictor(object):
         print("Модель " + self.name + " сохранена")
         return history
 
-    # def infer(self, close_list):
-    #     """
-    #     Возвращает (y_low, y_high, prob) с прогнозом цены
-    #     Параметры:
-    #     close_list - список текущих цен закрытия
-    #     """
-    #     x = self.get_single_input(close_list)
-    #     if not x.any():
-    #         return None
-    #     y = self.model(x, training=False)[0].numpy()
-    #     n = np.argmax(y)
-    #     y_n = float(y[n])
-    #     low = (
-    #         unembed(
-    #             n[i],
-    #             self.datainfo._y_min(),
-    #             self.datainfo._y_max(),
-    #             self.datainfo._out_size(),
-    #         )
-    #         * self.datainfo.y_std
-    #     )
-    #     high = (
-    #         unembed(
-    #             n[i] + 1,
-    #             self.datainfo._y_min(),
-    #             self.datainfo._y_max(),
-    #             self.datainfo._out_size(),
-    #         )
-    #         * self.datainfo.y_std
-    #     )
-    #     result = (low, high, y_n)
-    #     return result
-
     def predict(self, close_list):
         x = self.get_input(close_list)
+        if x is None:
+            return None
         y = self.model.predict(x, use_multiprocessing=True, verbose=1)
         n = np.argmax(y, axis=1)
         y_n = y[np.arange(len(y)), n]
         result = []
         for i in range(len(y_n)):
-            low = (
-                unembed(
-                    n[i],
-                    self.datainfo._y_min(),
-                    self.datainfo._y_max(),
-                    self.datainfo._out_size(),
-                )
-                * self.datainfo.y_std
+            low = unembed(
+                n[i],
+                self.datainfo._y_min(),
+                self.datainfo._y_max(),
+                self.datainfo._out_size(),
             )
-            high = (
-                unembed(
-                    n[i] + 1,
-                    self.datainfo._y_min(),
-                    self.datainfo._y_max(),
-                    self.datainfo._out_size(),
-                )
-                * self.datainfo.y_std
+            high = unembed(
+                n[i] + 1,
+                self.datainfo._y_min(),
+                self.datainfo._y_max(),
+                self.datainfo._out_size(),
             )
             result.append((low, high, float(y_n[n[i]])))
         return result

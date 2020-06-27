@@ -71,6 +71,8 @@ class Server(object):
             x = closes[i - shift : i].to_numpy()
             input_data.append(x)
         output_data = self.p.predict(input_data)
+        if output_data is None:
+            return None
 
         for i in range(shift, last_idx):
             plow, phigh, prob = output_data[i - shift]
@@ -102,7 +104,8 @@ class Server(object):
         while True:
             rates = self.request_data()
             results = self.compute(rates)
-            dbcommon.db_replace(self.db, results)
+            if not results is None:
+                dbcommon.db_replace(self.db, results)
             if DEBUG:
                 return 0
 
