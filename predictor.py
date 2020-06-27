@@ -29,7 +29,7 @@ def embed(v, min_v, max_v, dim):
     # v = max(min_v, min(max_v, v))
     n = int(max(0, min(7, (v - min_v) * step_size)))
     result = np.zeros(dim, dtype="float32")
-    # result = np.full(dim, -1, dtype='float32')
+    # result = np.full(dim, -1, dtype="float32")
     result[n] = 1
     return result
 
@@ -202,7 +202,7 @@ class Predictor(object):
         x_std = d.std()
         # изменим datainfo
         self.datainfo.x_std = float(x_std)
-        infinity = x_std * 4
+        infinity = self.datainfo._x_inf()  # x_std * 8
         d = np.nan_to_num(d / x_std, posinf=infinity, neginf=-infinity)
         x_data = roll(d[:-future], in_size, stride)
         x_forward = roll(d[in_size:], future, stride)
@@ -282,7 +282,7 @@ def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
         input_shape=input_shape,
         output_shape=output_shape,
         predict_size=predict_size,
-        filters=8,
+        filters=64,
         kernel_size=2,
         dense_size=64,
     )
@@ -298,6 +298,6 @@ def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/8", batch_size=2 ** 13, epochs=2 ** 11)
+            train("models/9", batch_size=2 ** 8, epochs=2 ** 11)
 # Debug
 # Тест загрузки предиктора
