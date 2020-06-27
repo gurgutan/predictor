@@ -25,3 +25,5 @@ variables.*
 # архивы
 *.zip
 *.gz
+db/predictions.sqlite
+models/8.cfg
