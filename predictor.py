@@ -27,7 +27,7 @@ def embed(v, min_v, max_v, dim):
     """Возвращает бинарный вектор, длины dim"""
     step_size = (dim - 1) / (max_v - min_v)
     # v = max(min_v, min(max_v, v))
-    n = int(max(0, min(7, (v - min_v) * step_size)))
+    n = int(max(0, min(dim - 1, (v - min_v) * step_size)))
     result = np.zeros(dim, dtype="float32")
     # result = np.full(dim, -1, dtype="float32")
     result[n] = 1
@@ -212,7 +212,10 @@ class Predictor(object):
         y = np.zeros((y_data.shape[0], out_shape[0]))
         for i in range(y.shape[0]):
             y[i] = embed(
-                y_data[i], self.datainfo._y_min(), self.datainfo._y_max(), out_size
+                y_data[i],
+                self.datainfo._y_min() / self.datainfo.y_std,
+                self.datainfo._y_max() / self.datainfo.y_std,
+                out_size,
             )
         self.datainfo.save(self.name + ".cfg")
         return x.astype("float32"), y.astype("float32")
@@ -258,14 +261,14 @@ class Predictor(object):
         for i in range(len(y_n)):
             low = unembed(
                 n[i],
-                self.datainfo._y_min(),
-                self.datainfo._y_max(),
+                self.datainfo._y_min() / self.datainfo.y_std,
+                self.datainfo._y_max() / self.datainfo.y_std,
                 self.datainfo._out_size(),
             )
             high = unembed(
                 n[i] + 1,
-                self.datainfo._y_min(),
-                self.datainfo._y_max(),
+                self.datainfo._y_min() / self.datainfo.y_std,
+                self.datainfo._y_max() / self.datainfo.y_std,
                 self.datainfo._out_size(),
             )
             result.append((low, high, float(y_n[n[i]])))
@@ -298,6 +301,6 @@ def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/9", batch_size=2 ** 8, epochs=2 ** 11)
+            train("models/9", batch_size=2 ** 14, epochs=2 ** 11)
 # Debug
 # Тест загрузки предиктора
