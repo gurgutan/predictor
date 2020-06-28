@@ -61,11 +61,26 @@ def conv2D(input_shape, output_shape, filters=32, kernel_size=4, dense_size=8):
     l2_reg = keras.regularizers.l2(l=1e-4)
     inputs = keras.Input(shape=input_shape)
     x = inputs
-
-    for i in range(15):
+    for add_filters in [
+        16,
+        16,
+        32,
+        32,
+        64,
+        64,
+        128,
+        128,
+        256,
+        256,
+        512,
+        512,
+        1024,
+        1024,
+        1024,
+    ]:  # range(15):
         ksize = min([x.shape[1], x.shape[2], kernel_size])
         x = layers.SeparableConv2D(
-            min(max_filters, filters + 2 ** i),  # min(512, filters * 2**i),
+            min(max_filters, add_filters),
             ksize,
             padding="valid",
             bias_initializer=keras.initializers.RandomNormal(),
@@ -73,11 +88,11 @@ def conv2D(input_shape, output_shape, filters=32, kernel_size=4, dense_size=8):
             kernel_initializer=keras.initializers.RandomNormal(),
             kernel_regularizer=l1_reg,
         )(x)
+        # x = layers.MaxPool2D(pool_size=(2, 2), strides=(1, 1))(x)
         x = layers.Activation("relu")(x)
         x = layers.BatchNormalization()(x)
-        # x = layers.MaxPool2D(pool_size=(2, 2), strides=(1, 1))(x)
 
-    x = layers.Dropout(0.1)(x)
+    x = layers.Dropout(0.2)(x)
     x = layers.Flatten()(x)
     x = layers.Dense(
         dense_size,

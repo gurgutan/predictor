@@ -26,8 +26,8 @@ def roll(a, size, dx=1):
 def embed(v, min_v, max_v, dim):
     """Возвращает бинарный вектор, длины dim"""
     step_size = (dim - 1) / (max_v - min_v)
-    # v = max(min_v, min(max_v, v))
-    n = int(max(0, min(dim - 1, (v - min_v) * step_size)))
+    v = max(min_v, min(max_v, v))
+    n = int((v - min_v) * step_size)
     result = np.zeros(dim, dtype="float32")
     # result = np.full(dim, -1, dtype="float32")
     result[n] = 1
@@ -156,7 +156,7 @@ class Predictor(object):
         Возврат:
         x, y - размеченные данные типа numpy.array, сохранные на диск файл dataset_file"""
 
-        stride = 2  # шаг "нарезки" входных данных
+        stride = 1  # шаг "нарезки" входных данных
         in_shape = self.datainfo.input_shape
         out_shape = self.datainfo.output_shape
         future = self.datainfo.future
@@ -202,20 +202,18 @@ class Predictor(object):
         x_std = d.std()
         # изменим datainfo
         self.datainfo.x_std = float(x_std)
-        infinity = self.datainfo._x_inf()  # x_std * 8
-        d = np.nan_to_num(d / x_std, posinf=infinity, neginf=-infinity)
+        d = np.nan_to_num(
+            d / x_std, posinf=self.datainfo._x_inf(), neginf=-self.datainfo._x_inf()
+        )
         x_data = roll(d[:-future], in_size, stride)
         x_forward = roll(d[in_size:], future, stride)
-        y_data = np.sum(x_forward, axis=1)
-        self.datainfo.y_std = float(y_data.std() * self.datainfo.x_std)
+        y_data = np.sum(x_forward * self.datainfo.x_std, axis=1)
+        self.datainfo.y_std = float(y_data.std())
         x = np.reshape(x_data, (x_data.shape[0], in_shape[0], in_shape[1], in_shape[2]))
         y = np.zeros((y_data.shape[0], out_shape[0]))
         for i in range(y.shape[0]):
             y[i] = embed(
-                y_data[i],
-                self.datainfo._y_min() / self.datainfo.y_std,
-                self.datainfo._y_max() / self.datainfo.y_std,
-                out_size,
+                y_data[i], self.datainfo._y_min(), self.datainfo._y_max(), out_size,
             )
         self.datainfo.save(self.name + ".cfg")
         return x.astype("float32"), y.astype("float32")
@@ -234,7 +232,7 @@ class Predictor(object):
             log_dir=log_dir, histogram_freq=1, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
-            monitor="val_loss", patience=8, min_delta=1e-3, restore_best_weights=False
+            monitor="val_loss", patience=16, min_delta=1e-3, restore_best_weights=True
         )
         cp_save = keras.callbacks.ModelCheckpoint(filepath=ckpt, save_weights_only=True)
         history = self.model.fit(
@@ -259,17 +257,23 @@ class Predictor(object):
         y_n = y[np.arange(len(y)), n]
         result = []
         for i in range(len(y_n)):
-            low = unembed(
-                n[i],
-                self.datainfo._y_min() / self.datainfo.y_std,
-                self.datainfo._y_max() / self.datainfo.y_std,
-                self.datainfo._out_size(),
+            low = (
+                unembed(
+                    n[i],
+                    self.datainfo._y_min(),
+                    self.datainfo._y_max(),
+                    self.datainfo._out_size(),
+                )
+                * self.datainfo.y_std
             )
-            high = unembed(
-                n[i] + 1,
-                self.datainfo._y_min() / self.datainfo.y_std,
-                self.datainfo._y_max() / self.datainfo.y_std,
-                self.datainfo._out_size(),
+            high = (
+                unembed(
+                    n[i] + 1,
+                    self.datainfo._y_min(),
+                    self.datainfo._y_max(),
+                    self.datainfo._out_size(),
+                )
+                * self.datainfo.y_std
             )
             result.append((low, high, float(y_n[n[i]])))
         return result
@@ -287,10 +291,10 @@ def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
         predict_size=predict_size,
         filters=64,
         kernel_size=2,
-        dense_size=64,
+        dense_size=256,
     )
     x, y = p.load_dataset(
-        csv_file="datas/EURUSD_M5_200001030000_202006122350.csv", count=0, skip=2 ** 16
+        csv_file="datas/EURUSD_M5_200001030000_202006122350.csv", count=0, skip=2 ** 14
     )
     if not x is None:
         history = p.train(x, y, batch_size=batch_size, epochs=epochs)
@@ -301,6 +305,6 @@ def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/9", batch_size=2 ** 14, epochs=2 ** 11)
+            train("models/10", batch_size=2 ** 14, epochs=2 ** 11)
 # Debug
 # Тест загрузки предиктора
