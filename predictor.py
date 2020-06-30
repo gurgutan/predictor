@@ -155,7 +155,7 @@ class Predictor(object):
         skip - сдвиг относительно конца файла
         Возврат:
         x, y - размеченные данные типа numpy.array, сохранные на диск файл dataset_file"""
-
+        # stride не менять, должно быть =1
         stride = 1  # шаг "нарезки" входных данных
         in_shape = self.datainfo.input_shape
         out_shape = self.datainfo.output_shape
@@ -232,7 +232,7 @@ class Predictor(object):
             log_dir=log_dir, histogram_freq=1, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
-            monitor="val_loss", patience=16, min_delta=1e-3, restore_best_weights=True
+            monitor="loss", patience=16, min_delta=1e-3, restore_best_weights=True
         )
         cp_save = keras.callbacks.ModelCheckpoint(filepath=ckpt, save_weights_only=True)
         history = self.model.fit(
@@ -291,11 +291,9 @@ def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
         predict_size=predict_size,
         filters=64,
         kernel_size=2,
-        dense_size=256,
+        dense_size=64,
     )
-    x, y = p.load_dataset(
-        csv_file="datas/EURUSD_M5_200001030000_202006122350.csv", count=0, skip=2 ** 14
-    )
+    x, y = p.load_dataset(csv_file="datas/EURUSD_M5_200001030000_202006122350.csv")
     if not x is None:
         history = p.train(x, y, batch_size=batch_size, epochs=epochs)
     else:
@@ -305,6 +303,6 @@ def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/10", batch_size=2 ** 14, epochs=2 ** 11)
+            train("models/11", batch_size=2 ** 15, epochs=2 ** 2)
 # Debug
 # Тест загрузки предиктора

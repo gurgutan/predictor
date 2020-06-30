@@ -38,6 +38,7 @@ def db_replace(db, data):
         data,
     )
     db.commit()
+    print("В БД записано " + str(len(data)) + " строк")
 
 
 def db_update_real_prices(db, data):
