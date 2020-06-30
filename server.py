@@ -90,8 +90,8 @@ class Server(object):
                 round(prob, 8),
             )
             results.append(db_row)
-            if DEBUG:
-                print(db_row)
+            # if DEBUG:
+            #     print(db_row)
         return results
 
     def start(self):

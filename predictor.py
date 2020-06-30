@@ -26,7 +26,6 @@ def roll(a, size, dx=1):
 def embed(v, min_v, max_v, dim):
     """Возвращает бинарный вектор, длины dim"""
     step_size = (dim - 1) / (max_v - min_v)
-    # v = max(min_v, min(max_v, v))
     n = int(max(0, min(dim - 1, (v - min_v) * step_size)))
     result = np.zeros(dim, dtype="float32")
     # result = np.full(dim, -1, dtype="float32")
@@ -229,7 +228,7 @@ class Predictor(object):
         except Exception as e:
             pass
         # Функция для tensorboard
-        log_dir = "./logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         tensorboard_link = keras.callbacks.TensorBoard(
             log_dir=log_dir, histogram_freq=1, write_graph=True
         )
@@ -259,17 +258,23 @@ class Predictor(object):
         y_n = y[np.arange(len(y)), n]
         result = []
         for i in range(len(y_n)):
-            low = unembed(
-                n[i],
-                self.datainfo._y_min() / self.datainfo.y_std,
-                self.datainfo._y_max() / self.datainfo.y_std,
-                self.datainfo._out_size(),
+            low = (
+                unembed(
+                    n[i],
+                    self.datainfo._y_min() / self.datainfo.y_std,
+                    self.datainfo._y_max() / self.datainfo.y_std,
+                    self.datainfo._out_size(),
+                )
+                * self.datainfo.y_std
             )
-            high = unembed(
-                n[i] + 1,
-                self.datainfo._y_min() / self.datainfo.y_std,
-                self.datainfo._y_max() / self.datainfo.y_std,
-                self.datainfo._out_size(),
+            high = (
+                unembed(
+                    n[i] + 1,
+                    self.datainfo._y_min() / self.datainfo.y_std,
+                    self.datainfo._y_max() / self.datainfo.y_std,
+                    self.datainfo._out_size(),
+                )
+                * self.datainfo.y_std
             )
             result.append((low, high, float(y_n[n[i]])))
         return result
@@ -301,6 +306,6 @@ def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/9", batch_size=2 ** 14, epochs=2 ** 11)
+            train("models/10", batch_size=2 ** 14, epochs=2 ** 11)
 # Debug
 # Тест загрузки предиктора
