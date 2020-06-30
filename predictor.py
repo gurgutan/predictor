@@ -14,7 +14,7 @@ from datainfo import DatasetInfo
 
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # os.environ["CUDA_VISIBLE_DEVICES"] = ""
-# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 def roll(a, size, dx=1):
@@ -26,8 +26,7 @@ def roll(a, size, dx=1):
 def embed(v, min_v, max_v, dim):
     """Возвращает бинарный вектор, длины dim"""
     step_size = (dim - 1) / (max_v - min_v)
-    v = max(min_v, min(max_v, v))
-    n = int((v - min_v) * step_size)
+    n = int(max(0, min(dim - 1, (v - min_v) * step_size)))
     result = np.zeros(dim, dtype="float32")
     # result = np.full(dim, -1, dtype="float32")
     result[n] = 1
@@ -218,7 +217,7 @@ class Predictor(object):
         self.datainfo.save(self.name + ".cfg")
         return x.astype("float32"), y.astype("float32")
 
-    def train(self, x, y, batch_size=64, epochs=1024):
+    def train(self, x, y, batch_size, epochs):
         # Загрузим веса, если они есть
         ckpt = "ckpt/" + self.name + ".ckpt"
         try:
@@ -227,7 +226,7 @@ class Predictor(object):
         except Exception as e:
             pass
         # Функция для tensorboard
-        log_dir = "./logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         tensorboard_link = keras.callbacks.TensorBoard(
             log_dir=log_dir, histogram_freq=1, write_graph=True
         )
@@ -279,7 +278,7 @@ class Predictor(object):
         return result
 
 
-def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
+def train(modelname, batch_size, epochs):
     input_shape = (16, 16, 1)
     output_shape = (8,)
     predict_size = 16
@@ -303,6 +302,6 @@ def train(modelname, batch_size=2 ** 8, epochs=2 ** 2):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/11", batch_size=2 ** 15, epochs=2 ** 2)
+            train("models/13", batch_size=2 ** 10, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора
