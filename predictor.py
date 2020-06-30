@@ -289,7 +289,7 @@ def train(modelname, batch_size, epochs):
         output_shape=output_shape,
         predict_size=predict_size,
         filters=64,
-        kernel_size=2,
+        kernel_size=4,
         dense_size=64,
     )
     x, y = p.load_dataset(csv_file="datas/EURUSD_M5_200001030000_202006122350.csv")
@@ -302,6 +302,6 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/13", batch_size=2 ** 10, epochs=2 ** 10)
+            train("models/14", batch_size=2 ** 10, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора

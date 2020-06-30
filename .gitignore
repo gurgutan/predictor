@@ -27,3 +27,5 @@ variables.*
 *.gz
 # БД
 *.sqlite
+# мусор
+trash
