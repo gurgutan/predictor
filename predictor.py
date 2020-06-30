@@ -259,8 +259,8 @@ class Predictor(object):
             low = (
                 unembed(
                     n[i],
-                    self.datainfo._y_min(),
-                    self.datainfo._y_max(),
+                    self.datainfo._y_min() / self.datainfo.y_std,
+                    self.datainfo._y_max() / self.datainfo.y_std,
                     self.datainfo._out_size(),
                 )
                 * self.datainfo.y_std
@@ -268,8 +268,8 @@ class Predictor(object):
             high = (
                 unembed(
                     n[i] + 1,
-                    self.datainfo._y_min(),
-                    self.datainfo._y_max(),
+                    self.datainfo._y_min() / self.datainfo.y_std,
+                    self.datainfo._y_max() / self.datainfo.y_std,
                     self.datainfo._out_size(),
                 )
                 * self.datainfo.y_std
