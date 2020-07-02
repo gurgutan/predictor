@@ -9,7 +9,7 @@ import os
 import time
 import datetime
 import sys
-from patterns import conv2D
+from patterns import conv2D, multiConv2D
 from datainfo import DatasetInfo
 
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -94,7 +94,7 @@ class Predictor(object):
         output_shape,
         conv_number=16,
         filters=64,
-        kernel_size=4,
+        kernel_size=2,
         dense_size=8,
     ):
         self.model = conv2D(
@@ -231,7 +231,10 @@ class Predictor(object):
             log_dir=log_dir, histogram_freq=1, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
-            monitor="loss", patience=16, min_delta=1e-3, restore_best_weights=True
+            monitor="val_mean_absolute_error",
+            patience=16,
+            min_delta=1e-3,
+            restore_best_weights=True,
         )
         cp_save = keras.callbacks.ModelCheckpoint(filepath=ckpt, save_weights_only=True)
         history = self.model.fit(
@@ -239,7 +242,8 @@ class Predictor(object):
             y,
             batch_size=batch_size,
             epochs=epochs,
-            validation_split=0.2,
+            validation_split=0.1,
+            shuffle=True,
             use_multiprocessing=True,
             callbacks=[early_stop, cp_save, tensorboard_link],
         )
@@ -288,11 +292,13 @@ def train(modelname, batch_size, epochs):
         input_shape=input_shape,
         output_shape=output_shape,
         predict_size=predict_size,
-        filters=64,
-        kernel_size=4,
+        filters=16,
+        kernel_size=2,
         dense_size=64,
     )
-    x, y = p.load_dataset(csv_file="datas/EURUSD_M5_200001030000_202006122350.csv")
+    x, y = p.load_dataset(
+        csv_file="datas/EURUSD_M5_200001030000_202006122350.csv", count=2 ** 19
+    )
     if not x is None:
         history = p.train(x, y, batch_size=batch_size, epochs=epochs)
     else:
@@ -302,6 +308,6 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/14", batch_size=2 ** 10, epochs=2 ** 10)
+            train("models/19", batch_size=2 ** 9, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора
