@@ -25,6 +25,8 @@ def db_open(dbname):
 
 
 def db_replace(db, data):
+    if data is None:
+        return
     cursor = db.cursor()
     cursor.executemany(
         "INSERT OR REPLACE INTO pdata("
@@ -64,4 +66,8 @@ def db_select(db, from_date, to_date):
 def db_get_lowdate(db):
     cursor = db.cursor()
     cursor.execute("select max(rdate) from pdata")
-    return cursor.fetchone()
+    value = cursor.fetchone()[0]
+    if value is None:
+        return None
+    result = dt.datetime.fromtimestamp(int(value))
+    return result

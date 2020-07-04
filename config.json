@@ -1,7 +1,8 @@
 {
     "dbname": "./db/predictions.sqlite",
     "initialdate": "2016-01-01T00:00:00",
-    "modelname": "./models/10",
+    "modelname": "./models/19",
     "symbol": "EURUSD",
-    "timeframe": "TIMEFRAME_M5"
+    "timeframe": "TIMEFRAME_M5",
+    "delay": 300
 }
