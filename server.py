@@ -8,6 +8,10 @@ from time import sleep
 from timer import DelayTimer
 import logging
 import MetaTrader5 as mt5
+import os
+import pytz
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 class Server(object):
@@ -15,6 +19,7 @@ class Server(object):
         configname = "config.json"
         self.p = None
         self.ready = False
+        self.__init_logger__()
         with open(configname) as config_file:
             data = json.load(config_file)
             self.dbname = data["dbname"]  # полное имя БД
@@ -23,12 +28,7 @@ class Server(object):
             self.symbol = data["symbol"]  # символ инструмента
             self.timeframe = data["timeframe"]  # тайм-фрэйм сервера
             self.delay = data["delay"]  # задержка в секундах цикла сервера
-        if (
-            self.__init_db__()
-            and self.__init_mt5__()
-            and self.__init_predictor__()
-            and self.__init_logger__()
-        ):
+        if self.__init_db__() and self.__init_mt5__() and self.__init_predictor__():
             self.ready = True
         else:
             logging.error("Ошибка инициализации сервера")
@@ -56,7 +56,7 @@ class Server(object):
         logging.basicConfig(
             # filename="srv.log",
             level=logging.DEBUG,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            format="%(asctime)s [%(levelname)s] %(message)s",
             # filemode="w",
         )
         return True
@@ -70,40 +70,51 @@ class Server(object):
         return True
 
     def get_rates_from_date(self, from_date):
-        mt5rates = mt5.copy_rates_range(
-            self.symbol, mt5.TIMEFRAME_M5, from_date, dt.datetime.now()
-        )
-        if mt5rates is None:
-            logging.error("Ошибка:" + str(mt5.last_error()))
-            return None
+        # установим таймзону в UTC
+        timezone = pytz.timezone("Etc/UTC")
+        rates_count = 0
+        while rates_count < 257:
+            mt5rates = mt5.copy_rates_range(
+                self.symbol, mt5.TIMEFRAME_M5, from_date, dt.datetime.now(tz=timezone)
+            )
+            if mt5rates is None:
+                logging.error("Ошибка:" + str(mt5.last_error()))
+                return None
+            rates_count = len(mt5rates)
+            if rates_count < 257:
+                from_date = from_date - dt.timedelta(days=1)
+
         rates = pd.DataFrame(mt5rates)
-        logging.info("Получено " + str(len(rates)) + " котировок")
+        logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
-    def get_rates(self, count):
+    def get_last_rates(self, count):
         mt5rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 0, count)
         if mt5rates is None:
             logging.error("Ошибка:" + str(mt5.last_error()))
             return None
         rates = pd.DataFrame(mt5rates)
-        logging.info("Получено " + str(len(rates)) + " котировок")
+        logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
-    def compute(self, rates):
+    def compute(self, rates, verbose=1):
         if len(rates) == 0:
             return None
         closes, times = rates["close"], rates["time"]
-        last_idx = len(closes)
+        count = len(closes)
         shift = self.p.datainfo._in_size() + 1
         results = []
+        # сделаем "нарезку" входных векторов
         input_data = []
-        for i in range(shift, last_idx):
+        for i in range(shift, count + 1):
             x = closes[i - shift : i].to_numpy()
             input_data.append(x)
-        output_data = self.p.predict(input_data)
+        # вычисляем прогноз
+        output_data = self.p.predict(input_data, verbose=verbose)
         if output_data is None:
             return None
-        for i in range(shift, last_idx):
+        # сформируем результирующий список кортежей для записи в БД
+        for i in range(shift, count + 1):
             plow, phigh, prob = output_data[i - shift]
             rdate = int(times[i - 1])
             rprice = closes[i - 1]
@@ -119,11 +130,12 @@ class Server(object):
                 round(prob, 6),
             )
             results.append(db_row)
-        logging.info("Вычисления завершены. Получено " + str(len(results)) + " строк")
+        logging.debug("Вычислено: " + str(len(results)))
         return results
 
     def calc_old(self):
         from_date = self.initialdate
+        # определяем "крайнюю" дату для последующих вычислений
         date = dbcommon.db_get_lowdate(self.db)
         delta = dt.timedelta(minutes=(self.p.datainfo._in_size() + 1) * 5)
         if not date is None:
@@ -132,13 +144,11 @@ class Server(object):
         if rates is None:
             logging.error("Отсутствуют новые котировки")
             return
-        results = self.compute(rates)
+        results = self.compute(rates, verbose=1)
         if results is None:
             return
-        print("Вычислено %d прогнозов" % len(results))
-        logging.info("Вычислено %d прогнозов" % len(results))
-        if not results is None:
-            dbcommon.db_replace(self.db, results)
+        logging.info("Вычислено %d " % len(results))
+        dbcommon.db_replace(self.db, results)
 
     def start(self):
         dtimer = DelayTimer(self.delay)
@@ -146,13 +156,16 @@ class Server(object):
         while True:
             if not dtimer.elapsed():
                 continue
-            rates = self.get_rates(self.p.datainfo._in_size() + 1)
+            rates = self.get_last_rates(self.p.datainfo._in_size() + 1)
             if rates is None:
-                logging.info("Отсутствуют новые котировки")
+                logging.debug("Отсутствуют новые котировки")
                 continue
-            results = self.compute(rates)
-            if not results is None:
-                dbcommon.db_replace(self.db, results)
+            results = self.compute(rates, verbose=0)
+            if results is None:
+                logging.error("Ошибка вычислений")
+                continue
+            dbcommon.db_replace(self.db, results)
+            # logging.info("В БД записано " + str(len(results)) + " строк")
 
 
 DEBUG = False

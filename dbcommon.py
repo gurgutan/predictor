@@ -8,8 +8,7 @@ def db_open(dbname):
         cursor = db.cursor()
         cursor.execute(
             "CREATE TABLE IF NOT EXISTS pdata("
-            + "id INTEGER PRIMARY KEY, "
-            + "rdate integer, "
+            + "rdate INTEGER PRIMARY KEY, "
             + "rprice real, "
             + "pmodel TEXT, "
             + "pdate integer, "
@@ -26,7 +25,7 @@ def db_open(dbname):
 
 def db_replace(db, data):
     if data is None:
-        return
+        return False
     cursor = db.cursor()
     cursor.executemany(
         "INSERT OR REPLACE INTO pdata("
@@ -40,7 +39,7 @@ def db_replace(db, data):
         data,
     )
     db.commit()
-    print("В БД записано " + str(len(data)) + " строк")
+    return True
 
 
 def db_update_real_prices(db, data):

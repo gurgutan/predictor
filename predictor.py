@@ -1,3 +1,6 @@
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import io
 import numpy as np
 import pandas as pd
@@ -5,7 +8,6 @@ import tensorflow as tf
 from tensorflow import keras
 import random
 from os import path
-import os
 import time
 import datetime
 import sys
@@ -14,7 +16,6 @@ from datainfo import DatasetInfo
 
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # os.environ["CUDA_VISIBLE_DEVICES"] = ""
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 def roll(a, size, dx=1):
@@ -282,7 +283,7 @@ class Predictor(object):
                 )
                 * self.datainfo.y_std
             )
-            result.append((low, high, float(y_n[n[i]])))
+            result.append((low, high, float(y_n[i])))
         return result
 
     def eval(self, closes):
