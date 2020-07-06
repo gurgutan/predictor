@@ -2,7 +2,7 @@
     "dbname": "./db/predictions.sqlite",
     "initialdate": "2016-01-01T00:00:00",
     "modelname": "./models/19",
-    "symbol": "EURUSD",
+    "symbol": "EURUSD_i",
     "timeframe": "TIMEFRAME_M5",
-    "delay": 300
+    "delay": 30
 }

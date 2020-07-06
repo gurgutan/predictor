@@ -251,11 +251,15 @@ class Predictor(object):
         print("Модель " + self.name + " сохранена")
         return history
 
-    def predict(self, close_list):
-        x = self.get_input(close_list)
+    def predict(self, closes, verbose=1):
+        """
+        Вычисление результата для набора
+        closes - массив размерности (n, input_size+1)
+        """
+        x = self.get_input(closes)
         if x is None:
             return None
-        y = self.model.predict(x, use_multiprocessing=True, verbose=1)
+        y = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
         n = np.argmax(y, axis=1)
         y_n = y[np.arange(len(y)), n]
         result = []
@@ -281,6 +285,12 @@ class Predictor(object):
             result.append((low, high, float(y_n[n[i]])))
         return result
 
+    def eval(self, closes):
+        """
+        closes - массив размерности (input_size)
+        """
+        return self.predict([closes], verbose=0)
+
 
 def train(modelname, batch_size, epochs):
     input_shape = (16, 16, 1)
@@ -299,6 +309,7 @@ def train(modelname, batch_size, epochs):
     x, y = p.load_dataset(
         csv_file="datas/EURUSD_M5_200001030000_202006122350.csv", count=2 ** 19
     )
+    keras.utils.plot_model(p.model, show_shapes=True)
     if not x is None:
         history = p.train(x, y, batch_size=batch_size, epochs=epochs)
     else:
