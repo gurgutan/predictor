@@ -13,12 +13,12 @@ import pytz
 # print(mt5.TIMEFRAME_M1)
 # print(mt5.TIMEFRAME_H1)
 
-timezone = pytz.timezone("Etc/UTC")
-print(dt.datetime.fromtimestamp(1594104300, tz=timezone))
-print(dt.datetime.fromtimestamp(1594104300))
+# timezone = pytz.timezone("Etc/UTC")
+# print(dt.datetime.fromtimestamp(1594104300, tz=timezone))
+# print(dt.datetime.fromtimestamp(1594104300))
 
 # 2020.07.06 16:11:15.574	MMTE (EURUSD_i,M5)	1594048216
-
+print("Подключено к терминалу '%s' версия %s" % ("ddf", "13432"))
 
 a = [0, 1, 2, 3]
 # print(a[-4:])

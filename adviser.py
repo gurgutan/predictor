@@ -32,7 +32,7 @@ class Adviser:
         self.tp = 1000
         self.max_vol = 1.0
         self.vol = 0.1
-        self.confidence = 0.4
+        self.confidence = 0.7
         self.std = 0.003
         self.symbol = symbol
         self.timeunit = 300  # секунд
@@ -42,13 +42,14 @@ class Adviser:
     def __init_mt5__(self):
         if self.IsMT5Connected():
             return True
-        logging.info("Подключение к терминалу MT5")
         # if not mt5.initialize(path="D:/Dev/Alpari MT5/terminal64.exe"):   # реальный
         if not mt5.initialize(path=self.mt5path):  # тестовый
             logging.error("Ошибка подключпения к терминалу MT5")
             mt5.shutdown()
             return False
-        logging.info("... версия MT5:" + str(mt5.version()))
+        logging.info(
+            "Подключено к терминалу '%s' версия %s" % (self.mt5path, str(mt5.version()))
+        )
         return True
 
     def IsMT5Connected(self):
@@ -134,7 +135,7 @@ class Adviser:
                 logging.error("Ошибка покупки: " + str(mt5.last_error()))
         if -d > self.vol and -pos_vol < self.max_vol:
             if self.order(order_type=-1, volume=self.vol):
-                logging.info("Продажа " + self.vol)
+                logging.info("Продажа " + str(self.vol))
             else:
                 logging.error("Ошибка продажи: " + str(mt5.last_error()))
 
@@ -142,7 +143,8 @@ class Adviser:
         if not self.ready:
             logging.error("Робот не готов к торговле")
             return False
-        logging.info("Запуск планировщика с периодом " + str(self.delay) + " сек.")
+        info = f"Робот(SL={self.sl},TP={self.tp},max_vol={self.max_vol},vol={self.vol},confidence={self.confidence},std={self.std},symbol={self.symbol},timeunit={self.timeunit},delay={self.delay}"
+        logging.info(info)
         dtimer = DelayTimer(self.delay)
         while True:
             if not dtimer.elapsed():
@@ -162,7 +164,7 @@ def main():
     if not predictor.trained:
         logging.error("Ошибка инициализации модели")
         return False
-    adviser = Adviser(predictor=predictor, delay=60)
+    adviser = Adviser(predictor=predictor, delay=300)
     if not adviser.ready:
         logging.error("Ошибка инициализации робота")
         return
