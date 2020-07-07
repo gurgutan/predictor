@@ -14,8 +14,8 @@ import pytz
 # print(mt5.TIMEFRAME_H1)
 
 timezone = pytz.timezone("Etc/UTC")
-print(dt.datetime.fromtimestamp(1594049400, tz=timezone))
-print(dt.datetime.fromtimestamp(1594049400))
+print(dt.datetime.fromtimestamp(1594104300, tz=timezone))
+print(dt.datetime.fromtimestamp(1594104300))
 
 # 2020.07.06 16:11:15.574	MMTE (EURUSD_i,M5)	1594048216
 

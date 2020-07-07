@@ -45,7 +45,7 @@ class Server(object):
     def __init_mt5__(self):
         # подключимся к MetaTrader 5
         logging.info("Подключение к терминалу MT5 ")
-        if not mt5.initialize():
+        if not mt5.initialize(path="D:/Dev/Alpari MT5/terminal64.exe"):
             logging.error("Ошибка подключпения к терминалу MT5")
             mt5.shutdown()
             return False
@@ -137,7 +137,8 @@ class Server(object):
         from_date = self.initialdate
         # определяем "крайнюю" дату для последующих вычислений
         date = dbcommon.db_get_lowdate(self.db)
-        delta = dt.timedelta(minutes=(self.p.datainfo._in_size() + 1) * 5)
+        delta = dt.timedelta(days=4)  # за 4 дня до
+        # delta = dt.timedelta(minutes=(self.p.datainfo._in_size() + 1) * 5)
         if not date is None:
             from_date = date - delta
         rates = self.get_rates_from_date(from_date)
@@ -147,8 +148,14 @@ class Server(object):
         results = self.compute(rates, verbose=1)
         if results is None:
             return
-        logging.info("Вычислено %d " % len(results))
+        # logging.info("Вычислено %d " % len(results))
         dbcommon.db_replace(self.db, results)
+
+    def IsMT5Connected(self):
+        info = mt5.account_info()
+        if mt5.last_error()[0] < 0:
+            return False
+        return True
 
     def start(self):
         dtimer = DelayTimer(self.delay)
@@ -156,6 +163,11 @@ class Server(object):
         while True:
             if not dtimer.elapsed():
                 continue
+
+            if not self.IsMT5Connected():
+                logging.error("Ошибка подклбчения к МТ5:" + str(mt5.last_error()))
+                if not self.__init_mt5__():
+                    continue
             rates = self.get_last_rates(self.p.datainfo._in_size() + 1)
             if rates is None:
                 logging.debug("Отсутствуют новые котировки")
