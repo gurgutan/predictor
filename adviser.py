@@ -69,9 +69,16 @@ class Adviser:
         # ticket time type magic identifier reason volume price_open sl tp price_current swap profit symbol comment
         vol = 0
         for pos in positions:
-            type_mult = -pos.type * 2 - 1  # -1=sell, +1=buy
+            type_mult = -(pos.type * 2 - 1)  # -1=sell, +1=buy
             vol += pos.volume * type_mult
         return vol
+
+    def order(self, order_type, volume):
+        if order_type == 1:
+            result = mt5.Buy(symbol=self.symbol, volume=volume)
+        elif order_type == -1:
+            result = mt5.Sell(symbol=self.symbol, volume=volume)
+        return result
 
     def get_trend(self):
         result = self.compute()
@@ -81,13 +88,6 @@ class Adviser:
         d = (low + high) / 2 - cur_price
         trend = (max(-1, min(1, d / self.std)), confidence)
         return trend
-
-    def order(self, order_type, volume):
-        if order_type == 1:
-            result = mt5.Buy(symbol=self.symbol, volume=volume)
-        elif order_type == -1:
-            result = mt5.Sell(symbol=self.symbol, volume=volume)
-        return result
 
     def compute(self):
         """
@@ -123,7 +123,10 @@ class Adviser:
         targ_vol = self.max_vol * trend[0]
         pos_vol = self._get_pos_vol()
         d = targ_vol - pos_vol
-        logging.debug("trend=" + str(trend) + " diff=" + str(d))
+
+        logging.debug(
+            f"pos_vol={pos_vol} targ_vol={targ_vol} trend={str(trend)} diff={str(d)}"
+        )
         if trend[1] < self.confidence:
             return
         if d == 0:
