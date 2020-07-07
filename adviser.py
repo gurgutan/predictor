@@ -9,6 +9,9 @@ from predictor import Predictor
 # ORDER_TYPE_SELL=-1
 # ORDER_TYPE_BUY=1
 
+version = "0.1"
+author = "СИИ"
+
 
 def __init_logger__():
     logging.basicConfig(
@@ -27,7 +30,7 @@ class Adviser:
         self.predictor = predictor
         self.sl = 1000
         self.tp = 1000
-        self.max_vol = 1
+        self.max_vol = 1.0
         self.vol = 0.1
         self.confidence = 0.4
         self.std = 0.003
@@ -67,7 +70,7 @@ class Adviser:
         for pos in positions:
             type_mult = -pos.type * 2 - 1  # -1=sell, +1=buy
             vol += pos.volume * type_mult
-        return pos
+        return vol
 
     def get_trend(self):
         result = self.compute()
@@ -75,7 +78,7 @@ class Adviser:
             return (0, 0)
         cur_date, cur_price, future_date, low, high, confidence = result
         d = (low + high) / 2 - cur_price
-        trend = (d / self.std, confidence)
+        trend = (max(-1, min(1, d / self.std)), confidence)
         return trend
 
     def order(self, order_type, volume):
@@ -96,13 +99,13 @@ class Adviser:
         if rates is None:
             logging.error("Ошибка запроса котировок: " + str(mt5.last_error()))
             return None
-        if len(rates) <= rates_count:
+        if len(rates) < rates_count:
             logging.error("Нет котировок")
             return None
         closes = rates["close"][-rates_count:]
         times = rates["time"][-rates_count:]
         future_date = int(times[-1] + self.timeunit * self.predictor.datainfo.future)
-        low, high, confidence = self.predictor.eval(closes)
+        low, high, confidence = self.predictor.eval(closes)[0]
         result = (
             times[-1],
             closes[-1],
@@ -111,21 +114,29 @@ class Adviser:
             closes[-1] + high,
             confidence,
         )
-        logging.debug(str(result))
+        # logging.debug(str(result))
         return result
 
     def deal(self):
-        trend = max(-1, min(1, self.get_trend()))
+        trend = self.get_trend()
         targ_vol = self.max_vol * trend[0]
         pos_vol = self._get_pos_vol()
         d = targ_vol - pos_vol
         logging.debug("trend=" + str(trend) + " diff=" + str(d))
+        if trend[1] < self.confidence:
+            return
         if d == 0:
             return
-        if d >= self.vol and pos_vol < self.max_vol:
-            self.order(order_type=-1, volume=self.vol)
-        if -d >= self.vol and -pos_vol < self.max_vol:
-            self.order(order_type=1, volume=self.vol)
+        if d > self.vol and pos_vol < self.max_vol:
+            if self.order(order_type=1, volume=self.vol):
+                logging.info("Покупка " + str(self.vol))
+            else:
+                logging.error("Ошибка покупки: " + str(mt5.last_error()))
+        if -d > self.vol and -pos_vol < self.max_vol:
+            if self.order(order_type=-1, volume=self.vol):
+                logging.info("Продажа " + self.vol)
+            else:
+                logging.error("Ошибка продажи: " + str(mt5.last_error()))
 
     def run(self):
         if not self.ready:
@@ -143,6 +154,7 @@ class Adviser:
 
 
 def main():
+    print("Adviser v=" + version + " author=" + author)
     __init_logger__()
     modelname = "models/19"
     logging.debug("Загрузка модели " + modelname)
@@ -150,7 +162,7 @@ def main():
     if not predictor.trained:
         logging.error("Ошибка инициализации модели")
         return False
-    adviser = Adviser(predictor=predictor)
+    adviser = Adviser(predictor=predictor, delay=60)
     if not adviser.ready:
         logging.error("Ошибка инициализации робота")
         return
