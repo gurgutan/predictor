@@ -115,7 +115,7 @@ class Server(object):
             return None
         # сформируем результирующий список кортежей для записи в БД
         for i in range(shift, count + 1):
-            plow, phigh, prob = output_data[i - shift]
+            plow, phigh, confidence = output_data[i - shift]
             rdate = int(times[i - 1])
             rprice = closes[i - 1]
             pmodel = self.p.name
@@ -127,7 +127,7 @@ class Server(object):
                 pdate,
                 round(rprice + plow, 6),
                 round(rprice + phigh, 6),
-                round(prob, 6),
+                round(confidence, 6),
             )
             results.append(db_row)
         logging.debug("Вычислено: " + str(len(results)))
