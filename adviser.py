@@ -167,13 +167,13 @@ class Adviser:
 
     def deal(self):
         trend = self.get_trend()
-        targ_vol = self.max_vol * trend[0]
+        targ_vol = round(self.max_vol * trend[0],2)
         pos_vol = self._get_pos_vol()
         if(pos_vol==None):
             return
-        d = targ_vol - pos_vol
+        d = round(targ_vol - pos_vol,2)
         logging.debug(
-            f"цена={trend[2]} прогноз={trend[0]} уверен={trend[1]} актив={pos_vol} цель={targ_vol} разность={str(d)}"
+            f"прогноз={trend[0]} цена={trend[2]} уверен={trend[1]} актив={pos_vol} цель={targ_vol} разность={str(d)}"
         )
         if trend[1] < self.confidence:
             return

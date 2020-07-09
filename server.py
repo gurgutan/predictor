@@ -11,8 +11,6 @@ import MetaTrader5 as mt5
 import os
 import pytz
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
 
 class Server(object):
     def __init__(self):
@@ -162,8 +160,10 @@ class Server(object):
         self.calc_old()  # обновление данных начиная с даты
         while True:
             if not dtimer.elapsed():
+                remained = dtimer.remained()
+                if remained > 1:
+                    sleep(1)
                 continue
-
             if not self.IsMT5Connected():
                 logging.error("Ошибка подклбчения к МТ5:" + str(mt5.last_error()))
                 if not self.__init_mt5__():

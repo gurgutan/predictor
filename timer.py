@@ -14,6 +14,13 @@ class DelayTimer:
         else:
             return False
 
+    def remained(self):
+        """
+        Возвращает число секунд, оставшихся до окончания цикла
+        """
+        delta = (datetime.now() - self.last).total_seconds()
+        return delta % self.seconds
+
 
 # Тест
 # t = DelayTimer(5)
