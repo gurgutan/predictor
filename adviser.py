@@ -2,6 +2,7 @@
 # Слеповичев И.И. 08.07.2020
 # Исполняемый скрипт торгового робота
 # Для работы необходимо:
+#   - наличие установленного Python 3.7 и выше
 #   - наличие установленного MetaTrader5
 #   - модель в соответствующей папке
 #   - tensorflow >=2.0.0
@@ -14,6 +15,17 @@
 #   - patterns.py
 #   - модель .pb
 # ---------------------------------------------------------
+# =========================================================
+# Общие константы
+ROBOT_NAME = "Аля"
+VERSION = "0.1"
+AUTHOR = "СИИ"
+MT5_PATH = "D:/Dev/MT5/terminal64.exe"
+MODEL_PATH = "D:/Dev/python/predictor/models/19"
+SYMBOL = "EURUSD"
+CONFIDENCE = 0.2
+# ---------------------------------------------------------
+
 
 import MetaTrader5 as mt5
 import numpy as np
@@ -22,14 +34,7 @@ from datetime import timedelta, datetime
 import logging
 from predictor import Predictor
 from time import sleep
-
-# Общие константы
-ROBOT_NAME = "Аля"
-VERSION = "0.1"
-AUTHOR = "СИИ"
-MT5_PATH = "D:/Dev/MT5/terminal64.exe"
-MODEL_PATH = "D:/Dev/python/predictor/models/19"
-SYMBOL = "EURUSD"
+from timer import DelayTimer
 
 
 def __init_logger__():
@@ -41,26 +46,6 @@ def __init_logger__():
     )
     return True
 
-class DelayTimer:
-    def __init__(self, seconds=60):
-        self.seconds = seconds
-        self.last = datetime.now()
-
-    def elapsed(self):
-        delta = (datetime.now() - self.last).total_seconds()
-        if delta > self.seconds:
-            self.last = datetime.now() - timedelta(seconds=delta % self.seconds)
-            return True
-        else:
-            return False
-
-    def remained(self):
-        """
-        Возвращает число секунд, оставшихся до окончания цикла
-        """
-        delta = (datetime.now() - self.last).total_seconds()
-        return delta % self.seconds
-
 
 class Adviser:
     def __init__(
@@ -69,16 +54,17 @@ class Adviser:
         delay=300,
         symbol="EURUSD",
         mt5path="D:/Dev/Alpari MT5/terminal64.exe",
+        confidence=0.2,
     ):
         self.mt5path = mt5path
         self.__init_mt5__()
         self.predictor = predictor
-        self.sl = 1000
-        self.tp = 1000
+        self.sl = 512
+        self.tp = 512
         self.max_vol = 1.0
         self.vol = 0.1
-        self.confidence = 0.7
-        self.std = 0.003
+        self.confidence = confidence
+        self.std = self.predictor.datainfo.y_std
         self.symbol = symbol
         self.timeunit = 300  # секунд
         self.delay = delay  # секунд
@@ -105,9 +91,7 @@ class Adviser:
     def _get_pos_vol(self):
         positions = mt5.positions_get(symbol=self.symbol)
         if positions == None:
-            logging.error(
-                "Ошибка запроса позиций: {}".format(mt5.last_error())
-            )
+            logging.error("Ошибка запроса позиций: {}".format(mt5.last_error()))
             return None
         # df=pd.DataFrame(list(positions),columns=usd_positions[0]._asdict().keys())
         # ticket time type magic identifier reason volume price_open sl tp price_current swap profit symbol comment
@@ -130,7 +114,7 @@ class Adviser:
         на выходе: (rdate, rclose, future_date, low, high, confidence)
         """
         rates_count = self.predictor.datainfo._in_size() + 1
-        
+
         rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 0, rates_count)
         if rates is None:
             logging.error("Ошибка запроса котировок: " + str(mt5.last_error()))
@@ -158,22 +142,25 @@ class Adviser:
             return (0, 0)
         cur_date, cur_price, future_date, low, high, confidence = result
         d = (low + high) / 2 - cur_price
+        # logging.debug(f"d={d}")
+        # коэфициент учета ширины интервала прогноза
+        interval_length_coef = self.predictor.datainfo._out_size() / 2
         trend = (
-            max(-1, min(1, d / self.std)),
-            round(confidence, 4),
+            max(-1, min(1, d / self.std / interval_length_coef)),
+            round(confidence, 2),
             round(cur_price, 5),
         )
         return trend
 
     def deal(self):
         trend = self.get_trend()
-        targ_vol = round(self.max_vol * trend[0],2)
+        targ_vol = round(self.max_vol * trend[0], 2)
         pos_vol = self._get_pos_vol()
-        if(pos_vol==None):
+        if pos_vol == None:
             return
-        d = round(targ_vol - pos_vol,2)
+        d = round(targ_vol - pos_vol, 2)
         logging.debug(
-            f"прогноз={trend[0]} цена={trend[2]} уверен={trend[1]} актив={pos_vol} цель={targ_vol} разность={str(d)}"
+            f"прогноз={round(trend[0],2)} цена={trend[2]} уверен={trend[1]} актив={pos_vol} цель={targ_vol} разность={str(d)}"
         )
         if trend[1] < self.confidence:
             return
@@ -215,7 +202,13 @@ def main():
     if not predictor.trained:
         logging.error("Ошибка загрузки модели")
         return False
-    adviser = Adviser(predictor=predictor, delay=300, mt5path=MT5_PATH, symbol=SYMBOL)
+    adviser = Adviser(
+        predictor=predictor,
+        delay=300,
+        mt5path=MT5_PATH,
+        symbol=SYMBOL,
+        confidence=CONFIDENCE,
+    )
     if not adviser.ready:
         logging.error("Ошибка инициализации робота")
         return
