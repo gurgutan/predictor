@@ -3,19 +3,38 @@ import datetime as dt
 
 
 def db_open(dbname):
+    model_info_ddl = f"CREATE TABLE IF NOT EXISTS model_info(
+        name TEXT NOT NULL PRIMARY KEY,
+        input_shape STRING,
+        output_shape STRING,
+        future INTEGER NOT NULL,
+        timeunit INTEGER NOT NULL);"
+    pdata_ddl = f"CREATE TABLE IF NOT EXISTS pdata(
+        rdate      INTEGER PRIMARY KEY,
+        rprice     REAL    NOT NULL,
+        symbol     TEXT,
+        model      TEXT    NOT NULL,
+        pdate      INTEGER NOT NULL,
+        plow       REAL    NOT NULL,
+        phigh      REAL    NOT NULL,
+        confidence REAL    NOT NULL);"
+    symbol_info_ddl = f"CREATE TABLE IF NOT EXISTS symbol_info(
+        name        TEXT    PRIMARY KEY,
+        timeframe   INTEGER NOT NULL,
+        volume_min  REAL    NOT NULL,
+        volume_max  REAL    NOT NULL,
+        volume_step REAL    NOT NULL);"
+    pdata_idx_ddl = f"CREATE INDEX pdate_idx ON pdata(pdate DESC);"
+    confidence_idx_ddl = f"CREATE INDEX confidence_idx ON pdata(confidence DESC);"
+
     try:
         db = sqlite3.connect(dbname)
         cursor = db.cursor()
-        cursor.execute(
-            "CREATE TABLE IF NOT EXISTS pdata("
-            + "rdate INTEGER PRIMARY KEY, "
-            + "rprice real, "
-            + "pmodel TEXT, "
-            + "pdate integer, "
-            + "plow real, "
-            + "phigh real, "
-            + "prob real)"
-        )
+        cursor.execute(pdata_ddl)
+        cursor.execute(model_info_ddl)
+        cursor.execute(symbol_info_ddl)
+        cursor.execute(pdata_idx_ddl)
+        cursor.execute(confidence_idx_ddl)
         db.commit()
         return db
     except Exception as e:
@@ -31,11 +50,12 @@ def db_replace(db, data):
         "INSERT OR REPLACE INTO pdata("
         + "rdate, "
         + "rprice, "
-        + "pmodel, "
+        + "symbol, "
+        + "model, "
         + "pdate, "
         + "plow, "
         + "phigh, "
-        + "prob) VALUES(?,?,?,?,?,?,?)",
+        + "confidence) VALUES(?,?,?,?,?,?,?,?)",
         data,
     )
     db.commit()

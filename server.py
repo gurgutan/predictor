@@ -11,8 +11,6 @@ import MetaTrader5 as mt5
 import os
 import pytz
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
 
 class Server(object):
     def __init__(self):
@@ -26,7 +24,7 @@ class Server(object):
             self.initialdate = dt.datetime.fromisoformat(data["initialdate"])
             self.modelname = data["modelname"]  # полное имя модели (с путем)
             self.symbol = data["symbol"]  # символ инструмента
-            self.timeframe = data["timeframe"]  # тайм-фрэйм сервера
+            self.timeframe = int(data["timeframe"])  # тайм-фрэйм в секундах
             self.delay = data["delay"]  # задержка в секундах цикла сервера
         if self.__init_db__() and self.__init_mt5__() and self.__init_predictor__():
             self.ready = True
@@ -44,12 +42,11 @@ class Server(object):
 
     def __init_mt5__(self):
         # подключимся к MetaTrader 5
-        logging.info("Подключение к терминалу MT5 ")
         if not mt5.initialize(path="D:/Dev/Alpari MT5/terminal64.exe"):
             logging.error("Ошибка подключпения к терминалу MT5")
             mt5.shutdown()
             return False
-        logging.info("... версия MT5:" + str(mt5.version()))
+        logging.info("Подключение к терминалу MT5, версия:" + str(mt5.version()))
         return True
 
     def __init_logger__(self):
@@ -118,12 +115,12 @@ class Server(object):
             plow, phigh, confidence = output_data[i - shift]
             rdate = int(times[i - 1])
             rprice = closes[i - 1]
-            pmodel = self.p.name
             pdate = int(rdate + 60 * 5 * self.p.datainfo.future)  # секунды*M5*future
             db_row = (
                 rdate,
                 round(rprice, 6),
-                pmodel,
+                self.symbol,
+                self.p.name,
                 pdate,
                 round(rprice + plow, 6),
                 round(rprice + phigh, 6),
@@ -162,8 +159,10 @@ class Server(object):
         self.calc_old()  # обновление данных начиная с даты
         while True:
             if not dtimer.elapsed():
+                remained = dtimer.remained()
+                if remained > 1:
+                    sleep(1)
                 continue
-
             if not self.IsMT5Connected():
                 logging.error("Ошибка подклбчения к МТ5:" + str(mt5.last_error()))
                 if not self.__init_mt5__():
