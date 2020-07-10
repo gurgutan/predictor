@@ -15,15 +15,18 @@
 #   - patterns.py
 #   - модель .pb
 # ---------------------------------------------------------
-# =========================================================
+
 # Общие константы
 ROBOT_NAME = "Аля"
 VERSION = "0.1"
 AUTHOR = "СИИ"
-MT5_PATH = "D:/Dev/MT5/terminal64.exe"
+MT5_PATH = "D:/Dev/Alpari MT5/terminal64.exe"
 MODEL_PATH = "D:/Dev/python/predictor/models/19"
-SYMBOL = "EURUSD"
-CONFIDENCE = 0.2
+# MODEL_PATH = "D:/Dev/python/predictor/TFLite/19.tflite"
+SYMBOL = "EURUSD_i"
+CONFIDENCE = 0.5
+DELAY = 300
+USE_TFLITE = False
 # ---------------------------------------------------------
 
 
@@ -71,8 +74,6 @@ class Adviser:
         self.ready = True
 
     def __init_mt5__(self):
-        if self.IsMT5Connected():
-            return True
         if not mt5.initialize(path=self.mt5path):  # тестовый
             logging.error("Ошибка подключения к терминалу MT5")
             mt5.shutdown()
@@ -102,6 +103,7 @@ class Adviser:
         return vol
 
     def order(self, order_type, volume):
+        # TODO заменить Buy, Sell на order_send
         if order_type == 1:
             result = mt5.Buy(symbol=self.symbol, volume=volume)
         elif order_type == -1:
@@ -125,7 +127,10 @@ class Adviser:
         closes = rates["close"][-rates_count:]
         times = rates["time"][-rates_count:]
         future_date = int(times[-1] + self.timeunit * self.predictor.datainfo.future)
-        low, high, confidence = self.predictor.eval(closes)[0]
+        if USE_TFLITE:
+            low, high, confidence = self.predictor.tflite_eval(closes)
+        else:
+            low, high, confidence = self.predictor.eval(closes)
         result = (
             times[-1],
             round(closes[-1], 6),
@@ -198,13 +203,14 @@ def main():
     print(f"Робот {ROBOT_NAME} v{VERSION}, автор:{AUTHOR}")
     __init_logger__()
     logging.debug("Загрузка модели " + MODEL_PATH)
-    predictor = Predictor(modelname=MODEL_PATH)
+    predictor = Predictor(modelname=MODEL_PATH, tflite=USE_TFLITE)
     if not predictor.trained:
         logging.error("Ошибка загрузки модели")
         return False
+
     adviser = Adviser(
         predictor=predictor,
-        delay=300,
+        delay=DELAY,
         mt5path=MT5_PATH,
         symbol=SYMBOL,
         confidence=CONFIDENCE,

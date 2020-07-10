@@ -50,12 +50,18 @@ class Predictor(object):
         filters=64,
         kernel_size=4,
         dense_size=8,
+        tflite=False,
     ):
         self.trained = False
+        self.tflite = tflite
+        self.interpreter = None
         if modelname == None:
             self.name = "default"
         else:
-            self.name = path.splitext(modelname)[0]
+            if self.tflite:
+                self.name = modelname
+            else:
+                self.name = path.splitext(modelname)[0]
         if not path.exists(self.name):
             self.model = self.create_model(
                 input_shape=input_shape,
@@ -65,18 +71,54 @@ class Predictor(object):
                 dense_size=dense_size,
             )
         else:
-            self.model = keras.models.load_model(self.name)
-            self.trained = True
+            if self.tflite:
+                self.interpreter = tf.lite.Interpreter(model_path=self.name)
+                self.interpreter.allocate_tensors()
+
+            else:
+                self.model = keras.models.load_model(self.name)
+        self.trained = True
         if not os.path.isfile(self.name + ".cfg"):
             self.datainfo = self.create_datainfo(
                 input_shape=input_shape,
                 output_shape=output_shape,
                 predict_size=predict_size,
                 x_std=0.0004,
-                y_std=0.0074,
+                y_std=0.0014,
             )
         else:
             self.datainfo = DatasetInfo().load(self.name + ".cfg")
+
+    def tflite_eval(self, closes):
+        input_details = self.interpreter.get_input_details()
+        output_details = self.interpreter.get_output_details()
+        x = self.get_input(closes)
+        if x is None:
+            return None
+        self.interpreter.set_tensor(input_details[0]["index"], x[0])
+        self.interpreter.invoke()
+        y = self.interpreter.get_tensor(output_details[0]["index"])
+        n = np.argmax(y, axis=0)
+        y_n = y[n]
+        low = (
+            unembed(
+                n[i],
+                self.datainfo._y_min() / self.datainfo.y_std,
+                self.datainfo._y_max() / self.datainfo.y_std,
+                self.datainfo._out_size(),
+            )
+            * self.datainfo.y_std
+        )
+        high = (
+            unembed(
+                n[i] + 1,
+                self.datainfo._y_min() / self.datainfo.y_std,
+                self.datainfo._y_max() / self.datainfo.y_std,
+                self.datainfo._out_size(),
+            )
+            * self.datainfo.y_std
+        )
+        return (low, high, float(y_n))
 
     def create_datainfo(self, input_shape, output_shape, predict_size, x_std, y_std):
         self.datainfo = DatasetInfo(
@@ -290,7 +332,7 @@ class Predictor(object):
         """
         closes - массив размерности (input_size)
         """
-        return self.predict([closes], verbose=0)
+        return self.predict([closes], verbose=0)[0]
 
 
 def train(modelname, batch_size, epochs):
