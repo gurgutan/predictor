@@ -13,6 +13,8 @@ import datetime
 import sys
 from patterns import conv2D, multiConv2D
 from datainfo import DatasetInfo
+import pydot
+import graphviz
 
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -303,12 +305,14 @@ def train(modelname, batch_size, epochs):
         input_shape=input_shape,
         output_shape=output_shape,
         predict_size=predict_size,
-        filters=16,
-        kernel_size=2,
+        filters=32,
+        kernel_size=4,
         dense_size=64,
     )
     x, y = p.load_dataset(
-        csv_file="datas/EURUSD_M5_200001030000_202006122350.csv", count=2 ** 19
+        csv_file="datas/EURUSD_M5_200001030000_202006122350.csv",
+        count=2 ** 19,  # таймфреймы за последние 5 лет
+        skip=2 ** 16,  # последние пол года не используем в обучении и валидации
     )
     keras.utils.plot_model(p.model, show_shapes=True)
     if not x is None:
@@ -320,6 +324,6 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/19", batch_size=2 ** 9, epochs=2 ** 10)
+            train("models/20", batch_size=2 ** 9, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора

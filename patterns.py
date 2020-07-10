@@ -79,31 +79,35 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
     max_filters = 512
     l1_reg = keras.regularizers.l1(l=1e-6)
     l2_reg = keras.regularizers.l2(l=1e-6)
-    inputs = keras.Input(shape=input_shape)
+    inputs = keras.Input(shape=input_shape, name="inputs")
     x = inputs
     # [32,32,64,64,128,128,256,256,256,256,256,256,256,512]:  # 13
     # [16,16,32,32,64,64,128,128,256,256,512,512,1024,1024,1024]:  # 10
     ksize = min([x.shape[1], x.shape[2], kernel_size])
     f = filters
+    i = 0
     while ksize > 1:
+        i += 1
         x = layers.SeparableConv2D(
             min(max_filters, f),
             ksize,
             padding="valid",
+            activation="relu",
             bias_initializer=keras.initializers.RandomNormal(),
             bias_regularizer=l2_reg,
             kernel_initializer=keras.initializers.RandomNormal(),
+            name=f"conv2d_{str(i)}"
             # kernel_regularizer=l2_reg,
         )(x)
-        x = layers.Activation("relu")(x)
-        x = layers.BatchNormalization()(x)
+        # x = layers.Activation("relu")(x)
+        x = layers.BatchNormalization(name=f"bnorma_{str(i)}")(x)
         ksize = min([x.shape[1], x.shape[2], ksize])
         f += 32
 
-    x = layers.Reshape((x.shape[-1], 1))(x)
-    x = layers.LocallyConnected1D(8, kernel_size=1)(x)
-    x = layers.Dropout(0.1)(x)
-    x = layers.Flatten()(x)
+    x = layers.Reshape((x.shape[-1], 1), name="reshape")(x)
+    x = layers.LocallyConnected1D(8, kernel_size=1, name="locconn1d")(x)
+    x = layers.Dropout(0.1, name="dropout")(x)
+    x = layers.Flatten(name="flatten")(x)
 
     x = layers.Dense(
         output_shape[0] * 8,
@@ -112,6 +116,7 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
         bias_regularizer=l1_reg,
         kernel_initializer=keras.initializers.RandomNormal(),
         kernel_regularizer=l1_reg,
+        name="dense_1",
     )(x)
     x = layers.Dense(
         output_shape[0] * 4,
@@ -120,6 +125,7 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
         bias_regularizer=l1_reg,
         kernel_initializer=keras.initializers.RandomNormal(),
         kernel_regularizer=l1_reg,
+        name="dense_2",
     )(x)
     outputs = layers.Dense(
         output_shape[0],
@@ -128,6 +134,7 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
         bias_regularizer=l1_reg,
         kernel_initializer=keras.initializers.RandomNormal(),
         kernel_regularizer=l1_reg,
+        name="outputs",
     )(x)
 
     model = keras.Model(inputs, outputs)

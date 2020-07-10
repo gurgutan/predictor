@@ -1,8 +1,9 @@
 FROM tensorflow/tensorflow:latest-gpu-py3
 
+RUN apt-get -y update && apt-get install -y graphviz
 RUN pip3 install --upgrade pip
 RUN pip3 install --upgrade setuptools
-RUN pip3 install --upgrade pandas pydot 
+RUN pip3 install --upgrade pandas pydot pydotplus
 RUN pip3 install --upgrade graphviz tqdm matplotlib
 
 EXPOSE 1979/tcp
