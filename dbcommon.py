@@ -3,30 +3,36 @@ import datetime as dt
 
 
 def db_open(dbname):
-    model_info_ddl = f"CREATE TABLE IF NOT EXISTS model_info(
-        name TEXT NOT NULL PRIMARY KEY,
-        input_shape STRING,
-        output_shape STRING,
-        future INTEGER NOT NULL,
-        timeunit INTEGER NOT NULL);"
-    pdata_ddl = f"CREATE TABLE IF NOT EXISTS pdata(
-        rdate      INTEGER PRIMARY KEY,
-        rprice     REAL    NOT NULL,
-        symbol     TEXT,
-        model      TEXT    NOT NULL,
-        pdate      INTEGER NOT NULL,
-        plow       REAL    NOT NULL,
-        phigh      REAL    NOT NULL,
-        confidence REAL    NOT NULL);"
-    symbol_info_ddl = f"CREATE TABLE IF NOT EXISTS symbol_info(
-        name        TEXT    PRIMARY KEY,
-        timeframe   INTEGER NOT NULL,
-        volume_min  REAL    NOT NULL,
-        volume_max  REAL    NOT NULL,
-        volume_step REAL    NOT NULL);"
-    pdata_idx_ddl = f"CREATE INDEX pdate_idx ON pdata(pdate DESC);"
-    confidence_idx_ddl = f"CREATE INDEX confidence_idx ON pdata(confidence DESC);"
-
+    model_info_ddl = (
+        "CREATE TABLE IF NOT EXISTS model_info(name TEXT NOT NULL PRIMARY KEY,"
+        + "input_shape STRING,"
+        + "output_shape STRING,"
+        + "future INTEGER NOT NULL,"
+        + "timeunit INTEGER NOT NULL);"
+    )
+    pdata_ddl = (
+        "CREATE TABLE IF NOT EXISTS pdata("
+        + "rdate INTEGER PRIMARY KEY,"
+        + "rprice REAL NOT NULL,"
+        + "symbol TEXT,"
+        + "model TEXT NOT NULL,"
+        + "pdate INTEGER NOT NULL,"
+        + "plow REAL NOT NULL,"
+        + "phigh REAL NOT NULL,"
+        + "confidence REAL NOT NULL);"
+    )
+    symbol_info_ddl = (
+        "CREATE TABLE IF NOT EXISTS symbol_info("
+        + "name TEXT PRIMARY KEY,"
+        + "timeframe INTEGER NOT NULL,"
+        + "volume_min REAL NOT NULL,"
+        + "volume_max REAL NOT NULL,"
+        + "volume_step REAL NOT NULL);"
+    )
+    pdata_idx_ddl = "CREATE INDEX IF NOT EXISTS pdate_idx ON pdata(pdate DESC);"
+    confidence_idx_ddl = (
+        "CREATE INDEX IF NOT EXISTS confidence_idx ON pdata(confidence DESC);"
+    )
     try:
         db = sqlite3.connect(dbname)
         cursor = db.cursor()

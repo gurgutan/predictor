@@ -145,4 +145,3 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
     )
     print(model.summary())
     return model
-
