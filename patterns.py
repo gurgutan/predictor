@@ -99,10 +99,9 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
             name=f"conv2d_{str(i)}"
             # kernel_regularizer=l2_reg,
         )(x)
-        # x = layers.Activation("relu")(x)
         x = layers.BatchNormalization(name=f"bnorma_{str(i)}")(x)
         ksize = min([x.shape[1], x.shape[2], ksize])
-        f += 32
+        f += 64
 
     x = layers.Reshape((x.shape[-1], 1), name="reshape")(x)
     x = layers.LocallyConnected1D(8, kernel_size=1, name="locconn1d")(x)
@@ -111,7 +110,7 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
 
     x = layers.Dense(
         output_shape[0] * 8,
-        activation="softsign",
+        activation="sigmoid",
         bias_initializer=keras.initializers.RandomNormal(),
         bias_regularizer=l1_reg,
         kernel_initializer=keras.initializers.RandomNormal(),
@@ -120,7 +119,7 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
     )(x)
     x = layers.Dense(
         output_shape[0] * 4,
-        activation="softsign",
+        activation="sigmoid",
         bias_initializer=keras.initializers.RandomNormal(),
         bias_regularizer=l1_reg,
         kernel_initializer=keras.initializers.RandomNormal(),
