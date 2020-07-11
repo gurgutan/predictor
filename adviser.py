@@ -38,6 +38,7 @@ import logging
 from predictor import Predictor
 from time import sleep
 from timer import DelayTimer
+from mt5common import SendOrder
 
 
 def __init_logger__():
@@ -48,6 +49,10 @@ def __init_logger__():
         # filemode="w",
     )
     return True
+
+
+def sign(x):
+    return 1 if x >= 0 else -1
 
 
 class Adviser:
@@ -170,15 +175,29 @@ class Adviser:
         if trend[1] < self.confidence:
             return
         if d >= self.vol and pos_vol < self.max_vol:
-            if self.order(order_type=1, volume=self.vol):
-                logging.info("Покупка " + str(self.vol))
-            else:
-                logging.error("Ошибка покупки: " + str(mt5.last_error()))
+            SendOrder(
+                self.symbol,
+                self.vol * sign(d),
+                tp=self.tp,
+                sl=self.sl,
+                comment=f"{ROBOT_NAME} {round(self.confidence, 2)}",
+            )
+            # if self.order(order_type=1, volume=self.vol):
+            #     logging.info("Покупка " + str(self.vol))
+            # else:
+            #     logging.error("Ошибка покупки: " + str(mt5.last_error()))
         elif -d >= self.vol and -pos_vol < self.max_vol:
-            if self.order(order_type=-1, volume=self.vol):
-                logging.info("Продажа " + str(self.vol))
-            else:
-                logging.error("Ошибка продажи: " + str(mt5.last_error()))
+            SendOrder(
+                self.symbol,
+                self.vol * sign(d),
+                tp=self.tp,
+                sl=self.sl,
+                comment=f"{ROBOT_NAME} {round(self.confidence, 2)}",
+            )
+            # if self.order(order_type=-1, volume=self.vol):
+            #     logging.info("Продажа " + str(self.vol))
+            # else:
+            #     logging.error("Ошибка продажи: " + str(mt5.last_error()))
 
     def run(self):
         if not self.ready:
@@ -203,7 +222,7 @@ def main():
     print(f"Робот {ROBOT_NAME} v{VERSION}, автор:{AUTHOR}")
     __init_logger__()
     logging.debug("Загрузка модели " + MODEL_PATH)
-    predictor = Predictor(modelname=MODEL_PATH, tflite=USE_TFLITE)
+    predictor = Predictor(modelname=MODEL_PATH, use_tflite=USE_TFLITE)
     if not predictor.trained:
         logging.error("Ошибка загрузки модели")
         return False

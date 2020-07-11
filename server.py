@@ -70,7 +70,7 @@ class Server(object):
         # установим таймзону в UTC
         timezone = pytz.timezone("Etc/UTC")
         rates_count = 0
-        while rates_count < 257:
+        while rates_count < self.p.datainfo._in_size() + 1:
             mt5rates = mt5.copy_rates_range(
                 self.symbol, mt5.TIMEFRAME_M5, from_date, dt.datetime.now(tz=timezone)
             )
@@ -78,9 +78,8 @@ class Server(object):
                 logging.error("Ошибка:" + str(mt5.last_error()))
                 return None
             rates_count = len(mt5rates)
-            if rates_count < 257:
+            if rates_count < self.p.datainfo._in_size() + 1:
                 from_date = from_date - dt.timedelta(days=1)
-
         rates = pd.DataFrame(mt5rates)
         logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
@@ -127,7 +126,7 @@ class Server(object):
                 round(confidence, 6),
             )
             results.append(db_row)
-        logging.debug("Вычислено: " + str(len(results)))
+        # logging.debug("Вычислено: " + str(len(results)))
         return results
 
     def calc_old(self):

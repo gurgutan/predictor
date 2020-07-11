@@ -13,8 +13,10 @@ import datetime
 import sys
 from patterns import conv2D, multiConv2D
 from datainfo import DatasetInfo
-import pydot
-import graphviz
+
+# import tflite_runtime.interpreter as tflite
+# import pydot
+# import graphviz
 
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -52,15 +54,15 @@ class Predictor(object):
         filters=64,
         kernel_size=4,
         dense_size=8,
-        tflite=False,
+        use_tflite=False,
     ):
         self.trained = False
-        self.tflite = tflite
+        self.use_tflite = use_tflite
         self.interpreter = None
         if modelname == None:
             self.name = "default"
         else:
-            if self.tflite:
+            if self.use_tflite:
                 self.name = modelname
             else:
                 self.name = path.splitext(modelname)[0]
@@ -73,8 +75,11 @@ class Predictor(object):
                 dense_size=dense_size,
             )
         else:
-            if self.tflite:
-                self.interpreter = tf.lite.Interpreter(model_path=self.name)
+            if self.use_tflite:
+
+                self.interpreter = tflite.Interpreter(
+                    model_path=self.name
+                )  # tf.lite.Interpreter(model_path=self.name)
                 self.interpreter.allocate_tensors()
 
             else:
@@ -356,7 +361,7 @@ def train(modelname, batch_size, epochs):
         count=2 ** 19,  # таймфреймы за последние 5 лет
         skip=2 ** 16,  # последние пол года не используем в обучении и валидации
     )
-    keras.utils.plot_model(p.model, show_shapes=True)
+    # keras.utils.plot_model(p.model, show_shapes=True)
     if not x is None:
         history = p.train(x, y, batch_size=batch_size, epochs=epochs)
     else:
@@ -366,6 +371,7 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
+
             train("models/20", batch_size=2 ** 9, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора
