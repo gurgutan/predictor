@@ -77,7 +77,7 @@ class Predictor(object):
         else:
             if self.use_tflite:
 
-                self.interpreter = tflite.Interpreter(
+                self.interpreter = tf.lite.Interpreter(
                     model_path=self.name
                 )  # tf.lite.Interpreter(model_path=self.name)
                 self.interpreter.allocate_tensors()
@@ -109,7 +109,7 @@ class Predictor(object):
         y_n = y[n]
         low = (
             unembed(
-                n[i],
+                n,
                 self.datainfo._y_min() / self.datainfo.y_std,
                 self.datainfo._y_max() / self.datainfo.y_std,
                 self.datainfo._out_size(),
@@ -118,7 +118,7 @@ class Predictor(object):
         )
         high = (
             unembed(
-                n[i] + 1,
+                n + 1,
                 self.datainfo._y_min() / self.datainfo.y_std,
                 self.datainfo._y_max() / self.datainfo.y_std,
                 self.datainfo._out_size(),
@@ -353,13 +353,13 @@ def train(modelname, batch_size, epochs):
         output_shape=output_shape,
         predict_size=predict_size,
         filters=32,
-        kernel_size=4,
+        kernel_size=2,
         dense_size=64,
     )
     x, y = p.load_dataset(
-        csv_file="datas/EURUSD_M5_200001030000_202006122350.csv",
+        csv_file="datas/EURUSD_M5_20000103_20200710.csv",
         count=2 ** 19,  # таймфреймы за последние 5 лет
-        skip=2 ** 16,  # последние пол года не используем в обучении и валидации
+        skip=0,  # последние пол года не используем в обучении и валидации
     )
     # keras.utils.plot_model(p.model, show_shapes=True)
     if not x is None:
@@ -371,7 +371,6 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-
-            train("models/20", batch_size=2 ** 9, epochs=2 ** 10)
+            train("models/21", batch_size=2 ** 14, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора
