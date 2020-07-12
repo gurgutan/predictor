@@ -21,12 +21,12 @@ ROBOT_NAME = "Аля"
 VERSION = "0.1"
 AUTHOR = "СИИ"
 MT5_PATH = "D:/Dev/Alpari MT5/terminal64.exe"
-MODEL_PATH = "D:/Dev/python/predictor/models/19"
-# MODEL_PATH = "D:/Dev/python/predictor/TFLite/19.tflite"
+# MODEL_PATH = "D:/Dev/python/predictor/models/19"
+MODEL_PATH = "D:/Dev/python/predictor/TFLite/20.tflite"
 SYMBOL = "EURUSD_i"
 CONFIDENCE = 0.5
 DELAY = 300
-USE_TFLITE = False
+USE_TFLITE = True
 # ---------------------------------------------------------
 
 
@@ -132,10 +132,7 @@ class Adviser:
         closes = rates["close"][-rates_count:]
         times = rates["time"][-rates_count:]
         future_date = int(times[-1] + self.timeunit * self.predictor.datainfo.future)
-        if USE_TFLITE:
-            low, high, confidence = self.predictor.tflite_eval(closes)
-        else:
-            low, high, confidence = self.predictor.eval(closes)
+        low, high, confidence = self.predictor.eval(closes)
         result = (
             times[-1],
             round(closes[-1], 6),

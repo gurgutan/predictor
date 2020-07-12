@@ -14,7 +14,6 @@ def main():
         if param in ("-r", "--run"):
             server = Server()
             if server.ready:
-                print("Сервер запущен")
                 server.start()
             else:
                 print("Сервер не запущен из-за ошибки")

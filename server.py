@@ -26,6 +26,7 @@ class Server(object):
             self.symbol = data["symbol"]  # символ инструмента
             self.timeframe = int(data["timeframe"])  # тайм-фрэйм в секундах
             self.delay = data["delay"]  # задержка в секундах цикла сервера
+            self.use_tflite = bool(data["use_tflite"])
         if self.__init_db__() and self.__init_mt5__() and self.__init_predictor__():
             self.ready = True
         else:
@@ -60,7 +61,7 @@ class Server(object):
 
     def __init_predictor__(self):
         logging.info("Загрузка и инициализация модели '%s'" % self.modelname)
-        self.p = Predictor(modelname=self.modelname)
+        self.p = Predictor(modelname=self.modelname, use_tflite=self.use_tflite)
         if not self.p.trained:
             logging.error("Ошибка инициализации модели '%s'" % self.modelname)
             return False
@@ -106,7 +107,10 @@ class Server(object):
             x = closes[i - shift : i].to_numpy()
             input_data.append(x)
         # вычисляем прогноз
-        output_data = self.p.predict(input_data, verbose=verbose)
+        if self.use_tflite:
+            output_data = self.p.tflite_predict(input_data)
+        else:
+            output_data = self.p.predict(input_data, verbose=verbose)
         if output_data is None:
             return None
         # сформируем результирующий список кортежей для записи в БД
@@ -137,6 +141,7 @@ class Server(object):
         # delta = dt.timedelta(minutes=(self.p.datainfo._in_size() + 1) * 5)
         if not date is None:
             from_date = date - delta
+        logging.info(f"Вычисление прошлых значений с даты {from_date}")
         rates = self.get_rates_from_date(from_date)
         if rates is None:
             logging.error("Отсутствуют новые котировки")
@@ -156,6 +161,7 @@ class Server(object):
     def start(self):
         dtimer = DelayTimer(self.delay)
         self.calc_old()  # обновление данных начиная с даты
+        logging.info(f"Запуск таймера с периодом {self.delay}")
         while True:
             if not dtimer.elapsed():
                 remained = dtimer.remained()
