@@ -28,9 +28,10 @@ SL = 512
 TP = 512
 MAX_VOL = 1.0
 VOL = 0.1
-CONFIDENCE = 0.5
-DELAY = 10
+CONFIDENCE = 0.2
+DELAY = 300
 USE_TFLITE = True
+REINVEST = 0.01
 # ---------------------------------------------------------
 
 
@@ -42,7 +43,7 @@ import logging
 from predictor import Predictor
 from time import sleep
 from timer import DelayTimer
-from mt5common import send_order, is_trade_allowed, get_account_info
+from mt5common import send_order, is_trade_allowed, get_account_info, get_equity
 
 
 logging.basicConfig(
@@ -80,7 +81,7 @@ class Adviser:
         self.sl = sl
         self.tp = tp
         self.max_vol = max_vol
-        self.vol = vol
+        self.min_vol = vol
         self.confidence = confidence
         self.std = round(self.predictor.datainfo.y_std, 8)
         self.symbol = symbol
@@ -170,8 +171,11 @@ class Adviser:
         return trend
 
     def deal(self):
+        equity = get_equity()
+        reinvest_k = 1.0 + REINVEST * equity / 1000  # для RUB
         trend = self.get_trend()
-        targ_vol = round(self.max_vol * trend[0], 2)
+        targ_vol = round(self.max_vol * trend[0] * reinvest_k, 2)
+        lot = self.min_vol * reinvest_k
         pos_vol = self._get_pos_vol()
         if pos_vol == None:
             return
@@ -181,10 +185,10 @@ class Adviser:
         )
         if trend[1] < self.confidence:
             return
-        if d >= self.vol and pos_vol < self.max_vol:
+        if d >= self.min_vol and pos_vol < self.max_vol:
             send_order(
                 self.symbol,
-                self.vol * sign(d),
+                lot * sign(d),
                 tp=self.tp,
                 sl=self.sl,
                 comment=f"{ROBOT_NAME} {round(self.confidence, 2)}",
@@ -193,10 +197,10 @@ class Adviser:
             #     logging.info("Покупка " + str(self.vol))
             # else:
             #     logging.error("Ошибка покупки: " + str(mt5.last_error()))
-        elif -d >= self.vol and -pos_vol < self.max_vol:
+        elif -d >= self.min_vol and -pos_vol < self.max_vol:
             send_order(
                 self.symbol,
-                self.vol * sign(d),
+                lot * sign(d),
                 tp=self.tp,
                 sl=self.sl,
                 comment=f"{ROBOT_NAME} {round(self.confidence, 2)}",
@@ -210,7 +214,7 @@ class Adviser:
         if not self.ready:
             logger.error("Робот не готов к торговле")
             return False
-        robot_info = f"Робот(SL={self.sl},TP={self.tp},max_vol={self.max_vol},vol={self.vol},confidence={self.confidence},std={self.std},symbol={self.symbol},timeunit={self.timeunit},delay={self.delay}"
+        robot_info = f"Робот(SL={self.sl},TP={self.tp},max_vol={self.max_vol},vol={self.min_vol},confidence={self.confidence},std={self.std},symbol={self.symbol},timeunit={self.timeunit},delay={self.delay}"
         logging.info(robot_info)
         dtimer = DelayTimer(self.delay)
         while True:

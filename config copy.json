@@ -1,8 +1,0 @@
-{
-    "dbname": "D:/Dev/Alpari MT5/MQL5/Files/predictions.sqlite",
-    "initialdate": "2015-01-01T00:00:00",
-    "modelname": "./models/19",
-    "symbol": "EURUSD_i",
-    "timeframe": 300,
-    "delay": 300
-}

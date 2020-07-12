@@ -15,6 +15,14 @@ def get_account_info():
         return ""
 
 
+def get_equity():
+    account_info = mt5.account_info()
+    if account_info != None:
+        return int(account_info._asdict()["equity"])
+    else:
+        return None
+
+
 def is_trade_allowed():
     terminal_info = mt5.terminal_info()._asdict()
     if terminal_info == None:
