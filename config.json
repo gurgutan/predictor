@@ -2,7 +2,7 @@
     "dbname": "D:/Dev/Alpari MT5/MQL5/Files/predictions.sqlite",
     "initialdate": "2010-01-01T00:00:00",
     "modelname": "./TFLite/20.tflite",
-    "symbol": "EURUSD_i",
+    "symbol": "EURUSD",
     "timeframe": 300,
     "delay": 300,
     "use_tflite": "True"

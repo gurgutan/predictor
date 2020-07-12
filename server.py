@@ -1,3 +1,6 @@
+"""
+Сервер для обновления БД прогнозов
+"""
 import dbcommon
 from predictor import Predictor
 import json

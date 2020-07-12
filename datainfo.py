@@ -12,6 +12,7 @@ class DatasetInfo(object):
         future=16,
         x_std=0.00047,
         y_std=0.33,
+        timeunit=300,
     ):
         """input_shape - формат входа
         output_shape - формат выхода
@@ -22,6 +23,7 @@ class DatasetInfo(object):
         self.future = future
         self.x_std = x_std
         self.y_std = y_std
+        self.timeunit = timeunit
 
     def toJson(self):
         return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
@@ -33,6 +35,7 @@ class DatasetInfo(object):
         self.future = int(copy["future"])
         self.x_std = float(copy["x_std"])
         self.y_std = float(copy["y_std"])
+        self.timeunit = int(copy["timeunit"])
         return self
 
     def load(self, filename):

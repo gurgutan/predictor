@@ -1,5 +1,5 @@
 # ---------------------------------------------------------
-# Слеповичев И.И. 08.07.2020
+# Слеповичев И.И. 12.07.2020
 # Исполняемый скрипт торгового робота
 # Для работы необходимо:
 #   - наличие установленного Python 3.7 и выше
@@ -19,13 +19,17 @@
 # Общие константы
 ROBOT_NAME = "Аля"
 VERSION = "0.1"
-AUTHOR = "СИИ"
+AUTHOR = "Слеповичев Иван Иванович"
 MT5_PATH = "D:/Dev/Alpari MT5/terminal64.exe"
 # MODEL_PATH = "D:/Dev/python/predictor/models/19"
 MODEL_PATH = "D:/Dev/python/predictor/TFLite/20.tflite"
-SYMBOL = "EURUSD_i"
+SYMBOL = "EURUSD"
+SL = 512
+TP = 512
+MAX_VOL = 1.0
+VOL = 0.1
 CONFIDENCE = 0.5
-DELAY = 300
+DELAY = 10
 USE_TFLITE = True
 # ---------------------------------------------------------
 
@@ -38,17 +42,19 @@ import logging
 from predictor import Predictor
 from time import sleep
 from timer import DelayTimer
-from mt5common import SendOrder
+from mt5common import send_order, is_trade_allowed, get_account_info
 
 
-def __init_logger__():
-    logging.basicConfig(
-        # filename="srv.log",
-        level=logging.DEBUG,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        # filemode="w",
-    )
-    return True
+logging.basicConfig(
+    handlers=(
+        logging.FileHandler("srv.log", encoding="utf-8", mode="a"),
+        logging.StreamHandler(),
+    ),
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)-6s:: %(message)s",
+    datefmt="%d.%m.%Y %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 
 def sign(x):
@@ -63,29 +69,34 @@ class Adviser:
         symbol="EURUSD",
         mt5path="D:/Dev/Alpari MT5/terminal64.exe",
         confidence=0.2,
+        sl=512,
+        tp=512,
+        max_vol=1.0,
+        vol=0.1,
     ):
         self.mt5path = mt5path
         self.__init_mt5__()
         self.predictor = predictor
-        self.sl = 512
-        self.tp = 512
-        self.max_vol = 1.0
-        self.vol = 0.1
+        self.sl = sl
+        self.tp = tp
+        self.max_vol = max_vol
+        self.vol = vol
         self.confidence = confidence
-        self.std = self.predictor.datainfo.y_std
+        self.std = round(self.predictor.datainfo.y_std, 8)
         self.symbol = symbol
-        self.timeunit = 300  # секунд
+        self.timeunit = self.predictor.datainfo.timeunit  # секунд
         self.delay = delay  # секунд
         self.ready = True
 
     def __init_mt5__(self):
         if not mt5.initialize(path=self.mt5path):  # тестовый
-            logging.error("Ошибка подключения к терминалу MT5")
+            logger.error("Ошибка подключения к терминалу MT5")
             mt5.shutdown()
             return False
-        logging.info(
+        logger.info(
             "Подключено к терминалу '%s' версия %s" % (self.mt5path, str(mt5.version()))
         )
+        logger.info(get_account_info())
         return True
 
     def IsMT5Connected(self):
@@ -97,7 +108,7 @@ class Adviser:
     def _get_pos_vol(self):
         positions = mt5.positions_get(symbol=self.symbol)
         if positions == None:
-            logging.error("Ошибка запроса позиций: {}".format(mt5.last_error()))
+            logger.error(f"Ошибка запроса позиций: {mt5.last_error()}")
             return None
         # df=pd.DataFrame(list(positions),columns=usd_positions[0]._asdict().keys())
         # ticket time type magic identifier reason volume price_open sl tp price_current swap profit symbol comment
@@ -107,13 +118,13 @@ class Adviser:
             vol += pos.volume * type_mult
         return vol
 
-    def order(self, order_type, volume):
-        # TODO заменить Buy, Sell на order_send
-        if order_type == 1:
-            result = mt5.Buy(symbol=self.symbol, volume=volume)
-        elif order_type == -1:
-            result = mt5.Sell(symbol=self.symbol, volume=volume)
-        return result
+    # def order(self, order_type, volume):
+    #     # TODO заменить Buy, Sell на order_send
+    #     if order_type == 1:
+    #         result = mt5.Buy(symbol=self.symbol, volume=volume)
+    #     elif order_type == -1:
+    #         result = mt5.Sell(symbol=self.symbol, volume=volume)
+    #     return result
 
     def compute(self):
         """
@@ -121,13 +132,12 @@ class Adviser:
         на выходе: (rdate, rclose, future_date, low, high, confidence)
         """
         rates_count = self.predictor.datainfo._in_size() + 1
-
         rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 0, rates_count)
         if rates is None:
-            logging.error("Ошибка запроса котировок: " + str(mt5.last_error()))
+            logger.error("Ошибка запроса котировок: " + str(mt5.last_error()))
             return None
         if len(rates) < rates_count:
-            logging.error("Нет котировок")
+            logger.error("Нет котировок")
             return None
         closes = rates["close"][-rates_count:]
         times = rates["time"][-rates_count:]
@@ -166,13 +176,13 @@ class Adviser:
         if pos_vol == None:
             return
         d = round(targ_vol - pos_vol, 2)
-        logging.debug(
+        logger.debug(
             f"прогноз={round(trend[0],2)} цена={trend[2]} уверен={trend[1]} актив={pos_vol} цель={targ_vol} разность={str(d)}"
         )
         if trend[1] < self.confidence:
             return
         if d >= self.vol and pos_vol < self.max_vol:
-            SendOrder(
+            send_order(
                 self.symbol,
                 self.vol * sign(d),
                 tp=self.tp,
@@ -184,7 +194,7 @@ class Adviser:
             # else:
             #     logging.error("Ошибка покупки: " + str(mt5.last_error()))
         elif -d >= self.vol and -pos_vol < self.max_vol:
-            SendOrder(
+            send_order(
                 self.symbol,
                 self.vol * sign(d),
                 tp=self.tp,
@@ -198,10 +208,10 @@ class Adviser:
 
     def run(self):
         if not self.ready:
-            logging.error("Робот не готов к торговле")
+            logger.error("Робот не готов к торговле")
             return False
-        info = f"Робот(SL={self.sl},TP={self.tp},max_vol={self.max_vol},vol={self.vol},confidence={self.confidence},std={self.std},symbol={self.symbol},timeunit={self.timeunit},delay={self.delay}"
-        logging.info(info)
+        robot_info = f"Робот(SL={self.sl},TP={self.tp},max_vol={self.max_vol},vol={self.vol},confidence={self.confidence},std={self.std},symbol={self.symbol},timeunit={self.timeunit},delay={self.delay}"
+        logging.info(robot_info)
         dtimer = DelayTimer(self.delay)
         while True:
             if not dtimer.elapsed():
@@ -210,29 +220,38 @@ class Adviser:
                     sleep(1)
                 continue
             if not self.IsMT5Connected():
+                logger.error("Потеряно подключение к MetaTrader5")
                 if not self.__init_mt5__():
                     continue
+            if not is_trade_allowed():
+                logger.info("Торговля не разрешена или отключен алготрейдинг")
             self.deal()
 
 
 def main():
-    print(f"Робот {ROBOT_NAME} v{VERSION}, автор:{AUTHOR}")
-    __init_logger__()
-    logging.debug("Загрузка модели " + MODEL_PATH)
+    logger.info(
+        "=================================================================================="
+    )
+    logger.info(f"Робот {ROBOT_NAME} v{VERSION}, автор:{AUTHOR}")
     predictor = Predictor(modelname=MODEL_PATH, use_tflite=USE_TFLITE)
     if not predictor.trained:
-        logging.error("Ошибка загрузки модели")
+        logger.error(f"Ошибка загрузки модели {MODEL_PATH}")
         return False
-
+    else:
+        logger.debug(f"Модель {MODEL_PATH} загружена")
     adviser = Adviser(
         predictor=predictor,
         delay=DELAY,
         mt5path=MT5_PATH,
         symbol=SYMBOL,
         confidence=CONFIDENCE,
+        tp=TP,
+        sl=SL,
+        max_vol=MAX_VOL,
+        vol=VOL,
     )
     if not adviser.ready:
-        logging.error("Ошибка инициализации робота")
+        logger.error("Ошибка инициализации робота")
         return
     adviser.run()
 

@@ -98,13 +98,16 @@ class Predictor(object):
         else:
             self.datainfo = DatasetInfo().load(self.name + ".cfg")
 
-    def create_datainfo(self, input_shape, output_shape, predict_size, x_std, y_std):
+    def create_datainfo(
+        self, input_shape, output_shape, predict_size, x_std, y_std, timeunit
+    ):
         self.datainfo = DatasetInfo(
             input_shape=input_shape,
             output_shape=output_shape,
             future=predict_size,
             x_std=x_std,
             y_std=y_std,
+            timeunit=timeunit,
         )
         self.datainfo.save(self.name + ".cfg")
         return self.datainfo
@@ -311,15 +314,15 @@ class Predictor(object):
             return self.predict([closes], verbose=0)[0]
 
     def tflite_predict(self, closes):
-        logging.debug("Подготовка входных данных")
+        # logging.debug("Подготовка входных данных")
         x = self.get_input(closes)
         if x is None:
             return None
         input_details = self.interpreter.get_input_details()
         output_details = self.interpreter.get_output_details()
         y = np.zeros((len(x), 8), dtype="float32")
-        logging.debug("Вычисление")
-        for i in tqdm(range(len(x))):
+        # logging.debug("Вычисление")
+        for i in range(len(x)):
             self.interpreter.set_tensor(
                 input_details[0]["index"],
                 np.reshape(x[i], (1, x[i].shape[0], x[i].shape[1], x[i].shape[2])),
@@ -330,8 +333,8 @@ class Predictor(object):
         n = np.argmax(y, axis=1)
         y_n = y[np.arange(len(y)), n]
         result = []
-        logging.debug("Формирование списка для записи в БД")
-        for i in tqdm(range(len(y_n))):
+        # logging.debug("Формирование списка для записи в БД")
+        for i in range(len(y_n)):
             low = (
                 unembed(
                     n[i],
