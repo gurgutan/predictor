@@ -83,7 +83,7 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
     x = inputs
     # [32,32,64,64,128,128,256,256,256,256,256,256,256,512]:  # 13
     # [16,16,32,32,64,64,128,128,256,256,512,512,1024,1024,1024]:  # 10
-    ksize = min([x.shape[1], x.shape[2], kernel_size])
+    ksize = kernel_size
     f = filters
     i = 0
     while ksize > 1:
@@ -101,10 +101,11 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
         )(x)
         x = layers.BatchNormalization(name=f"bnorma_{str(i)}")(x)
         ksize = min([x.shape[1], x.shape[2], ksize])
-        f += 64
+        f += 32
 
     x = layers.Reshape((x.shape[-1], 1), name="reshape")(x)
-    x = layers.LocallyConnected1D(8, kernel_size=1, name="locconn1d")(x)
+    x = layers.LocallyConnected1D(8, kernel_size=8, name="locconn1d")(x)
+    # x = layers.MaxPool1D(4)(x)
     x = layers.Dropout(0.1, name="dropout")(x)
     x = layers.Flatten(name="flatten")(x)
 
