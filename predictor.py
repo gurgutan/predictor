@@ -40,8 +40,8 @@ def embed(v, min_v, max_v, dim):
     return result
 
 
-def unembed(n, min_v, max_v, dim):
-    step_size = (max_v - min_v) / (dim - 1)
+def unembed(n: int, min_v: float, max_v: float, dim: int) -> float:
+    step_size = float((max_v - min_v) / (dim - 1.0))
     v = min_v + n * step_size
     return v
 
@@ -94,6 +94,7 @@ class Predictor(object):
                 predict_size=predict_size,
                 x_std=0.0004,
                 y_std=0.0014,
+                timeunit=300,
             )
         else:
             self.datainfo = DatasetInfo().load(self.name + ".cfg")
@@ -113,7 +114,7 @@ class Predictor(object):
         return self.datainfo
 
     def create_model(
-        self, input_shape, output_shape, conv_number, filters, kernel_size, dense_size,
+        self, input_shape, output_shape, filters, kernel_size, dense_size,
     ):
         self.model = conv2D(
             input_shape=input_shape,

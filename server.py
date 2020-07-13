@@ -55,10 +55,7 @@ class Server(object):
 
     def __init_logger__(self):
         logging.basicConfig(
-            # filename="srv.log",
-            level=logging.DEBUG,
-            format="%(asctime)s [%(levelname)s] %(message)s",
-            # filemode="w",
+            level=logging.DEBUG, format="%(asctime)s %(levelname)-6s :: %(message)s",
         )
         return True
 

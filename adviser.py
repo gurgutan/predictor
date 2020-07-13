@@ -21,8 +21,8 @@ ROBOT_NAME = "Аля"
 VERSION = "0.1"
 AUTHOR = "Слеповичев Иван Иванович"
 MT5_PATH = "D:/Dev/Alpari MT5/terminal64.exe"
-# MODEL_PATH = "D:/Dev/python/predictor/models/19"
-MODEL_PATH = "D:/Dev/python/predictor/TFLite/20.tflite"
+MODEL_PATH = "D:/Dev/python/predictor/models/19"
+# MODEL_PATH = "D:/Dev/python/predictor/TFLite/20.tflite"
 SYMBOL = "EURUSD"
 SL = 512
 TP = 512
@@ -30,8 +30,8 @@ MAX_VOL = 1.0
 VOL = 0.1
 CONFIDENCE = 0.2
 DELAY = 300
-USE_TFLITE = True
-REINVEST = 0.01
+USE_TFLITE = False
+REINVEST = 0.1
 # ---------------------------------------------------------
 
 
@@ -113,19 +113,19 @@ class Adviser:
             return None
         # df=pd.DataFrame(list(positions),columns=usd_positions[0]._asdict().keys())
         # ticket time type magic identifier reason volume price_open sl tp price_current swap profit symbol comment
-        vol = 0
+        vol = 0.0
         for pos in positions:
-            type_mult = -(pos.type * 2 - 1)  # -1=sell, +1=buy
+            type_mult = -(pos.type * 2.0 - 1.0)  # -1=sell, +1=buy
             vol += pos.volume * type_mult
         return vol
 
-    # def order(self, order_type, volume):
-    #     # TODO заменить Buy, Sell на order_send
-    #     if order_type == 1:
-    #         result = mt5.Buy(symbol=self.symbol, volume=volume)
-    #     elif order_type == -1:
-    #         result = mt5.Sell(symbol=self.symbol, volume=volume)
-    #     return result
+    def order(self, order_type, volume):
+        # TODO заменить Buy, Sell на order_send
+        if order_type == 1:
+            result = mt5.Buy(symbol=self.symbol, volume=volume)
+        elif order_type == -1:
+            result = mt5.Sell(symbol=self.symbol, volume=volume)
+        return result
 
     def compute(self):
         """
@@ -157,56 +157,59 @@ class Adviser:
     def get_trend(self):
         result = self.compute()
         if result is None:
-            return (0, 0)
+            return (0.0, 0.0)
         cur_date, cur_price, future_date, low, high, confidence = result
-        d = (low + high) / 2 - cur_price
+        d = (low + high) / 2.0 - cur_price
         # logging.debug(f"d={d}")
         # коэфициент учета ширины интервала прогноза
-        interval_length_coef = self.predictor.datainfo._out_size() / 2
+        interval_length_coef = float(self.predictor.datainfo._out_size() / 2.0)
         trend = (
-            max(-1, min(1, d / self.std / interval_length_coef)),
-            round(confidence, 2),
-            round(cur_price, 5),
+            round(max(-1.0, min(1.0, d / self.std / interval_length_coef)), 6),
+            round(confidence, 6),
+            round(cur_price, 6),
         )
         return trend
 
     def deal(self):
         equity = get_equity()
-        reinvest_k = 1.0 + REINVEST * equity / 1000  # для RUB
+        if equity is None:
+            equity = 0
+        reinvest_k = 1.0 + REINVEST * equity / 10000.0  # для RUB
         trend = self.get_trend()
-        targ_vol = round(self.max_vol * trend[0] * reinvest_k, 2)
+        targ_vol = self.max_vol * round(trend[0], 2) * reinvest_k
         lot = self.min_vol * reinvest_k
         pos_vol = self._get_pos_vol()
+        # защита от открытия ордера при неизвестном объеме позиции
         if pos_vol == None:
             return
-        d = round(targ_vol - pos_vol, 2)
+        d = round(targ_vol - pos_vol, 4)
         logger.debug(
-            f"прогноз={round(trend[0],2)} цена={trend[2]} уверен={trend[1]} актив={pos_vol} цель={targ_vol} разность={str(d)}"
+            f"прогноз={trend[0]} цена={trend[2]} уверен={trend[1]} актив={pos_vol} цель={targ_vol} разность={d}"
         )
         if trend[1] < self.confidence:
             return
-        if d >= self.min_vol and pos_vol < self.max_vol:
+        if d >= lot and pos_vol < self.max_vol * reinvest_k:
             send_order(
                 self.symbol,
-                lot * sign(d),
+                round(lot * sign(d), 2),
                 tp=self.tp,
                 sl=self.sl,
                 comment=f"{ROBOT_NAME} {round(self.confidence, 2)}",
             )
-            # if self.order(order_type=1, volume=self.vol):
-            #     logging.info("Покупка " + str(self.vol))
+            # if self.order(order_type=1, volume=self.min_vol):
+            #     logging.info("Покупка " + str(self.min_vol))
             # else:
             #     logging.error("Ошибка покупки: " + str(mt5.last_error()))
-        elif -d >= self.min_vol and -pos_vol < self.max_vol:
+        elif -d >= lot and -pos_vol < self.max_vol * reinvest_k:
             send_order(
                 self.symbol,
-                lot * sign(d),
+                round(lot * sign(d), 2),
                 tp=self.tp,
                 sl=self.sl,
                 comment=f"{ROBOT_NAME} {round(self.confidence, 2)}",
             )
-            # if self.order(order_type=-1, volume=self.vol):
-            #     logging.info("Продажа " + str(self.vol))
+            # if self.order(order_type=-1, volume=self.min_vol):
+            #     logging.info("Продажа " + str(self.min_vol))
             # else:
             #     logging.error("Ошибка продажи: " + str(mt5.last_error()))
 
@@ -234,9 +237,9 @@ class Adviser:
 
 def main():
     logger.info(
-        "=================================================================================="
+        "==============================================================================="
     )
-    logger.info(f"Робот {ROBOT_NAME} v{VERSION}, автор:{AUTHOR}")
+    logger.info(f"Робот {ROBOT_NAME} v{VERSION}, автор: {AUTHOR}")
     predictor = Predictor(modelname=MODEL_PATH, use_tflite=USE_TFLITE)
     if not predictor.trained:
         logger.error(f"Ошибка загрузки модели {MODEL_PATH}")
