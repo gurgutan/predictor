@@ -243,7 +243,7 @@ def main():
         "==============================================================================="
     )
     logger.info(f"Робот {ROBOT_NAME} v{VERSION}, автор: {AUTHOR}")
-    predictor = Predictor(modelname=MODEL_PATH, use_tflite=USE_TFLITE)
+    predictor = Predictor(modelname=MODEL_PATH)
     if not predictor.trained:
         logger.error(f"Ошибка загрузки модели {MODEL_PATH}")
         return False
