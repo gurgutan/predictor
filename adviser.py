@@ -27,11 +27,11 @@ SYMBOL = "EURUSD"
 SL = 512
 TP = 512
 MAX_VOL = 1.0
-VOL = 0.2
-CONFIDENCE = 0.1
+VOL = 0.1
+CONFIDENCE = 0.2
 DELAY = 300
 USE_TFLITE = False
-REINVEST = 0.1
+REINVEST = 0.04
 # ---------------------------------------------------------
 
 

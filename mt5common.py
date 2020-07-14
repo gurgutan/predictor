@@ -78,7 +78,9 @@ def send_order(symbol, volume, tp=512, sl=512, comment=""):
     }
     result = mt5.order_send(request)
     # проверим результат выполнения
-    logger.info(f"order_send: {symbol}, {str_order_type} {lot} по цене {price}")
+    logger.info(
+        f"order_send: {symbol}, {str_order_type} {lot} по цене {round(price,5)}"
+    )
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         logger.error(f"Ошибка: order_send, retcode={result.retcode}")
         # запросим результат в виде словаря и выведем поэлементно
