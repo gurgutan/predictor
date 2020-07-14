@@ -29,12 +29,18 @@ class Server(object):
             self.symbol = data["symbol"]  # символ инструмента
             self.timeframe = int(data["timeframe"])  # тайм-фрэйм в секундах
             self.delay = data["delay"]  # задержка в секундах цикла сервера
-            self.use_tflite = bool(data["use_tflite"])
         if self.__init_db__() and self.__init_mt5__() and self.__init_predictor__():
             self.ready = True
         else:
             logging.error("Ошибка инициализации сервера")
             self.ready = False
+
+    def is_tflite(self):
+        """
+        Возвращает True, если используется модель tflite, иначе False
+        Определяется по расширению имени модели
+        """
+        return self.p.is_tflite()
 
     def __init_db__(self):
         logging.info("Открытие БД " + self.dbname)
@@ -61,7 +67,7 @@ class Server(object):
 
     def __init_predictor__(self):
         logging.info("Загрузка и инициализация модели '%s'" % self.modelname)
-        self.p = Predictor(modelname=self.modelname, use_tflite=self.use_tflite)
+        self.p = Predictor(modelname=self.modelname)
         if not self.p.trained:
             logging.error("Ошибка инициализации модели '%s'" % self.modelname)
             return False
@@ -94,8 +100,9 @@ class Server(object):
         logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
-    def compute(self, rates, verbose=1):
+    def compute(self, rates, verbose=0):
         if len(rates) == 0:
+            loggin.error(f"Ошибка: пустой список котировок")
             return None
         closes, times = rates["close"], rates["time"]
         count = len(closes)
@@ -107,11 +114,12 @@ class Server(object):
             x = closes[i - shift : i].to_numpy()
             input_data.append(x)
         # вычисляем прогноз
-        if self.use_tflite:
-            output_data = self.p.tflite_predict(input_data)
+        if self.is_tflite():
+            output_data = self.p.tflite_predict(input_data, verbose=verbose)
         else:
             output_data = self.p.predict(input_data, verbose=verbose)
         if output_data is None:
+            logging.error(f"Ошибка: не удалось получить прогноз для {times[-1]}")
             return None
         # сформируем результирующий список кортежей для записи в БД
         for i in range(shift, count + 1):

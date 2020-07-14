@@ -27,8 +27,8 @@ SYMBOL = "EURUSD"
 SL = 512
 TP = 512
 MAX_VOL = 1.0
-VOL = 0.1
-CONFIDENCE = 0.2
+VOL = 0.2
+CONFIDENCE = 0.1
 DELAY = 300
 USE_TFLITE = False
 REINVEST = 0.1
@@ -88,6 +88,7 @@ class Adviser:
         self.timeunit = self.predictor.datainfo.timeunit  # секунд
         self.delay = delay  # секунд
         self.ready = True
+        self.try_order_count = 3  # количество повторов order_send в случае неудачи
 
     def __init_mt5__(self):
         if not mt5.initialize(path=self.mt5path):  # тестовый
@@ -188,30 +189,32 @@ class Adviser:
         )
         if trend[1] < self.confidence:
             return
-        if d >= lot and pos_vol < self.max_vol * reinvest_k:
-            send_order(
-                self.symbol,
-                round(lot * sign(d), 2),
-                tp=self.tp,
-                sl=self.sl,
-                comment=f"{ROBOT_NAME} {round(self.confidence, 2)}",
-            )
-            # if self.order(order_type=1, volume=self.min_vol):
-            #     logging.info("Покупка " + str(self.min_vol))
-            # else:
-            #     logging.error("Ошибка покупки: " + str(mt5.last_error()))
-        elif -d >= lot and -pos_vol < self.max_vol * reinvest_k:
-            send_order(
-                self.symbol,
-                round(lot * sign(d), 2),
-                tp=self.tp,
-                sl=self.sl,
-                comment=f"{ROBOT_NAME} {round(self.confidence, 2)}",
-            )
-            # if self.order(order_type=-1, volume=self.min_vol):
-            #     logging.info("Продажа " + str(self.min_vol))
-            # else:
-            #     logging.error("Ошибка продажи: " + str(mt5.last_error()))
+        if (d >= self.min_vol and pos_vol < self.max_vol * reinvest_k) or (
+            -d >= self.min_vol and -pos_vol < self.max_vol * reinvest_k
+        ):
+            i = 0
+            while (
+                not send_order(
+                    self.symbol,
+                    round(self.min_vol * sign(d), 2),
+                    tp=self.tp,
+                    sl=self.sl,
+                    comment=f"{ROBOT_NAME} {round(self.confidence, 2)}",
+                )
+                and i < self.try_order_count
+            ):
+                sleep(1)
+                i += 1
+        # if (d >= self.min_vol and pos_vol < self.max_vol * reinvest_k)
+        # if self.order(order_type=1, volume=self.min_vol):
+        #     logging.info("Покупка " + str(self.min_vol))
+        # else:
+        #     logging.error("Ошибка покупки: " + str(mt5.last_error()))
+        # elif(-d >= self.min_vol and -pos_vol < self.max_vol * reinvest_k)
+        # if self.order(order_type=-1, volume=self.min_vol):
+        #     logging.info("Продажа " + str(self.min_vol))
+        # else:
+        #     logging.error("Ошибка продажи: " + str(mt5.last_error()))
 
     def run(self):
         if not self.ready:
@@ -263,6 +266,8 @@ def main():
     adviser.run()
 
 
+# TODO 1. Сравнить сети 19, 20 и 20.tflite
+# TODO 2. Определять tflite модели по расширению
 # -----------------------------------------------------------
 if __name__ == "__main__":
     main()

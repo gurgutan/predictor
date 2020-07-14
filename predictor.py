@@ -56,18 +56,14 @@ class Predictor(object):
         filters=64,
         kernel_size=4,
         dense_size=8,
-        use_tflite=False,
     ):
         self.trained = False
-        self.use_tflite = use_tflite
         self.interpreter = None
+        self.name = modelname
         if modelname == None:
             self.name = "default"
         else:
-            if self.use_tflite:
-                self.name = modelname
-            else:
-                self.name = path.splitext(modelname)[0]
+            self.name = modelname
         if not path.exists(self.name):
             print(f"Модель '{self.name}' не найдена, будет создана новая...")
             self.model = self.create_model(
@@ -78,7 +74,7 @@ class Predictor(object):
                 dense_size=dense_size,
             )
         else:
-            if self.use_tflite:
+            if self.is_tflite():
                 self.interpreter = tf.lite.Interpreter(
                     model_path=self.name
                 )  # tf.lite.Interpreter(model_path=self.name)
@@ -98,6 +94,13 @@ class Predictor(object):
             )
         else:
             self.datainfo = DatasetInfo().load(self.name + ".cfg")
+
+    def is_tflite(self):
+        """
+        Возвращает True, если используется модель tflite, иначе False
+        Определяется по расширению имени модели
+        """
+        return self.name.split(".")[-1] == "tflite"
 
     def create_datainfo(
         self, input_shape, output_shape, predict_size, x_std, y_std, timeunit
@@ -309,12 +312,12 @@ class Predictor(object):
         """
         closes - массив размерности (input_size)
         """
-        if self.use_tflite:
+        if self.is_tflite():
             return self.tflite_predict([closes])[0]
         else:
             return self.predict([closes], verbose=0)[0]
 
-    def tflite_predict(self, closes):
+    def tflite_predict(self, closes, verbose):
         # logging.debug("Подготовка входных данных")
         x = self.get_input(closes)
         if x is None:
@@ -323,14 +326,24 @@ class Predictor(object):
         output_details = self.interpreter.get_output_details()
         y = np.zeros((len(x), 8), dtype="float32")
         # logging.debug("Вычисление")
-        for i in range(len(x)):
-            self.interpreter.set_tensor(
-                input_details[0]["index"],
-                np.reshape(x[i], (1, x[i].shape[0], x[i].shape[1], x[i].shape[2])),
-            )
-            self.interpreter.invoke()
-            output = self.interpreter.get_tensor(output_details[0]["index"])
-            y[i] = output
+        if verbose == 0:
+            for i in range(len(x)):
+                self.interpreter.set_tensor(
+                    input_details[0]["index"],
+                    np.reshape(x[i], (1, x[i].shape[0], x[i].shape[1], x[i].shape[2])),
+                )
+                self.interpreter.invoke()
+                output = self.interpreter.get_tensor(output_details[0]["index"])
+                y[i] = output
+        else:
+            for i in tqdm(range(len(x))):
+                self.interpreter.set_tensor(
+                    input_details[0]["index"],
+                    np.reshape(x[i], (1, x[i].shape[0], x[i].shape[1], x[i].shape[2])),
+                )
+                self.interpreter.invoke()
+                output = self.interpreter.get_tensor(output_details[0]["index"])
+                y[i] = output
         n = np.argmax(y, axis=1)
         y_n = y[np.arange(len(y)), n]
         result = []
