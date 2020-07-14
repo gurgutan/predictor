@@ -97,7 +97,7 @@ class Server(object):
             logging.error("Ошибка:" + str(mt5.last_error()))
             return None
         rates = pd.DataFrame(mt5rates)
-        logging.debug("Получено " + str(len(rates)) + " котировок")
+        # logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
     def compute(self, rates, verbose=0):
@@ -138,7 +138,7 @@ class Server(object):
                 round(confidence, 6),
             )
             results.append(db_row)
-        # logging.debug("Вычислено: " + str(len(results)))
+        logging.debug(str(results[-1]))
         return results
 
     def calc_old(self):

@@ -51,12 +51,14 @@ def send_order(symbol, volume, tp=512, sl=512, comment=""):
         order_type = mt5.ORDER_TYPE_BUY
         stop_loss = round(price - sl * point, 5)
         take_profit = round(price + tp * point, 5)
+        str_order_type = "buy"
     elif volume < 0:
         lot = round(-volume, 2)
         price = mt5.symbol_info_tick(symbol).bid
         order_type = mt5.ORDER_TYPE_SELL
         stop_loss = round(price + sl * point, 5)
         take_profit = round(price - tp * point, 5)
+        str_order_type = "sell"
     else:
         logger.error(f"Ошибка в volume:{volume}")
         return False
@@ -76,9 +78,9 @@ def send_order(symbol, volume, tp=512, sl=512, comment=""):
     }
     result = mt5.order_send(request)
     # проверим результат выполнения
-    logger.info(f"order_send(): {symbol}, {lot} по {price}")
+    logger.info(f"order_send: {symbol}, {str_order_type} {lot} по цене {price}")
     if result.retcode != mt5.TRADE_RETCODE_DONE:
-        logger.error(f"order_send failed, retcode={result.retcode}")
+        logger.error(f"Ошибка: order_send, retcode={result.retcode}")
         # запросим результат в виде словаря и выведем поэлементно
         result_dict = result._asdict()
         for field in result_dict.keys():

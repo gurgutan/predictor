@@ -4,5 +4,5 @@
     "modelname": "models/20.tflite",
     "symbol": "EURUSD",
     "timeframe": 300,
-    "delay": 300,
+    "delay": 300
 }

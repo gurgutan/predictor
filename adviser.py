@@ -177,7 +177,7 @@ class Adviser:
             equity = 0
         reinvest_k = 1.0 + REINVEST * equity / 10000.0  # для RUB
         trend = self.get_trend()
-        targ_vol = self.max_vol * round(trend[0], 2) * reinvest_k
+        targ_vol = round(self.max_vol * round(trend[0], 2) * reinvest_k, 2)
         lot = self.min_vol * reinvest_k
         pos_vol = self._get_pos_vol()
         # защита от открытия ордера при неизвестном объеме позиции
