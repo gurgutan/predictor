@@ -27,11 +27,11 @@ SYMBOL = "EURUSD"
 SL = 512
 TP = 512
 MAX_VOL = 1.0
-VOL = 0.1
+VOL = 0.4  # 0.4 с 16.07.20 18:55
 CONFIDENCE = 0.2
 DELAY = 300
 USE_TFLITE = False
-REINVEST = 0.04
+REINVEST = 0.2
 # ---------------------------------------------------------
 
 
@@ -52,7 +52,7 @@ logging.basicConfig(
         logging.StreamHandler(),
     ),
     level=logging.DEBUG,
-    format="%(asctime)s %(levelname)-6s:: %(message)s",
+    format="%(asctime)s %(levelname)-6s | %(message)s",
     datefmt="%d.%m.%Y %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
@@ -178,12 +178,12 @@ class Adviser:
         reinvest_k = 1.0 + REINVEST * equity / 10000.0  # для RUB
         trend = self.get_trend()
         targ_vol = round(self.max_vol * round(trend[0], 2) * reinvest_k, 2)
-        lot = self.min_vol * reinvest_k
         pos_vol = self._get_pos_vol()
         # защита от открытия ордера при неизвестном объеме позиции
         if pos_vol == None:
             return
-        d = round(targ_vol - pos_vol, 4)
+        d = round(targ_vol - pos_vol, 8)
+        lot = self.min_vol * sign(d)
         logger.debug(
             f"прогноз={trend[0]} цена={trend[2]} уверен={trend[1]} актив={pos_vol} цель={targ_vol} разность={d}"
         )
@@ -196,7 +196,7 @@ class Adviser:
             while (
                 not send_order(
                     self.symbol,
-                    round(self.min_vol * sign(d), 2),
+                    round(lot, 2),
                     tp=self.tp,
                     sl=self.sl,
                     comment=f"{ROBOT_NAME} {round(self.confidence, 2)}",
@@ -220,7 +220,7 @@ class Adviser:
         if not self.ready:
             logger.error("Робот не готов к торговле")
             return False
-        robot_info = f"Робот(SL={self.sl},TP={self.tp},max_vol={self.max_vol},vol={self.min_vol},confidence={self.confidence},std={self.std},symbol={self.symbol},timeunit={self.timeunit},delay={self.delay}"
+        robot_info = f"Робот(SL={self.sl},TP={self.tp},max_vol={self.max_vol},vol={self.min_vol},confidence={self.confidence},std={self.std},symbol={self.symbol},timeunit={self.timeunit},delay={self.delay})"
         logging.info(robot_info)
         dtimer = DelayTimer(self.delay)
         while True:

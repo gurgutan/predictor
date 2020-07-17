@@ -138,7 +138,8 @@ class Server(object):
                 round(confidence, 6),
             )
             results.append(db_row)
-        logging.debug(str(results[-1]))
+        d = round((results[-1][5] + results[-1][6]) / 2.0 - results[-1][1], 4)
+        logging.debug(f"{results[-1]} d={d}")
         return results
 
     def calc_old(self):
