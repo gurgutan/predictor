@@ -282,7 +282,7 @@ class Predictor(object):
         )
         early_stop = keras.callbacks.EarlyStopping(
             monitor="val_mean_absolute_error",
-            patience=16,
+            patience=32,
             min_delta=1e-3,
             restore_best_weights=True,
         )
@@ -352,14 +352,14 @@ def train(modelname, batch_size, epochs):
         input_shape=input_shape,
         output_shape=output_shape,
         predict_size=predict_size,
-        filters=32,
-        kernel_size=2,
+        filters=64,
+        kernel_size=4,
         dense_size=64,
     )
     x, y = p.load_dataset(
         csv_file="datas/EURUSD_M5_20000103_20200710.csv",
         count=2 ** 19,  # таймфреймы за последние 5 лет
-        skip=0,  # последние пол года не используем в обучении и валидации
+        skip=2 ** 14,  # последние 2 мес. не используем в обучении и валидации
     )
     # keras.utils.plot_model(p.model, show_shapes=True)
     if not x is None:
@@ -371,6 +371,6 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/21", batch_size=2 ** 14, epochs=2 ** 10)
+            train("models/23", batch_size=2 ** 15, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора
