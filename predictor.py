@@ -13,6 +13,8 @@ import datetime
 import sys
 from patterns import conv2D, multiConv2D
 from datainfo import DatasetInfo
+from tqdm import tqdm
+import logging
 
 # import tflite_runtime.interpreter as tflite
 # import pydot
@@ -38,8 +40,8 @@ def embed(v, min_v, max_v, dim):
     return result
 
 
-def unembed(n, min_v, max_v, dim):
-    step_size = (max_v - min_v) / (dim - 1)
+def unembed(n: int, min_v: float, max_v: float, dim: int) -> float:
+    step_size = float((max_v - min_v) / (dim - 1.0))
     v = min_v + n * step_size
     return v
 
@@ -54,19 +56,16 @@ class Predictor(object):
         filters=64,
         kernel_size=4,
         dense_size=8,
-        use_tflite=False,
     ):
         self.trained = False
-        self.use_tflite = use_tflite
         self.interpreter = None
+        self.name = modelname
         if modelname == None:
             self.name = "default"
         else:
-            if self.use_tflite:
-                self.name = modelname
-            else:
-                self.name = path.splitext(modelname)[0]
+            self.name = modelname
         if not path.exists(self.name):
+            print(f"Модель '{self.name}' не найдена, будет создана новая...")
             self.model = self.create_model(
                 input_shape=input_shape,
                 output_shape=output_shape,
@@ -75,8 +74,7 @@ class Predictor(object):
                 dense_size=dense_size,
             )
         else:
-            if self.use_tflite:
-
+            if self.is_tflite():
                 self.interpreter = tf.lite.Interpreter(
                     model_path=self.name
                 )  # tf.lite.Interpreter(model_path=self.name)
@@ -92,60 +90,34 @@ class Predictor(object):
                 predict_size=predict_size,
                 x_std=0.0004,
                 y_std=0.0014,
+                timeunit=300,
             )
         else:
             self.datainfo = DatasetInfo().load(self.name + ".cfg")
 
-    def tflite_eval(self, closes):
-        input_details = self.interpreter.get_input_details()
-        output_details = self.interpreter.get_output_details()
-        x = self.get_input(closes)
-        if x is None:
-            return None
-        self.interpreter.set_tensor(input_details[0]["index"], x[0])
-        self.interpreter.invoke()
-        y = self.interpreter.get_tensor(output_details[0]["index"])
-        n = np.argmax(y, axis=0)
-        y_n = y[n]
-        low = (
-            unembed(
-                n,
-                self.datainfo._y_min() / self.datainfo.y_std,
-                self.datainfo._y_max() / self.datainfo.y_std,
-                self.datainfo._out_size(),
-            )
-            * self.datainfo.y_std
-        )
-        high = (
-            unembed(
-                n + 1,
-                self.datainfo._y_min() / self.datainfo.y_std,
-                self.datainfo._y_max() / self.datainfo.y_std,
-                self.datainfo._out_size(),
-            )
-            * self.datainfo.y_std
-        )
-        return (low, high, float(y_n))
+    def is_tflite(self):
+        """
+        Возвращает True, если используется модель tflite, иначе False
+        Определяется по расширению имени модели
+        """
+        return self.name.split(".")[-1] == "tflite"
 
-    def create_datainfo(self, input_shape, output_shape, predict_size, x_std, y_std):
+    def create_datainfo(
+        self, input_shape, output_shape, predict_size, x_std, y_std, timeunit
+    ):
         self.datainfo = DatasetInfo(
             input_shape=input_shape,
             output_shape=output_shape,
             future=predict_size,
             x_std=x_std,
             y_std=y_std,
+            timeunit=timeunit,
         )
         self.datainfo.save(self.name + ".cfg")
         return self.datainfo
 
     def create_model(
-        self,
-        input_shape,
-        output_shape,
-        conv_number=16,
-        filters=64,
-        kernel_size=2,
-        dense_size=8,
+        self, input_shape, output_shape, filters, kernel_size, dense_size,
     ):
         self.model = conv2D(
             input_shape=input_shape,
@@ -161,7 +133,7 @@ class Predictor(object):
         Возвращает входной вектор для сети по массиву close_list.
         Размерность close_list: (любая, input_size+1)
         """
-        result = []
+        result_list = []
         in_size = self.datainfo._in_size()
         for c in close_list:
             if len(c) < in_size + 1:
@@ -191,10 +163,11 @@ class Predictor(object):
                         self.datainfo.input_shape[2],
                     ),
                 )
-            result.append(x)
-        if len(result) == 0:
+            result_list.append(x)
+        if len(result_list) == 0:
             return None
-        return np.stack(result, axis=0)
+        result = np.stack(result_list, axis=0).astype("float32")
+        return result
 
     def load_dataset(self, csv_file, count=0, skip=0):
         """Подготовка обучающей выборки (x,y). Тип x и y - numpy.ndarray.
@@ -339,7 +312,63 @@ class Predictor(object):
         """
         closes - массив размерности (input_size)
         """
-        return self.predict([closes], verbose=0)[0]
+        if self.is_tflite():
+            return self.tflite_predict([closes])[0]
+        else:
+            return self.predict([closes], verbose=0)[0]
+
+    def tflite_predict(self, closes, verbose):
+        # logging.debug("Подготовка входных данных")
+        x = self.get_input(closes)
+        if x is None:
+            return None
+        input_details = self.interpreter.get_input_details()
+        output_details = self.interpreter.get_output_details()
+        y = np.zeros((len(x), 8), dtype="float32")
+        # logging.debug("Вычисление")
+        if verbose == 0:
+            for i in range(len(x)):
+                self.interpreter.set_tensor(
+                    input_details[0]["index"],
+                    np.reshape(x[i], (1, x[i].shape[0], x[i].shape[1], x[i].shape[2])),
+                )
+                self.interpreter.invoke()
+                output = self.interpreter.get_tensor(output_details[0]["index"])
+                y[i] = output
+        else:
+            for i in tqdm(range(len(x))):
+                self.interpreter.set_tensor(
+                    input_details[0]["index"],
+                    np.reshape(x[i], (1, x[i].shape[0], x[i].shape[1], x[i].shape[2])),
+                )
+                self.interpreter.invoke()
+                output = self.interpreter.get_tensor(output_details[0]["index"])
+                y[i] = output
+        n = np.argmax(y, axis=1)
+        y_n = y[np.arange(len(y)), n]
+        result = []
+        # logging.debug("Формирование списка для записи в БД")
+        for i in range(len(y_n)):
+            low = (
+                unembed(
+                    n[i],
+                    self.datainfo._y_min() / self.datainfo.y_std,
+                    self.datainfo._y_max() / self.datainfo.y_std,
+                    self.datainfo._out_size(),
+                )
+                * self.datainfo.y_std
+            )
+            high = (
+                unembed(
+                    n[i] + 1,
+                    self.datainfo._y_min() / self.datainfo.y_std,
+                    self.datainfo._y_max() / self.datainfo.y_std,
+                    self.datainfo._out_size(),
+                )
+                * self.datainfo.y_std
+            )
+            result.append((low, high, float(y_n[i])))
+        return result
 
 
 def train(modelname, batch_size, epochs):

@@ -30,3 +30,5 @@ variables.*
 *.sqlite
 # мусор
 trash
+# логи
+*.log

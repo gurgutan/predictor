@@ -4,7 +4,8 @@ from datetime import timedelta, datetime
 class DelayTimer:
     def __init__(self, seconds=60):
         self.seconds = seconds
-        self.last = datetime.now()
+        # Выравнивание времени по начальной дате
+        self.last = datetime(2000, 1, 1)
 
     def elapsed(self):
         delta = (datetime.now() - self.last).total_seconds()

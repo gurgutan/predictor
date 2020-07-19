@@ -4,10 +4,10 @@
 FROM docker.io/intelaipg/intel-optimized-tensorflow:2.0.0-mkl-py3
 
 RUN apt-get -y update && apt-get install -y graphviz
-RUN pip3 install --upgrade pip
-RUN pip3 install --upgrade setuptools
+RUN pip3 install --upgrade pip setuptools
 RUN pip3 install --upgrade pandas pydot pydotplus
 RUN pip3 install --upgrade graphviz tqdm matplotlib
+
 
 # Переменные окружения для настройки параллелизма intel cpu
 ENV KMP_ABORT_DELAY 0

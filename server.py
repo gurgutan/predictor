@@ -1,3 +1,6 @@
+"""
+Сервер для обновления БД прогнозов
+"""
 import dbcommon
 from predictor import Predictor
 import json
@@ -32,6 +35,13 @@ class Server(object):
             logging.error("Ошибка инициализации сервера")
             self.ready = False
 
+    def is_tflite(self):
+        """
+        Возвращает True, если используется модель tflite, иначе False
+        Определяется по расширению имени модели
+        """
+        return self.p.is_tflite()
+
     def __init_db__(self):
         logging.info("Открытие БД " + self.dbname)
         self.db = dbcommon.db_open(self.dbname)
@@ -51,10 +61,7 @@ class Server(object):
 
     def __init_logger__(self):
         logging.basicConfig(
-            # filename="srv.log",
-            level=logging.DEBUG,
-            format="%(asctime)s [%(levelname)s] %(message)s",
-            # filemode="w",
+            level=logging.DEBUG, format="%(asctime)s %(levelname)-6s :: %(message)s",
         )
         return True
 
@@ -90,11 +97,12 @@ class Server(object):
             logging.error("Ошибка:" + str(mt5.last_error()))
             return None
         rates = pd.DataFrame(mt5rates)
-        logging.debug("Получено " + str(len(rates)) + " котировок")
+        # logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
-    def compute(self, rates, verbose=1):
+    def compute(self, rates, verbose=0):
         if len(rates) == 0:
+            loggin.error(f"Ошибка: пустой список котировок")
             return None
         closes, times = rates["close"], rates["time"]
         count = len(closes)
@@ -106,8 +114,12 @@ class Server(object):
             x = closes[i - shift : i].to_numpy()
             input_data.append(x)
         # вычисляем прогноз
-        output_data = self.p.predict(input_data, verbose=verbose)
+        if self.is_tflite():
+            output_data = self.p.tflite_predict(input_data, verbose=verbose)
+        else:
+            output_data = self.p.predict(input_data, verbose=verbose)
         if output_data is None:
+            logging.error(f"Ошибка: не удалось получить прогноз для {times[-1]}")
             return None
         # сформируем результирующий список кортежей для записи в БД
         for i in range(shift, count + 1):
@@ -126,7 +138,8 @@ class Server(object):
                 round(confidence, 6),
             )
             results.append(db_row)
-        # logging.debug("Вычислено: " + str(len(results)))
+        d = round((results[-1][5] + results[-1][6]) / 2.0 - results[-1][1], 4)
+        logging.debug(f"{results[-1]} d={d}")
         return results
 
     def calc_old(self):
@@ -137,6 +150,7 @@ class Server(object):
         # delta = dt.timedelta(minutes=(self.p.datainfo._in_size() + 1) * 5)
         if not date is None:
             from_date = date - delta
+        logging.info(f"Вычисление прошлых значений с даты {from_date}")
         rates = self.get_rates_from_date(from_date)
         if rates is None:
             logging.error("Отсутствуют новые котировки")
@@ -156,6 +170,7 @@ class Server(object):
     def start(self):
         dtimer = DelayTimer(self.delay)
         self.calc_old()  # обновление данных начиная с даты
+        logging.info(f"Запуск таймера с периодом {self.delay}")
         while True:
             if not dtimer.elapsed():
                 remained = dtimer.remained()

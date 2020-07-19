@@ -1,21 +1,47 @@
 import MetaTrader5 as mt5
 import pytz
+import logging
+
 
 MAGIC = 197979
+logger = logging.getLogger(__name__)
 
 
-def SendOrder(symbol, volume, tp=512, sl=512, comment=""):
-    pass
+def get_account_info():
+    account_info = mt5.account_info()
+    if account_info != None:
+        return str(account_info)
+    else:
+        return ""
+
+
+def get_equity():
+    account_info = mt5.account_info()
+    if account_info != None:
+        return int(account_info._asdict()["equity"])
+    else:
+        return None
+
+
+def is_trade_allowed():
+    terminal_info = mt5.terminal_info()._asdict()
+    if terminal_info == None:
+        logger.error(f"Ошибка запроса terminal_info()")
+        return False
+    return terminal_info["trade_allowed"] and (not terminal_info["tradeapi_disabled"])
+
+
+def send_order(symbol, volume, tp=512, sl=512, comment=""):
     # подготовим структуру запроса для покупки
     symbol_info = mt5.symbol_info(symbol)
     if symbol_info is None:
-        print(symbol, f"Символ '{symbol}' не найден")
+        logger.error(f"Символ '{symbol}' не найден")
         return False
     # если символ недоступен в MarketWatch, добавим его
     if not symbol_info.visible:
-        print(symbol, "Символ не включен, включаю...")
+        logger.info(f"Символ {symbol} не включен, включаю...")
         if not mt5.symbol_select(symbol, True):
-            print(f"ошибка выполнения symbol_select({symbol})")
+            logger.error(f"ошибка выполнения symbol_select({symbol})")
             return False
     point = mt5.symbol_info(symbol).point
     deviation = 20
@@ -23,22 +49,24 @@ def SendOrder(symbol, volume, tp=512, sl=512, comment=""):
         lot = round(volume, 2)
         price = mt5.symbol_info_tick(symbol).ask
         order_type = mt5.ORDER_TYPE_BUY
-        stop_loss = price - sl * point
-        take_profit = price + tp * point
+        stop_loss = round(price - sl * point, 5)
+        take_profit = round(price + tp * point, 5)
+        str_order_type = "buy"
     elif volume < 0:
         lot = round(-volume, 2)
         price = mt5.symbol_info_tick(symbol).bid
         order_type = mt5.ORDER_TYPE_SELL
-        stop_loss = price + sl * point
-        take_profit = price - tp * point
+        stop_loss = round(price + sl * point, 5)
+        take_profit = round(price - tp * point, 5)
+        str_order_type = "sell"
     else:
-        print("Ошибка в volume")
+        logger.error(f"Ошибка в volume:{volume}")
         return False
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
         "volume": lot,
-        "type": mt5.ORDER_TYPE_BUY,
+        "type": order_type,
         "price": price,
         "sl": stop_loss,
         "tp": take_profit,
@@ -46,23 +74,25 @@ def SendOrder(symbol, volume, tp=512, sl=512, comment=""):
         "magic": MAGIC,
         "comment": comment,
         "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_RETURN,
+        "type_filling": mt5.ORDER_FILLING_FOK,  # ORDER_FILLING_RETURN,
     }
     result = mt5.order_send(request)
     # проверим результат выполнения
-    print(f"order_send(): {symbol} {lot} по {price}")
+    logger.info(
+        f"order_send: {symbol}, {str_order_type} {lot} по цене {round(price,5)}"
+    )
     if result.retcode != mt5.TRADE_RETCODE_DONE:
-        print(f"order_send failed, retcode={result.retcode}")
+        logger.error(f"Ошибка: order_send, retcode={result.retcode}")
         # запросим результат в виде словаря и выведем поэлементно
         result_dict = result._asdict()
         for field in result_dict.keys():
-            print(f"   {field}={result_dict[field]}")
+            logger.error(f"   {field}={result_dict[field]}")
             # если это структура торгового запроса, то выведем её тоже поэлементно
             if field == "request":
                 traderequest_dict = result_dict[field]._asdict()
                 for tradereq_filed in traderequest_dict:
-                    print(
-                        f"  traderequest: {tradereq_filed}={ traderequest_dict[tradereq_filed]}"
+                    logger.error(
+                        f"  traderequest: {tradereq_filed}={traderequest_dict[tradereq_filed]}"
                     )
         return False
     return True
