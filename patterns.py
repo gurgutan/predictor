@@ -78,47 +78,43 @@ def multiConv2D(input_shape, output_shape, filters, kernel_size, dense_size):
 def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
     # [32,32,64,64,128,128,256,256,256,256,256,256,256,512]:  # 13
     # [16,16,32,32,64,64,128,128,256,256,512,512,1024,1024,1024]:  # 10
-    max_filters = 2048
-    l1_reg = keras.regularizers.l1(l=1e-6)
-    l2_reg = keras.regularizers.l2(l=1e-6)
+    max_filters = 2 ** 9
+    l1_reg = keras.regularizers.l1(l=1e-5)
+    l2_reg = keras.regularizers.l2(l=1e-5)
     inputs = keras.Input(shape=input_shape, name="inputs")
     ksize = kernel_size
     x = inputs
     f = filters
     i = 0
-    while ksize > 1:
+    while ksize > 1 and i < 16:
         i += 1
         x = layers.SeparableConv2D(
             min(max_filters, f),
             ksize,
             padding="valid",
-            activation="softsign",
-            bias_initializer=keras.initializers.RandomUniform(),
+            activation="relu",
+            bias_initializer=keras.initializers.RandomNormal(),
             bias_regularizer=l2_reg,
-            kernel_initializer=keras.initializers.RandomUniform(),
-            name=f"conv2d_{str(i)}"
-            # kernel_regularizer=l2_reg,
+            kernel_initializer=keras.initializers.RandomNormal(),
+            name=f"conv2d_{str(i)}",
         )(x)
         x = layers.BatchNormalization(name=f"bnorma_{str(i)}")(x)
-        x = layers.Dropout(1.0 / 32.0, name=f"dropout_{i}")(x)
         ksize = min([x.shape[1], x.shape[2], ksize])
-        f *= 2
+        f += 32
 
     x = layers.Reshape((x.shape[-1], 1), name="reshape")(x)
-    # x = layers.LocallyConnected1D(8, kernel_size=1, activation="relu")(x)
-    x = layers.MaxPool1D(4)(x)
-    # x = layers.Dropout(1 / 16, name="dropout")(x)
+    x = layers.LocallyConnected1D(8, kernel_size=1)(x)
+    x = layers.Dropout(1.0 / 32.0, name=f"dropout_{i}")(x)
     x = layers.Flatten(name="flatten")(x)
 
-    # x = layers.Dense(
-    #     output_shape[0] * 8,
-    #     activation="softsign",
-    #     bias_initializer=keras.initializers.RandomNormal(),
-    #     bias_regularizer=l1_reg,
-    #     kernel_initializer=keras.initializers.RandomNormal(),
-    #     kernel_regularizer=l1_reg,
-    #     name="dense_1",
-    # )(x)
+    x = layers.Dense(
+        output_shape[0] * 8,
+        activation="softsign",
+        bias_initializer=keras.initializers.RandomNormal(),
+        bias_regularizer=l1_reg,
+        kernel_initializer=keras.initializers.RandomNormal(),
+        kernel_regularizer=l1_reg,
+    )(x)
     x = layers.Dense(
         output_shape[0] * 4,
         activation="softsign",

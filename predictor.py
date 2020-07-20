@@ -271,6 +271,7 @@ class Predictor(object):
             callbacks=[early_stop, cp_save, tensorboard_link],
         )
         self.model.save(self.name)
+        # tf.saved_model.save(self.model, self.name + ".saved_model")
         print("Модель " + self.name + " сохранена")
         return history
 
@@ -382,7 +383,7 @@ def train(modelname, batch_size, epochs):
         output_shape=output_shape,
         predict_size=predict_size,
         filters=64,
-        kernel_size=4,
+        kernel_size=2,
         dense_size=64,
     )
     x, y = p.load_dataset(
@@ -400,6 +401,6 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/23", batch_size=2 ** 15, epochs=2 ** 10)
+            train("models/23", batch_size=2 ** 14, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора
