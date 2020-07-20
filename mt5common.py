@@ -7,6 +7,23 @@ MAGIC = 197979
 logger = logging.getLogger(__name__)
 
 
+def init_mt5(mt5path):
+    if not mt5.initialize(path=mt5path):
+        logger.error("Ошибка подключения к терминалу MT5")
+        mt5.shutdown()
+        return False
+    logger.info("Подключено к терминалу '%s' версия %s" % (mt5path, str(mt5.version())))
+    # logger.info(get_account_info())
+    return True
+
+
+def is_mt5_connected():
+    info = mt5.account_info()
+    if mt5.last_error()[0] < 0:
+        return False
+    return True
+
+
 def get_account_info():
     account_info = mt5.account_info()
     if account_info != None:

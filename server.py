@@ -27,7 +27,7 @@ class Server(object):
             self.initialdate = dt.datetime.fromisoformat(data["initialdate"])
             self.modelname = data["modelname"]  # полное имя модели (с путем)
             self.symbol = data["symbol"]  # символ инструмента
-            self.timeframe = int(data["timeframe"])  # тайм-фрэйм в секундах
+            # self.timeframe = int(data["timeframe"])  # тайм-фрэйм в секундах
             self.delay = data["delay"]  # задержка в секундах цикла сервера
         if self.__init_db__() and self.__init_mt5__() and self.__init_predictor__():
             self.ready = True
@@ -126,20 +126,21 @@ class Server(object):
             plow, phigh, confidence = output_data[i - shift]
             rdate = int(times[i - 1])
             rprice = closes[i - 1]
-            pdate = int(rdate + 60 * 5 * self.p.datainfo.future)  # секунды*M5*future
+            pdate = int(
+                rdate + self.p.datainfo.timeunit * self.p.datainfo.future
+            )  # секунды*M5*future
             db_row = (
                 rdate,
-                round(rprice, 6),
+                round(rprice, 8),
                 self.symbol,
                 self.p.name,
                 pdate,
-                round(rprice + plow, 6),
-                round(rprice + phigh, 6),
-                round(confidence, 6),
+                round(rprice + plow, 8),
+                round(rprice + phigh, 8),
+                round(confidence, 8),
             )
             results.append(db_row)
-        d = round((results[-1][5] + results[-1][6]) / 2.0 - results[-1][1], 4)
-        logging.debug(f"{results[-1]} d={d}")
+
         return results
 
     def calc_old(self):
@@ -190,7 +191,9 @@ class Server(object):
                 logging.error("Ошибка вычислений")
                 continue
             dbcommon.db_replace(self.db, results)
-            # logging.info("В БД записано " + str(len(results)) + " строк")
+            _, rprice, _, _, future, low, high, c = results[-1]
+            d = round(((low + high) / 2.0 - rprice) / self.p.datainfo.y_std, 5)
+            logging.debug(f"price={rprice} d={d}")
 
 
 DEBUG = False
