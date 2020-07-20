@@ -54,10 +54,10 @@ class DatasetInfo(object):
         return functools.reduce(operator.mul, self.output_shape)
 
     def _y_min(self):
-        return -self.y_std * 2
+        return -self.y_std * 4
 
     def _y_max(self):
-        return self.y_std * 2
+        return self.y_std * 4
 
     def _x_inf(self):
         return self.x_std * 6

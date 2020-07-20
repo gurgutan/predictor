@@ -21,17 +21,17 @@ ROBOT_NAME = "Аля"
 VERSION = "0.1"
 AUTHOR = "Слеповичев Иван Иванович"
 MT5_PATH = "D:/Dev/Alpari MT5/terminal64.exe"
-MODEL_PATH = "D:/Dev/python/predictor/models/19"
+MODEL_PATH = "D:/Dev/python/predictor/models/22"
 # MODEL_PATH = "D:/Dev/python/predictor/TFLite/20.tflite"
 SYMBOL = "EURUSD"
 SL = 512
 TP = 512
 MAX_VOL = 1.0
-VOL = 0.4  # 0.4 с 16.07.20 18:55
+VOL = 0.1  # 0.4 с 16.07.20 18:55
 CONFIDENCE = 0.2
 DELAY = 300
 USE_TFLITE = False
-REINVEST = 0.2
+REINVEST = 0.01
 # ---------------------------------------------------------
 
 
@@ -43,7 +43,14 @@ import logging
 from predictor import Predictor
 from time import sleep
 from timer import DelayTimer
-from mt5common import send_order, is_trade_allowed, get_account_info, get_equity
+from mt5common import (
+    send_order,
+    is_trade_allowed,
+    get_account_info,
+    get_equity,
+    is_mt5_connected,
+    init_mt5,
+)
 
 
 logging.basicConfig(
@@ -76,7 +83,6 @@ class Adviser:
         vol=0.1,
     ):
         self.mt5path = mt5path
-        self.__init_mt5__()
         self.predictor = predictor
         self.sl = sl
         self.tp = tp
@@ -85,27 +91,9 @@ class Adviser:
         self.confidence = confidence
         self.std = round(self.predictor.datainfo.y_std, 8)
         self.symbol = symbol
-        self.timeunit = self.predictor.datainfo.timeunit  # секунд
         self.delay = delay  # секунд
         self.ready = True
-        self.try_order_count = 3  # количество повторов order_send в случае неудачи
-
-    def __init_mt5__(self):
-        if not mt5.initialize(path=self.mt5path):  # тестовый
-            logger.error("Ошибка подключения к терминалу MT5")
-            mt5.shutdown()
-            return False
-        logger.info(
-            "Подключено к терминалу '%s' версия %s" % (self.mt5path, str(mt5.version()))
-        )
-        logger.info(get_account_info())
-        return True
-
-    def IsMT5Connected(self):
-        info = mt5.account_info()
-        if mt5.last_error()[0] < 0:
-            return False
-        return True
+        self.__try_order_count = 3  # количество повторов order_send в случае неудачи
 
     def _get_pos_vol(self):
         positions = mt5.positions_get(symbol=self.symbol)
@@ -128,44 +116,57 @@ class Adviser:
             result = mt5.Sell(symbol=self.symbol, volume=volume)
         return result
 
+    def get_last_rates(self, count):
+        mt5rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 0, count)
+        if mt5rates is None:
+            logging.error("Ошибка:" + str(mt5.last_error()))
+            return None
+        rates = pd.DataFrame(mt5rates)
+        # logging.debug("Получено " + str(len(rates)) + " котировок")
+        return rates
+
     def compute(self):
         """
         Вычисление прогноза на текущую дату
         на выходе: (rdate, rclose, future_date, low, high, confidence)
         """
         rates_count = self.predictor.datainfo._in_size() + 1
-        rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 0, rates_count)
+        rates = self.get_last_rates(rates_count)
+        # rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 0, rates_count)
         if rates is None:
             logger.error("Ошибка запроса котировок: " + str(mt5.last_error()))
             return None
         if len(rates) < rates_count:
             logger.error("Нет котировок")
             return None
-        closes = rates["close"][-rates_count:]
-        times = rates["time"][-rates_count:]
-        future_date = int(times[-1] + self.timeunit * self.predictor.datainfo.future)
+        closes = rates["close"].tolist()[-rates_count:]
+        times = rates["time"].tolist()[-rates_count:]
+        future_date = int(
+            times[-1]
+            + self.predictor.datainfo.timeunit * self.predictor.datainfo.future
+        )
         low, high, confidence = self.predictor.eval(closes)
         result = (
             times[-1],
-            round(closes[-1], 6),
+            round(closes[-1], 8),
             future_date,
-            round(closes[-1] + low, 6),
-            round(closes[-1] + high, 6),
-            round(confidence, 6),
+            round(closes[-1] + low, 8),
+            round(closes[-1] + high, 8),
+            round(confidence, 8),
         )
         return result
 
     def get_trend(self):
         result = self.compute()
         if result is None:
-            return (0.0, 0.0)
+            return (0, 0)
         cur_date, cur_price, future_date, low, high, confidence = result
         d = (low + high) / 2.0 - cur_price
         # logging.debug(f"d={d}")
         # коэфициент учета ширины интервала прогноза
         interval_length_coef = float(self.predictor.datainfo._out_size() / 2.0)
         trend = (
-            round(max(-1.0, min(1.0, d / self.std / interval_length_coef)), 6),
+            round(max(-1.0, min(1.0, d / self.std / interval_length_coef)), 4),
             round(confidence, 6),
             round(cur_price, 6),
         )
@@ -182,16 +183,14 @@ class Adviser:
         # защита от открытия ордера при неизвестном объеме позиции
         if pos_vol == None:
             return
-        d = round(targ_vol - pos_vol, 8)
+        d = round(targ_vol - pos_vol, 2)
         lot = self.min_vol * sign(d)
         logger.debug(
             f"прогноз={trend[0]} цена={trend[2]} уверен={trend[1]} актив={pos_vol} цель={targ_vol} разность={d}"
         )
         if trend[1] < self.confidence:
             return
-        if (d >= self.min_vol and pos_vol < self.max_vol * reinvest_k) or (
-            -d >= self.min_vol and -pos_vol < self.max_vol * reinvest_k
-        ):
+        if abs(d) >= self.min_vol and abs(pos_vol) < self.max_vol * reinvest_k:
             i = 0
             while (
                 not send_order(
@@ -201,37 +200,32 @@ class Adviser:
                     sl=self.sl,
                     comment=f"{ROBOT_NAME} {round(self.confidence, 2)}",
                 )
-                and i < self.try_order_count
+                and i < self.__try_order_count
             ):
                 sleep(1)
                 i += 1
-        # if (d >= self.min_vol and pos_vol < self.max_vol * reinvest_k)
-        # if self.order(order_type=1, volume=self.min_vol):
-        #     logging.info("Покупка " + str(self.min_vol))
-        # else:
-        #     logging.error("Ошибка покупки: " + str(mt5.last_error()))
-        # elif(-d >= self.min_vol and -pos_vol < self.max_vol * reinvest_k)
-        # if self.order(order_type=-1, volume=self.min_vol):
-        #     logging.info("Продажа " + str(self.min_vol))
-        # else:
-        #     logging.error("Ошибка продажи: " + str(mt5.last_error()))
 
     def run(self):
         if not self.ready:
             logger.error("Робот не готов к торговле")
             return False
-        robot_info = f"Робот(SL={self.sl},TP={self.tp},max_vol={self.max_vol},vol={self.min_vol},confidence={self.confidence},std={self.std},symbol={self.symbol},timeunit={self.timeunit},delay={self.delay})"
+        robot_info = (
+            f"Робот(\n  SL={self.sl},\n  TP={self.tp},\n  max_vol={self.max_vol},\n"
+            + f"  vol={self.min_vol},\n  confidence={self.confidence},\n  std={self.std},\n"
+            + f"  symbol={self.symbol},\n  timeunit={self.predictor.datainfo.timeunit},\n"
+            + f"  delay={self.delay})"
+        )
         logging.info(robot_info)
         dtimer = DelayTimer(self.delay)
         while True:
             if not dtimer.elapsed():
                 remained = dtimer.remained()
                 if remained > 1:
-                    sleep(1)
+                    sleep(remained - 0.01)  # ожидаем на 10 мс меньше, чем осталось
                 continue
-            if not self.IsMT5Connected():
+            if not is_mt5_connected():
                 logger.error("Потеряно подключение к MetaTrader5")
-                if not self.__init_mt5__():
+                if not init_mt5(self.mt5path)():
                     continue
             if not is_trade_allowed():
                 logger.info("Торговля не разрешена или отключен алготрейдинг")
@@ -239,9 +233,7 @@ class Adviser:
 
 
 def main():
-    logger.info(
-        "==============================================================================="
-    )
+    logger.info("===============================================================")
     logger.info(f"Робот {ROBOT_NAME} v{VERSION}, автор: {AUTHOR}")
     predictor = Predictor(modelname=MODEL_PATH)
     if not predictor.trained:
