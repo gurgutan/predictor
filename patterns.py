@@ -98,13 +98,14 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
             kernel_initializer=keras.initializers.RandomNormal(),
             name=f"conv2d_{str(i)}",
         )(x)
-        x = layers.BatchNormalization(name=f"bnorma_{str(i)}")(x)
+        # x = layers.BatchNormalization(name=f"bnorma_{str(i)}")(x)
         ksize = min([x.shape[1], x.shape[2], ksize])
         f += 32
 
     x = layers.Reshape((x.shape[-1], 1), name="reshape")(x)
+    x = layers.BatchNormalization()(x)
     x = layers.LocallyConnected1D(8, kernel_size=1)(x)
-    x = layers.Dropout(1.0 / 32.0, name=f"dropout_{i}")(x)
+    x = layers.Dropout(1.0 / 8.0, name=f"dropout_{i}")(x)
     x = layers.Flatten(name="flatten")(x)
 
     x = layers.Dense(
