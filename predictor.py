@@ -34,8 +34,8 @@ def embed(v, min_v, max_v, dim):
     """Возвращает бинарный вектор, длины dim"""
     step_size = (dim - 1) / (max_v - min_v)
     n = int(max(0, min(dim - 1, (v - min_v) * step_size)))
-    result = np.zeros(dim, dtype="float32")
-    # result = np.full(dim, -1, dtype="float32")
+    # result = np.zeros(dim, dtype="float32")
+    result = np.full(dim, -1, dtype="float32")
     result[n] = 1
     return result
 
@@ -255,7 +255,7 @@ class Predictor(object):
         )
         early_stop = keras.callbacks.EarlyStopping(
             monitor="val_mean_absolute_error",
-            patience=32,
+            patience=16,
             min_delta=1e-3,
             restore_best_weights=True,
         )
@@ -401,6 +401,6 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/23", batch_size=2 ** 14, epochs=2 ** 10)
+            train("models/24", batch_size=2 ** 14, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора
