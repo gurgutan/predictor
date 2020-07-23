@@ -6,7 +6,7 @@ from tensorflow.keras import layers
 
 
 def abs_cat_loss(y_true, y_pred):
-    d = tf.math.reduce_sum(tf.math.multiply(y_true, y_pred))
+    d = tf.keras.losses.cosine_similarity(y_true, y_pred)
     return d  # tf.reduce_mean(d, axis=-1)
 
 
@@ -78,12 +78,25 @@ def multiConv2D(input_shape, output_shape, filters, kernel_size, dense_size):
 def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
     # [32,32,64,64,128,128,256,256,256,256,256,256,256,512]:  # 13
     # [16,16,32,32,64,64,128,128,256,256,512,512,1024,1024,1024]:  # 10
-    max_filters = 2 ** 9
-    l1_reg = keras.regularizers.l1(l=1e-5)
-    l2_reg = keras.regularizers.l2(l=1e-5)
+    max_filters = 2 ** 8
+    l1_reg = keras.regularizers.l1(l=1e-6)
+    l2_reg = keras.regularizers.l2(l=1e-6)
     inputs = keras.Input(shape=input_shape, name="inputs")
     ksize = kernel_size
     x = inputs
+
+    x = layers.Flatten()(x)
+    x = layers.Dense(
+        x.shape[-1],
+        activation="softsign",
+        bias_initializer=keras.initializers.RandomNormal(),
+        bias_regularizer=l1_reg,
+        kernel_initializer=keras.initializers.RandomNormal(),
+        kernel_regularizer=l1_reg,
+    )(x)
+    x = layers.Reshape(input_shape)(x)
+    # x = layers.LocallyConnected2D(1, kernel_size=1, activation="relu")(x)
+
     f = filters
     i = 0
     while ksize > 1 and i < 16:
@@ -98,15 +111,14 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
             kernel_initializer=keras.initializers.RandomNormal(),
             name=f"conv2d_{str(i)}",
         )(x)
-        # x = layers.BatchNormalization(name=f"bnorma_{str(i)}")(x)
+        x = layers.BatchNormalization()(x)
         ksize = min([x.shape[1], x.shape[2], ksize])
         f += 32
 
-    x = layers.Reshape((x.shape[-1], 1), name="reshape")(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.LocallyConnected1D(8, kernel_size=1)(x)
-    x = layers.Dropout(1.0 / 8.0, name=f"dropout_{i}")(x)
-    x = layers.Flatten(name="flatten")(x)
+    x = layers.Reshape((x.shape[-1], 1))(x)
+    # x = layers.LocallyConnected1D(8, kernel_size=1)(x)
+    x = layers.Dropout(1.0 / 16.0, name=f"dropout_{i}")(x)
+    x = layers.Flatten()(x)
 
     x = layers.Dense(
         output_shape[0] * 8,
@@ -127,7 +139,7 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
     )(x)
     outputs = layers.Dense(
         output_shape[0],
-        activation="softmax",
+        activation="softsign",
         bias_initializer=keras.initializers.RandomNormal(),
         bias_regularizer=l1_reg,
         kernel_initializer=keras.initializers.RandomNormal(),
@@ -138,7 +150,8 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
     model = keras.Model(inputs, outputs)
     model.compile(
         loss=keras.losses.CosineSimilarity(),
-        optimizer=keras.optimizers.Adam(learning_rate=0.001),
+        # loss=abs_cat_loss,
+        optimizer=keras.optimizers.Adam(learning_rate=0.01),
         metrics=["accuracy", "mean_absolute_error"],
     )
     print(model.summary())
