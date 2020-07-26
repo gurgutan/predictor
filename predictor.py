@@ -68,7 +68,7 @@ class Predictor(object):
             self.name = "default"
         else:
             self.name = modelname
-        if not path.exists(self.name):
+        if not path.exists(self.name + ".h5"):
             print(f"Модель '{self.name}' не найдена, будет создана новая...")
             self.model = self.create_model(
                 input_shape=input_shape,
@@ -88,7 +88,7 @@ class Predictor(object):
                 self.interpreter.allocate_tensors()
 
             else:
-                self.model = keras.models.load_model(self.name)
+                self.model = keras.models.load_model(self.name + ".h5")
         self.trained = True
         if not os.path.isfile(self.name + ".cfg"):
             self.datainfo = self.create_datainfo(
@@ -363,6 +363,7 @@ class Predictor(object):
             callbacks=[early_stop, cp_save, tensorboard_link],
         )
         self.model.save(self.name)
+        self.model.save(self.name, save_format=".h5")
         # tf.saved_model.save(self.model, self.name + ".saved_model")
         print("Модель " + self.name + " сохранена")
         return history
@@ -384,7 +385,7 @@ def train(modelname, batch_size, epochs):
     )
     x, y = p.load_dataset(
         csv_file="datas/EURUSD_M5_20000103_20200710.csv",
-        count=2 ** 21,  # таймфреймы за последние N лет
+        count=2 ** 20,  # таймфреймы за последние N лет
         skip=2 * 12,  # 190,  # 10.07.20 - 70 = 01.05.2020
     )
     # keras.utils.plot_model(p.model, show_shapes=True)
