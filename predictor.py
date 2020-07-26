@@ -143,11 +143,7 @@ class Predictor(object):
                     + "<"
                     + str(in_size + 1)
                 )
-                x = np.zeros(
-                    self.datainfo.input_shape[0],
-                    self.datainfo.input_shape[1],
-                    self.datainfo.input_shape[2],
-                )
+                x = np.zeros(self.datainfo.input_shape)
             else:
                 closes = np.array(c[-in_size - 1 :])
                 d = np.nan_to_num(
@@ -155,14 +151,7 @@ class Predictor(object):
                     posinf=self.datainfo._x_inf(),
                     neginf=-self.datainfo._x_inf(),
                 )
-                x = np.reshape(
-                    d,
-                    (
-                        self.datainfo.input_shape[0],
-                        self.datainfo.input_shape[1],
-                        self.datainfo.input_shape[2],
-                    ),
-                )
+                x = np.reshape(d, self.datainfo.input_shape,)
             result_list.append(x)
         if len(result_list) == 0:
             return None
