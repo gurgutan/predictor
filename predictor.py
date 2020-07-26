@@ -152,9 +152,9 @@ class Predictor(object):
                 )
                 x = np.zeros(self.datainfo.input_shape)
             else:
-                closes = np.array(c[-in_size - 1 :])
+                opens = np.array(c[-in_size - 1 :])
                 d = np.nan_to_num(
-                    np.diff(closes) / self.datainfo.x_std,
+                    np.diff(opens) / self.datainfo.x_std,
                     posinf=self.datainfo._x_inf(),
                     neginf=-self.datainfo._x_inf(),
                 )
@@ -207,15 +207,15 @@ class Predictor(object):
             ],
         )
         if skip == 0 and count == 0:
-            closes = data["close"]
+            open_rates = data["open"]
         elif skip == 0:
-            closes = data["close"][-count:]
+            open_rates = data["open"][-count:]
         elif count == 0:
-            closes = data["close"][:-skip]
+            open_rates = data["open"][:-skip]
         else:
-            closes = data["close"][-count - skip : -skip]
+            open_rates = data["open"][-count - skip : -skip]
         # получим серию с разницами цен закрытия
-        d = np.diff(np.array(closes), n=1)
+        d = np.diff(np.array(open_rates), n=1)
         # нормируем серию стандартным отклонением
         x_std = d.std()
         # изменим datainfo
@@ -236,12 +236,12 @@ class Predictor(object):
         self.datainfo.save(self.name + ".cfg")
         return x.astype("float32"), y.astype("float32")
 
-    def predict(self, closes, verbose=1):
+    def predict(self, opens, verbose=1):
         """
         Вычисление результата для набора
-        closes - массив размерности (n, input_size+1)
+        opens - массив размерности (n, input_size+1)
         """
-        x = self.get_input(closes)
+        x = self.get_input(opens)
         if x is None:
             return None
         y = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
@@ -270,18 +270,18 @@ class Predictor(object):
             result.append((low, high, float(y_n[i])))
         return result
 
-    def eval(self, closes):
+    def eval(self, opens):
         """
-        closes - массив размерности (input_size)
+        opens - массив размерности (input_size)
         """
         if self.is_tflite():
-            return self.tflite_predict([closes])[0]
+            return self.tflite_predict([opens])[0]
         else:
-            return self.predict([closes], verbose=0)[0]
+            return self.predict([opens], verbose=0)[0]
 
-    def tflite_predict(self, closes, verbose):
+    def tflite_predict(self, opens, verbose):
         # logging.debug("Подготовка входных данных")
-        x = self.get_input(closes)
+        x = self.get_input(opens)
         if x is None:
             return None
         input_details = self.interpreter.get_input_details()
@@ -300,8 +300,7 @@ class Predictor(object):
         else:
             for i in tqdm(range(len(x))):
                 self.interpreter.set_tensor(
-                    input_details[0]["index"],
-                    np.reshape(x[i], (1, x[i].shape[0], x[i].shape[1], x[i].shape[2])),
+                    input_details[0]["index"], np.reshape(x[i], (1,) + x[i].shape),
                 )
                 self.interpreter.invoke()
                 output = self.interpreter.get_tensor(output_details[0]["index"])
@@ -398,6 +397,6 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/24.9", batch_size=2 ** 10, epochs=2 ** 10)
+            train("models/24.10", batch_size=2 ** 8, epochs=2 ** 0)
 # Debug
 # Тест загрузки предиктора
