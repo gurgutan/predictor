@@ -92,7 +92,7 @@ class Server(object):
         return rates
 
     def get_last_rates(self, count):
-        mt5rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 0, count)
+        mt5rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 1, count)
         if mt5rates is None:
             logging.error("Ошибка:" + str(mt5.last_error()))
             return None
@@ -140,7 +140,6 @@ class Server(object):
                 round(confidence, 8),
             )
             results.append(db_row)
-
         return results
 
     def calc_old(self):
@@ -192,7 +191,7 @@ class Server(object):
                 continue
             dbcommon.db_replace(self.db, results)
             _, rprice, _, _, future, low, high, c = results[-1]
-            d = round(((low + high) / 2.0 - rprice) / self.p.datainfo.y_std, 5)
+            d = round(((low + high) / 2.0 - rprice) / self.p.datainfo.y_std, 6)
             logging.debug(f"price={rprice} d={d}")
 
 
