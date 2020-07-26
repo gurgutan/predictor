@@ -5,6 +5,9 @@ import io
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+
+# tf.compat.v1.disable_eager_execution()
+
 from tensorflow import keras
 import random
 from os import path
@@ -15,6 +18,7 @@ from patterns import conv2D, multiConv2D
 from datainfo import DatasetInfo
 from tqdm import tqdm
 import logging
+
 
 # import tflite_runtime.interpreter as tflite
 # import pydot
@@ -35,8 +39,8 @@ def embed(v, min_v, max_v, dim):
     step_size = (dim - 1) / (max_v - min_v)
     n = int(max(0, min(dim - 1, (v - min_v) * step_size)))
     # result = np.zeros(dim, dtype="float32")
-    result = np.full(dim, -1, dtype="float32")
-    result[n] = 1
+    result = np.full(dim, 0, dtype="float32")
+    result[n] = 0.9
     return result
 
 
@@ -73,6 +77,9 @@ class Predictor(object):
                 kernel_size=kernel_size,
                 dense_size=dense_size,
             )
+            # Также нужно удалить файл конфигурации
+            if os.path.isfile(self.name + ".cfg"):
+                os.remove(self.name + ".cfg")
         else:
             if self.is_tflite():
                 self.interpreter = tf.lite.Interpreter(
@@ -231,7 +238,7 @@ class Predictor(object):
         x_forward = roll(d[in_size:], future, stride)
         y_data = np.sum(x_forward * self.datainfo.x_std, axis=1)
         self.datainfo.y_std = float(y_data.std())
-        x = np.reshape(x_data, (x_data.shape[0], in_shape[0], in_shape[1], in_shape[2]))
+        x = np.reshape(x_data, (x_data.shape[0],) + in_shape)
         y = np.zeros((y_data.shape[0], out_shape[0]))
         for i in range(y.shape[0]):
             y[i] = embed(
@@ -239,41 +246,6 @@ class Predictor(object):
             )
         self.datainfo.save(self.name + ".cfg")
         return x.astype("float32"), y.astype("float32")
-
-    def train(self, x, y, batch_size, epochs):
-        # Загрузим веса, если они есть
-        ckpt = "ckpt/" + self.name + ".ckpt"
-        try:
-            self.model.load_weights(ckpt)
-            print("Загружены веса последней контрольной точки " + self.name)
-        except Exception as e:
-            pass
-        # Функция для tensorboard
-        log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        tensorboard_link = keras.callbacks.TensorBoard(
-            log_dir=log_dir, histogram_freq=1, write_graph=True
-        )
-        early_stop = keras.callbacks.EarlyStopping(
-            monitor="val_mean_absolute_error",
-            patience=16,
-            min_delta=1e-3,
-            restore_best_weights=True,
-        )
-        cp_save = keras.callbacks.ModelCheckpoint(filepath=ckpt, save_weights_only=True)
-        history = self.model.fit(
-            x,
-            y,
-            batch_size=batch_size,
-            epochs=epochs,
-            validation_split=0.1,
-            shuffle=True,
-            use_multiprocessing=True,
-            callbacks=[early_stop, cp_save, tensorboard_link],
-        )
-        self.model.save(self.name)
-        # tf.saved_model.save(self.model, self.name + ".saved_model")
-        print("Модель " + self.name + " сохранена")
-        return history
 
     def predict(self, closes, verbose=1):
         """
@@ -371,9 +343,45 @@ class Predictor(object):
             result.append((low, high, float(y_n[i])))
         return result
 
+    def train(self, x, y, batch_size, epochs):
+        # Загрузим веса, если они есть
+        ckpt = "ckpt/" + self.name + ".ckpt"
+        try:
+            self.model.load_weights(ckpt)
+            print("Загружены веса последней контрольной точки " + self.name)
+        except Exception as e:
+            pass
+        # Функция для tensorboard
+        log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        tensorboard_link = keras.callbacks.TensorBoard(
+            log_dir=log_dir, histogram_freq=1, write_graph=True
+        )
+        early_stop = keras.callbacks.EarlyStopping(
+            # monitor="val_mean_absolute_error",
+            monitor="val_loss",
+            patience=16,
+            min_delta=1e-4,
+            restore_best_weights=True,
+        )
+        cp_save = keras.callbacks.ModelCheckpoint(filepath=ckpt, save_weights_only=True)
+        history = self.model.fit(
+            x,
+            y,
+            batch_size=batch_size,
+            epochs=epochs,
+            validation_split=0.1,
+            shuffle=True,
+            use_multiprocessing=True,
+            callbacks=[early_stop, cp_save, tensorboard_link],
+        )
+        self.model.save(self.name)
+        # tf.saved_model.save(self.model, self.name + ".saved_model")
+        print("Модель " + self.name + " сохранена")
+        return history
+
 
 def train(modelname, batch_size, epochs):
-    input_shape = (16, 16, 1)
+    input_shape = (64, 1)
     output_shape = (8,)
     predict_size = 16
     p = Predictor(
@@ -383,13 +391,13 @@ def train(modelname, batch_size, epochs):
         output_shape=output_shape,
         predict_size=predict_size,
         filters=64,
-        kernel_size=2,
+        kernel_size=4,
         dense_size=64,
     )
     x, y = p.load_dataset(
         csv_file="datas/EURUSD_M5_20000103_20200710.csv",
-        count=2 ** 19,  # таймфреймы за последние 5 лет
-        skip=2 ** 14,  # последние 2 мес. не используем в обучении и валидации
+        count=2 ** 21,  # таймфреймы за последние N лет
+        skip=2 * 12,  # 190,  # 10.07.20 - 70 = 01.05.2020
     )
     # keras.utils.plot_model(p.model, show_shapes=True)
     if not x is None:
@@ -401,6 +409,6 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/24", batch_size=2 ** 14, epochs=2 ** 10)
+            train("models/24.9", batch_size=2 ** 10, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора

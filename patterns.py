@@ -3,6 +3,10 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.models import Sequential
 from tensorflow.keras import layers
+import functools
+import operator
+
+# tf.compat.v1.disable_eager_execution()
 
 
 def abs_cat_loss(y_true, y_pred):
@@ -78,7 +82,7 @@ def multiConv2D(input_shape, output_shape, filters, kernel_size, dense_size):
 def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
     # [32,32,64,64,128,128,256,256,256,256,256,256,256,512]:  # 13
     # [16,16,32,32,64,64,128,128,256,256,512,512,1024,1024,1024]:  # 10
-    max_filters = 2 ** 8
+    max_filters = 2 ** 9
     l1_reg = keras.regularizers.l1(l=1e-6)
     l2_reg = keras.regularizers.l2(l=1e-6)
     inputs = keras.Input(shape=input_shape, name="inputs")
@@ -86,73 +90,87 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
     x = inputs
 
     x = layers.Flatten()(x)
-    x = layers.Dense(
-        x.shape[-1],
-        activation="softsign",
-        bias_initializer=keras.initializers.RandomNormal(),
-        bias_regularizer=l1_reg,
-        kernel_initializer=keras.initializers.RandomNormal(),
-        kernel_regularizer=l1_reg,
-    )(x)
-    x = layers.Reshape(input_shape)(x)
-    # x = layers.LocallyConnected2D(1, kernel_size=1, activation="relu")(x)
+    # x = layers.Dense(
+    #     x.shape[-1],
+    #     activation="sigmoid",
+    #     bias_initializer=keras.initializers.RandomNormal(),
+    #     bias_regularizer=l1_reg,
+    #     kernel_initializer=keras.initializers.RandomNormal(),
+    #     kernel_regularizer=l1_reg,
+    # )(x)
+    # x = layers.Reshape(input_shape)(x)
 
+    x = layers.Reshape((x.shape[-1], 1))(x)
     f = filters
     i = 0
-    while ksize > 1 and i < 16:
+    while ksize > 1 and i < 64:
         i += 1
-        x = layers.SeparableConv2D(
+        x = layers.SeparableConv1D(
             min(max_filters, f),
             ksize,
             padding="valid",
-            activation="relu",
+            activation="softsign",
             bias_initializer=keras.initializers.RandomNormal(),
             bias_regularizer=l2_reg,
             kernel_initializer=keras.initializers.RandomNormal(),
-            name=f"conv2d_{str(i)}",
         )(x)
+        ksize = min(x.shape.as_list()[1:] + [ksize])
         x = layers.BatchNormalization()(x)
-        ksize = min([x.shape[1], x.shape[2], ksize])
-        f += 32
+
+        # if x.shape[-2] >= 3:
+        #     x = layers.AveragePooling1D(2)(x)
+        # x = layers.Dropout(1.0 / 64.0)(x)
+        f *= 2
+
+    # x = layers.BatchNormalization()(x)
+    # x = layers.LocallyConnected1D(8, kernel_size=1)(x)
+    # for i in range(8):
+    #     # x = layers.Reshape((x.shape[-1], 1))(x)
+    #     x = layers.LSTM(filters, return_sequences=True)(x)
+
+    x = layers.Dropout(1.0 / 16.0)(x)
+
+    x = layers.Flatten()(x)
+    # x = layers.Dense(
+    #     output_shape[0] * 8,
+    #     activation="softsign",
+    #     bias_initializer=keras.initializers.RandomNormal(),
+    #     bias_regularizer=l1_reg,
+    #     kernel_initializer=keras.initializers.RandomNormal(),
+    #     kernel_regularizer=l1_reg,
+    # )(x)
+    # x = layers.Dense(
+    #     output_shape[0] * 4,
+    #     activation="softsign",
+    #     bias_initializer=keras.initializers.RandomNormal(),
+    #     bias_regularizer=l1_reg,
+    #     kernel_initializer=keras.initializers.RandomNormal(),
+    #     kernel_regularizer=l1_reg,
+    #     name="dense_2",
+    # )(x)
+
+    # outputs = layers.Dense(
+    #     output_shape[0],
+    #     activation="softmax",
+    #     bias_initializer=keras.initializers.RandomNormal(),
+    #     bias_regularizer=l2_reg,
+    #     kernel_initializer=keras.initializers.RandomNormal(),
+    #     kernel_regularizer=l2_reg,
+    #     name="outputs",
+    # )(x)
 
     x = layers.Reshape((x.shape[-1], 1))(x)
-    # x = layers.LocallyConnected1D(8, kernel_size=1)(x)
-    x = layers.Dropout(1.0 / 16.0, name=f"dropout_{i}")(x)
-    x = layers.Flatten()(x)
-
-    x = layers.Dense(
-        output_shape[0] * 8,
-        activation="softsign",
-        bias_initializer=keras.initializers.RandomNormal(),
-        bias_regularizer=l1_reg,
-        kernel_initializer=keras.initializers.RandomNormal(),
-        kernel_regularizer=l1_reg,
-    )(x)
-    x = layers.Dense(
-        output_shape[0] * 4,
-        activation="softsign",
-        bias_initializer=keras.initializers.RandomNormal(),
-        bias_regularizer=l1_reg,
-        kernel_initializer=keras.initializers.RandomNormal(),
-        kernel_regularizer=l1_reg,
-        name="dense_2",
-    )(x)
-    outputs = layers.Dense(
-        output_shape[0],
-        activation="softsign",
-        bias_initializer=keras.initializers.RandomNormal(),
-        bias_regularizer=l1_reg,
-        kernel_initializer=keras.initializers.RandomNormal(),
-        kernel_regularizer=l1_reg,
-        name="outputs",
-    )(x)
+    x = layers.LocallyConnected1D(8, x.shape[-2], activation="sigmoid")(x)
+    outputs = layers.Reshape(output_shape)(x)
 
     model = keras.Model(inputs, outputs)
     model.compile(
         loss=keras.losses.CosineSimilarity(),
+        # loss=keras.losses.KLDivergence(),
+        # los s=keras.losses.MeanAbsoluteError(),
         # loss=abs_cat_loss,
         optimizer=keras.optimizers.Adam(learning_rate=0.01),
-        metrics=["accuracy", "mean_absolute_error"],
+        metrics=["categorical_accuracy"],
     )
     print(model.summary())
     return model
