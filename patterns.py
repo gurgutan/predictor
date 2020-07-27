@@ -25,7 +25,7 @@ def rnn_block(n, inputs):
 def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
     # [32,32,64,64,128,128,256,256,256,256,256,256,256,512]:  # 13
     # [16,16,32,32,64,64,128,128,256,256,512,512,1024,1024,1024]:  # 10
-    max_filters = 2 ** 9
+    max_filters = 2 ** 10
     l1_reg = keras.regularizers.l1(l=1e-6)
     l2_reg = keras.regularizers.l2(l=1e-6)
     inputs = keras.Input(shape=input_shape, name="inputs")
@@ -33,8 +33,8 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
     # bin_bound = 32
     # bins = [i * bin_len for i in range(-bin_bound, bin_bound)]
     x = inputs
-    for i in range(8):
-        x = layers.SimpleRNN(x.shape[-2])(x)
+    for i in range(2):
+        x = layers.LSTM(x.shape[-2])(x)
         x = layers.Reshape((x.shape[-1], 1))(x)
     for f in [2 ** 10, 2 ** 10]:
         x = layers.SeparableConv1D(
@@ -68,7 +68,6 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
     #     activation="softsign",
     #     bias_initializer=keras.initializers.RandomNormal(),
     #     bias_regularizer=l1_reg,
-    #     kernel_initializer=keras.initializers.RandomNormal(),
     #     kernel_regularizer=l1_reg,
     #     name="dense_2",
     # )(x)
@@ -190,10 +189,10 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
         )(x)
         ksize = min(x.shape.as_list()[1:] + [ksize])
         x = layers.BatchNormalization()(x)
-        # if x.shape[-2] >= 3:
-        #     x = layers.AveragePooling1D(2)(x)
-        # x = layers.Dropout(1.0 / 64.0)(x)
-        f += 0
+        if x.shape[-2] >= 3:
+            x = layers.AveragePooling1D(2)(x)
+        x = layers.Dropout(1.0 / 64.0)(x)
+        f += 16
 
     # x = layers.BatchNormalization()(x)
     # x = layers.LocallyConnected1D(8, kernel_size=1)(x)

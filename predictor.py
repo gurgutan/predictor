@@ -229,10 +229,15 @@ class Predictor(object):
         self.datainfo.y_std = float(y_data.std())
         x = np.reshape(x_data, (x_data.shape[0],) + in_shape)
         y = np.zeros((y_data.shape[0], out_shape[0]))
+
         for i in range(y.shape[0]):
             y[i] = embed(
                 y_data[i], self.datainfo._y_min(), self.datainfo._y_max(), out_size,
             )
+        n = np.arange(len(x))
+        idx = n[(y_data >= self.datainfo.y_std) | (y_data <= -self.datainfo.y_std)]
+        x = x[idx]
+        y = y[idx]
         self.datainfo.save(self.name + ".cfg")
         return x.astype("float32"), y.astype("float32")
 
@@ -357,7 +362,7 @@ class Predictor(object):
             y,
             batch_size=batch_size,
             epochs=epochs,
-            validation_split=1.0 / 16.0,
+            validation_split=1.0 / 32.0,
             shuffle=True,
             use_multiprocessing=True,
             callbacks=[early_stop, cp_save, tensorboard_link],
@@ -379,13 +384,13 @@ def train(modelname, batch_size, epochs):
         input_shape=input_shape,
         output_shape=output_shape,
         predict_size=predict_size,
-        filters=1024,
-        kernel_size=16,
+        filters=256,
+        kernel_size=4,
         dense_size=64,
     )
     x, y = p.load_dataset(
         csv_file="datas/EURUSD_M5_20000103_20200710.csv",
-        count=2 ** 20,  # таймфреймы за последние N лет
+        count=1513200,  # таймфреймы за последние N лет (1513200)
         skip=0,  # 190,  # 10.07.20 - 70 = 01.05.2020
     )
     # keras.utils.plot_model(p.model, show_shapes=True)
@@ -398,6 +403,6 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/31", batch_size=2 ** 10, epochs=2 ** 10)
+            train("models/32", batch_size=2 ** 14, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора
