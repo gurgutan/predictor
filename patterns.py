@@ -14,6 +14,92 @@ def abs_cat_loss(y_true, y_pred):
     return d  # tf.reduce_mean(d, axis=-1)
 
 
+def rnn_block(n, inputs):
+    x = inputs
+    for i in range(n):
+        x = layers.SimpleRNN(x.shape[-2])(x)
+        x = layers.Reshape((x.shape[-1], 1))(x)
+    return x
+
+
+def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
+    # [32,32,64,64,128,128,256,256,256,256,256,256,256,512]:  # 13
+    # [16,16,32,32,64,64,128,128,256,256,512,512,1024,1024,1024]:  # 10
+    max_filters = 2 ** 9
+    l1_reg = keras.regularizers.l1(l=1e-6)
+    l2_reg = keras.regularizers.l2(l=1e-6)
+    inputs = keras.Input(shape=input_shape, name="inputs")
+    # bin_len = 0.00032
+    # bin_bound = 32
+    # bins = [i * bin_len for i in range(-bin_bound, bin_bound)]
+    x = inputs
+    for i in range(8):
+        x = layers.SimpleRNN(x.shape[-2])(x)
+        x = layers.Reshape((x.shape[-1], 1))(x)
+    for f in [2 ** 10, 2 ** 10]:
+        x = layers.SeparableConv1D(
+            f,
+            x.shape[-2],
+            padding="valid",
+            activation="relu",
+            bias_initializer=keras.initializers.RandomNormal(),
+            bias_regularizer=l2_reg,
+            kernel_initializer=keras.initializers.RandomNormal(),
+            kernel_regularizer=l2_reg,
+        )(x)
+        x = layers.BatchNormalization()(x)
+        # x = layers.AveragePooling1D(x.shape[-2])(x)
+        x = layers.Dropout(1.0 / 64.0)(x)
+        x = layers.Reshape((x.shape[-1], 1))(x)
+
+    # x = layers.Dropout(1.0 / 8.0)(x)
+
+    x = layers.Flatten()(x)
+    # x = layers.Dense(
+    #     output_shape[0] * 16,
+    #     activation="softsign",
+    #     bias_initializer=keras.initializers.RandomNormal(),
+    #     bias_regularizer=l1_reg,
+    #     kernel_initializer=keras.initializers.RandomNormal(),
+    #     kernel_regularizer=l1_reg,
+    # )(x)
+    # x = layers.Dense(
+    #     output_shape[0] * 4,
+    #     activation="softsign",
+    #     bias_initializer=keras.initializers.RandomNormal(),
+    #     bias_regularizer=l1_reg,
+    #     kernel_initializer=keras.initializers.RandomNormal(),
+    #     kernel_regularizer=l1_reg,
+    #     name="dense_2",
+    # )(x)
+    outputs = layers.Dense(
+        output_shape[0],
+        activation="softmax",
+        bias_initializer=keras.initializers.RandomNormal(),
+        bias_regularizer=l2_reg,
+        kernel_initializer=keras.initializers.RandomNormal(),
+        kernel_regularizer=l2_reg,
+        name="outputs",
+    )(x)
+
+    # x = layers.Reshape((x.shape[-1], 1))(x)
+    # x = layers.LocallyConnected1D(8, 8, activation="sigmoid")(x)
+    # x = layers.LocallyConnected1D(8, x.shape[-2], activation="sigmoid")(x)
+    # outputs = layers.Reshape(output_shape)(x)
+
+    model = keras.Model(inputs, outputs)
+    model.compile(
+        loss=keras.losses.CosineSimilarity(),
+        # loss=keras.losses.KLDivergence(),
+        # los s=keras.losses.MeanAbsoluteError(),
+        # loss=abs_cat_loss,
+        optimizer=keras.optimizers.SGD(learning_rate=0.1),
+        metrics=["mean_absolute_error"],
+    )
+    print(model.summary())
+    return model
+
+
 def multiConv2D(input_shape, output_shape, filters, kernel_size, dense_size):
     l1_reg = keras.regularizers.l1(l=1e-5)
     l2_reg = keras.regularizers.l2(l=1e-5)
@@ -83,8 +169,8 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
     # [32,32,64,64,128,128,256,256,256,256,256,256,256,512]:  # 13
     # [16,16,32,32,64,64,128,128,256,256,512,512,1024,1024,1024]:  # 10
     max_filters = 2 ** 9
-    l1_reg = keras.regularizers.l1(l=1e-4)
-    l2_reg = keras.regularizers.l2(l=1e-4)
+    l1_reg = keras.regularizers.l1(l=1e-6)
+    l2_reg = keras.regularizers.l2(l=1e-6)
     inputs = keras.Input(shape=input_shape, name="inputs")
     ksize = kernel_size
     x = inputs
@@ -100,14 +186,14 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
             bias_initializer=keras.initializers.RandomNormal(),
             bias_regularizer=l2_reg,
             kernel_initializer=keras.initializers.RandomNormal(),
+            kernel_regularizer=l2_reg,
         )(x)
         ksize = min(x.shape.as_list()[1:] + [ksize])
         x = layers.BatchNormalization()(x)
-
         # if x.shape[-2] >= 3:
         #     x = layers.AveragePooling1D(2)(x)
         # x = layers.Dropout(1.0 / 64.0)(x)
-        f += 16
+        f += 0
 
     # x = layers.BatchNormalization()(x)
     # x = layers.LocallyConnected1D(8, kernel_size=1)(x)
@@ -115,40 +201,40 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
     #     # x = layers.Reshape((x.shape[-1], 1))(x)
     #     x = layers.LSTM(filters, return_sequences=True)(x)
 
-    x = layers.Dropout(1.0 / 16.0)(x)
+    x = layers.Dropout(1.0 / 4.0)(x)
 
     x = layers.Flatten()(x)
-    # x = layers.Dense(
-    #     output_shape[0] * 8,
-    #     activation="softsign",
-    #     bias_initializer=keras.initializers.RandomNormal(),
-    #     bias_regularizer=l1_reg,
-    #     kernel_initializer=keras.initializers.RandomNormal(),
-    #     kernel_regularizer=l1_reg,
-    # )(x)
-    # x = layers.Dense(
-    #     output_shape[0] * 4,
-    #     activation="softsign",
-    #     bias_initializer=keras.initializers.RandomNormal(),
-    #     bias_regularizer=l1_reg,
-    #     kernel_initializer=keras.initializers.RandomNormal(),
-    #     kernel_regularizer=l1_reg,
-    #     name="dense_2",
-    # )(x)
+    x = layers.Dense(
+        output_shape[0] * 8,
+        activation="softsign",
+        bias_initializer=keras.initializers.RandomNormal(),
+        bias_regularizer=l1_reg,
+        kernel_initializer=keras.initializers.RandomNormal(),
+        kernel_regularizer=l1_reg,
+    )(x)
+    x = layers.Dense(
+        output_shape[0] * 4,
+        activation="softsign",
+        bias_initializer=keras.initializers.RandomNormal(),
+        bias_regularizer=l1_reg,
+        kernel_initializer=keras.initializers.RandomNormal(),
+        kernel_regularizer=l1_reg,
+        name="dense_2",
+    )(x)
+    outputs = layers.Dense(
+        output_shape[0],
+        activation="softmax",
+        bias_initializer=keras.initializers.RandomNormal(),
+        bias_regularizer=l2_reg,
+        kernel_initializer=keras.initializers.RandomNormal(),
+        kernel_regularizer=l2_reg,
+        name="outputs",
+    )(x)
 
-    # outputs = layers.Dense(
-    #     output_shape[0],
-    #     activation="softmax",
-    #     bias_initializer=keras.initializers.RandomNormal(),
-    #     bias_regularizer=l2_reg,
-    #     kernel_initializer=keras.initializers.RandomNormal(),
-    #     kernel_regularizer=l2_reg,
-    #     name="outputs",
-    # )(x)
-
-    x = layers.Reshape((x.shape[-1], 1))(x)
-    x = layers.LocallyConnected1D(8, x.shape[-2], activation="sigmoid")(x)
-    outputs = layers.Reshape(output_shape)(x)
+    # x = layers.Reshape((x.shape[-1], 1))(x)
+    # x = layers.LocallyConnected1D(8, 8, activation="sigmoid")(x)
+    # x = layers.LocallyConnected1D(8, x.shape[-2], activation="sigmoid")(x)
+    # outputs = layers.Reshape(output_shape)(x)
 
     model = keras.Model(inputs, outputs)
     model.compile(
@@ -157,7 +243,7 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
         # los s=keras.losses.MeanAbsoluteError(),
         # loss=abs_cat_loss,
         optimizer=keras.optimizers.Adam(learning_rate=0.01),
-        metrics=["categorical_accuracy"],
+        metrics=["categorical_accuracy", "mean_absolute_error"],
     )
     print(model.summary())
     return model
