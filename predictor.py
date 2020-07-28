@@ -69,7 +69,7 @@ class Predictor(object):
             self.name = "default"
         else:
             self.name = modelname
-        if not path.exists(self.name + ".h5"):
+        if not path.exists(self.name):
             print(f"Модель '{self.name}' не найдена, будет создана новая...")
             self.model = self.create_model(
                 input_shape=input_shape,
@@ -89,7 +89,7 @@ class Predictor(object):
                 self.interpreter.allocate_tensors()
 
             else:
-                self.model = keras.models.load_model(self.name + ".h5")
+                self.model = keras.models.load_model(self.name)
         self.trained = True
         if not os.path.isfile(self.name + ".cfg"):
             self.datainfo = self.create_datainfo(
