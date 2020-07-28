@@ -190,9 +190,11 @@ class Server(object):
                 logging.error("Ошибка вычислений")
                 continue
             dbcommon.db_replace(self.db, results)
-            _, rprice, _, _, future, low, high, c = results[-1]
-            d = round(((low + high) / 2.0 - rprice) / self.p.datainfo.y_std, 6)
-            logging.debug(f"price={rprice} d={d}")
+            rdate, rprice, _, _, future, low, high, c = results[-1]
+            d = round(((low + high) / 2.0 - rprice) / self.p.datainfo.y_std / 4, 5)
+            logging.debug(
+                f"time={dt.datetime.fromtimestamp(rdate)} price={rprice} d={d} conf={round(c,4)}"
+            )
 
 
 DEBUG = False
