@@ -55,12 +55,12 @@ class Predictor(object):
     def __init__(
         self,
         modelname,
-        input_shape,
-        output_shape,
-        predict_size,
-        filters,
-        kernel_size,
-        dense_size,
+        input_shape=(256, 1),
+        output_shape=(8,),
+        predict_size=16,
+        filters=64,
+        kernel_size=4,
+        dense_size=32,
     ):
         self.trained = False
         self.interpreter = None
