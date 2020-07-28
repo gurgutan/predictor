@@ -29,28 +29,25 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
     l1_reg = keras.regularizers.l1(l=1e-6)
     l2_reg = keras.regularizers.l2(l=1e-6)
     inputs = keras.Input(shape=input_shape, name="inputs")
-    # bin_len = 0.00032
-    # bin_bound = 32
-    # bins = [i * bin_len for i in range(-bin_bound, bin_bound)]
     x = inputs
-    for i in range(2):
-        x = layers.LSTM(x.shape[-2])(x)
+    for i in range(3):
+        x = layers.LSTM(filters)(x)
         x = layers.Reshape((x.shape[-1], 1))(x)
-    for f in [2 ** 10, 2 ** 10]:
-        x = layers.SeparableConv1D(
-            f,
-            x.shape[-2],
-            padding="valid",
-            activation="relu",
-            bias_initializer=keras.initializers.RandomNormal(),
-            bias_regularizer=l2_reg,
-            kernel_initializer=keras.initializers.RandomNormal(),
-            kernel_regularizer=l2_reg,
-        )(x)
-        x = layers.BatchNormalization()(x)
-        # x = layers.AveragePooling1D(x.shape[-2])(x)
-        x = layers.Dropout(1.0 / 64.0)(x)
-        x = layers.Reshape((x.shape[-1], 1))(x)
+    # for f in [256, 256, 256, 256, 256, 256, 512, 512]:
+    #     x = layers.SeparableConv1D(
+    #         f,
+    #         kernel_size,
+    #         padding="valid",
+    #         activation="relu",
+    #         bias_initializer=keras.initializers.RandomNormal(),
+    #         bias_regularizer=l2_reg,
+    #         kernel_initializer=keras.initializers.RandomNormal(),
+    #         kernel_regularizer=l2_reg,
+    #     )(x)
+    #     x = layers.BatchNormalization()(x)
+    #     # x = layers.AveragePooling1D(2)(x)
+    #     x = layers.Dropout(1.0 / 64.0)(x)
+    #     # x = layers.Reshape((x.shape[-1], 1))(x)
 
     # x = layers.Dropout(1.0 / 8.0)(x)
 
@@ -63,14 +60,14 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
     #     kernel_initializer=keras.initializers.RandomNormal(),
     #     kernel_regularizer=l1_reg,
     # )(x)
-    # x = layers.Dense(
-    #     output_shape[0] * 4,
-    #     activation="softsign",
-    #     bias_initializer=keras.initializers.RandomNormal(),
-    #     bias_regularizer=l1_reg,
-    #     kernel_regularizer=l1_reg,
-    #     name="dense_2",
-    # )(x)
+    x = layers.Dense(
+        output_shape[0] * 4,
+        activation="softsign",
+        bias_initializer=keras.initializers.RandomNormal(),
+        bias_regularizer=l1_reg,
+        kernel_regularizer=l1_reg,
+        name="dense_2",
+    )(x)
     outputs = layers.Dense(
         output_shape[0],
         activation="softmax",
@@ -181,7 +178,7 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
             min(max_filters, f),
             ksize,
             padding="valid",
-            activation="softplus",
+            activation="relu",
             bias_initializer=keras.initializers.RandomNormal(),
             bias_regularizer=l2_reg,
             kernel_initializer=keras.initializers.RandomNormal(),
@@ -189,8 +186,8 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
         )(x)
         ksize = min(x.shape.as_list()[1:] + [ksize])
         x = layers.BatchNormalization()(x)
-        if x.shape[-2] >= 3:
-            x = layers.AveragePooling1D(2)(x)
+        # if x.shape[-2] >= 3:
+        #     x = layers.AveragePooling1D(2)(x)
         x = layers.Dropout(1.0 / 64.0)(x)
         f += 16
 

@@ -36,16 +36,17 @@ def roll(a, size, dx=1):
 
 def embed(v, min_v, max_v, dim):
     """Возвращает бинарный вектор, длины dim"""
-    step_size = (dim - 1) / (max_v - min_v)
-    n = int(max(0, min(dim - 1, (v - min_v) * step_size)))
+    step_size = dim / (max_v - min_v)
+    v = max(min_v, min(max_v - 0.00001, v))
+    n = int((v - min_v) * step_size)
     # result = np.zeros(dim, dtype="float32")
-    result = np.full(dim, 0, dtype="float32")
-    result[n] = 0.9
+    result = np.full(dim, 0.1, dtype="float32")
+    result[n] = 1
     return result
 
 
 def unembed(n: int, min_v: float, max_v: float, dim: int) -> float:
-    step_size = float((max_v - min_v) / (dim - 1.0))
+    step_size = float((max_v - min_v) / dim)
     v = min_v + n * step_size
     return v
 
@@ -235,7 +236,12 @@ class Predictor(object):
                 y_data[i], self.datainfo._y_min(), self.datainfo._y_max(), out_size,
             )
         n = np.arange(len(x))
-        idx = n[(y_data >= self.datainfo.y_std) | (y_data <= -self.datainfo.y_std)]
+        rnd = np.random.random(len(x))
+        idx = n[
+            (y_data >= self.datainfo.y_std)
+            | (y_data <= -self.datainfo.y_std)
+            | (rnd < 0.05)
+        ]
         x = x[idx]
         y = y[idx]
         self.datainfo.save(self.name + ".cfg")
@@ -385,7 +391,7 @@ def train(modelname, batch_size, epochs):
         output_shape=output_shape,
         predict_size=predict_size,
         filters=256,
-        kernel_size=4,
+        kernel_size=8,
         dense_size=64,
     )
     x, y = p.load_dataset(
@@ -403,6 +409,6 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/32", batch_size=2 ** 14, epochs=2 ** 10)
+            train("models/33", batch_size=2 ** 9, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора
