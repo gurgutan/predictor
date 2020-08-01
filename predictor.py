@@ -40,8 +40,8 @@ def embed(v, min_v, max_v, dim):
     v = max(min_v, min(max_v - 0.00001, v))
     n = int((v - min_v) * step_size)
     # result = np.zeros(dim, dtype="float32")
-    result = np.full(dim, 0.1, dtype="float32")
-    result[n] = 1
+    result = np.full(dim, 0.01, dtype="float32")
+    result[n] = 0.99
     return result
 
 
@@ -240,7 +240,100 @@ class Predictor(object):
         idx = n[
             (y_data >= self.datainfo.y_std)
             | (y_data <= -self.datainfo.y_std)
-            | (rnd < 0.05)
+            | (rnd < 0.2)
+        ]
+        x = x[idx]
+        y = y[idx]
+        self.datainfo.save(self.name + ".cfg")
+        return x.astype("float32"), y.astype("float32")
+
+    def load_dataset2(self, csv_file, count=0, skip=0):
+        """Подготовка обучающей выборки (x,y). Тип x и y - numpy.ndarray.
+        Аргументы:
+        csv_file - файл с ценами формата csv с колонками: 'date','time','open','high','low','close','tickvol','vol','spread'
+        count - количество используемых примеров датасета
+        skip - сдвиг относительно конца файла
+        Возврат:
+        x, y - размеченные данные типа numpy.array, сохранные на диск файл dataset_file"""
+        # stride не менять, должно быть =1
+        stride = 1  # шаг "нарезки" входных данных
+        in_shape = self.datainfo.input_shape
+        out_shape = self.datainfo.output_shape
+        future = self.datainfo.future
+        in_size = self.datainfo._in_size()
+        out_size = self.datainfo._out_size()  # out_shape[0]
+        if not path.exists(csv_file):
+            print('Отсутствует файл "' + csv_file + '"\nЗагрузка данных неуспешна')
+            return None, None
+        print("Чтение файла", csv_file, "и создание обучающей выборки")
+        data = pd.read_csv(
+            csv_file,
+            sep="\t",
+            header=0,
+            dtype={
+                "open": np.float32,
+                "close": np.float32,
+                "tickvol": np.float32,
+                "vol": np.float32,
+            },
+            names=[
+                "date",
+                "time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "tickvol",
+                "vol",
+                "spread",
+            ],
+        )
+        if skip == 0 and count == 0:
+            open_rates = data["open"]
+            vol_rates = data["tickvol"]
+        elif skip == 0:
+            open_rates = data["open"][-count:]
+            vol_rates = data["tickvol"][-count:]
+        elif count == 0:
+            open_rates = data["open"][:-skip]
+            vol_rates = data["tickvol"][:-skip]
+        else:
+            open_rates = data["open"][-count - skip : -skip]
+            vol_rates = data["tickvol"][-count - skip : -skip]
+        # получим серию с разницами цен закрытия
+        d_open = np.diff(np.array(open_rates), n=1)
+        # нормируем серию стандартным отклонением
+        x_std = d_open.std()
+        # изменим datainfo
+        self.datainfo.x_std = float(x_std)
+        d_open = np.nan_to_num(
+            d_open / x_std,
+            posinf=self.datainfo._x_inf(),
+            neginf=-self.datainfo._x_inf(),
+        )
+        d_vol = np.nan_to_num(np.array(vol_rates) / d_vol.std())
+        open_strided = roll(d_open[:-future], in_size, stride)
+        open_forward = roll(d_open[in_size:], future, stride)
+        vol_strided = roll(d_open[:-future], in_size, stride)
+        output_value = np.sum(open_forward * self.datainfo.x_std, axis=1)
+        self.datainfo.y_std = float(output_value.std())
+        stacked = np.column_stack((open_strided, vol_strided))
+        x = np.reshape(stacked, (stacked.shape[0],) + in_shape)
+        y = np.zeros((output_value.shape[0], out_shape[0]))
+
+        for i in range(y.shape[0]):
+            y[i] = embed(
+                output_value[i],
+                self.datainfo._y_min(),
+                self.datainfo._y_max(),
+                out_size,
+            )
+        n = np.arange(len(x))
+        rnd = np.random.random(len(x))
+        idx = n[
+            (output_value >= self.datainfo.y_std)
+            | (output_value <= -self.datainfo.y_std)
+            | (rnd < 0.2)
         ]
         x = x[idx]
         y = y[idx]
@@ -358,7 +451,7 @@ class Predictor(object):
         early_stop = keras.callbacks.EarlyStopping(
             # monitor="val_mean_absolute_error",
             monitor="val_mean_absolute_error",
-            patience=16,
+            patience=32,
             min_delta=1e-4,
             restore_best_weights=True,
         )
@@ -368,7 +461,7 @@ class Predictor(object):
             y,
             batch_size=batch_size,
             epochs=epochs,
-            validation_split=1.0 / 32.0,
+            validation_split=1.0 / 16.0,
             shuffle=True,
             use_multiprocessing=True,
             callbacks=[early_stop, cp_save, tensorboard_link],
@@ -381,7 +474,7 @@ class Predictor(object):
 
 
 def train(modelname, batch_size, epochs):
-    input_shape = (64, 1)
+    input_shape = (8, 8, 8, 1)
     output_shape = (8,)
     predict_size = 16
     p = Predictor(
@@ -390,8 +483,8 @@ def train(modelname, batch_size, epochs):
         input_shape=input_shape,
         output_shape=output_shape,
         predict_size=predict_size,
-        filters=256,
-        kernel_size=8,
+        filters=64,
+        kernel_size=2,
         dense_size=64,
     )
     x, y = p.load_dataset(
@@ -409,6 +502,8 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/33", batch_size=2 ** 9, epochs=2 ** 10)
+            train("models/35", batch_size=2 ** 9, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора
+# TODO Доделать работу с объемами!
+
