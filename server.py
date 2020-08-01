@@ -92,7 +92,7 @@ class Server(object):
         return rates
 
     def get_last_rates(self, count):
-        mt5rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 1, count)
+        mt5rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 0, count)
         if mt5rates is None:
             logging.error("Ошибка:" + str(mt5.last_error()))
             return None
@@ -181,6 +181,7 @@ class Server(object):
                 logging.error("Ошибка подклбчения к МТ5:" + str(mt5.last_error()))
                 if not self.__init_mt5__():
                     continue
+            sleep(0.01)  # задержка, для получения актуальных баров
             rates = self.get_last_rates(self.p.datainfo._in_size() + 1)
             if rates is None:
                 logging.debug("Отсутствуют новые котировки")
