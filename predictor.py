@@ -244,6 +244,7 @@ class Predictor(object):
         ]
         x = x[idx]
         y = y[idx]
+        print(f"Загружено {len(x)} примеров")
         self.datainfo.save(self.name + ".cfg")
         return x.astype("float32"), y.astype("float32")
 
@@ -435,7 +436,13 @@ class Predictor(object):
             result.append((low, high, float(y_n[i])))
         return result
 
+    def shuffle_dataset(self, x, y):
+        n = np.arange(len(x))
+        np.random.shuffle(n)
+        return x[n], y[n]
+
     def train(self, x, y, batch_size, epochs):
+        x, y = self.shuffle_dataset(x, y)
         # Загрузим веса, если они есть
         ckpt = "ckpt/" + self.name + ".ckpt"
         try:
@@ -502,7 +509,7 @@ def train(modelname, batch_size, epochs):
 if __name__ == "__main__":
     for param in sys.argv:
         if param == "--train":
-            train("models/35", batch_size=2 ** 9, epochs=2 ** 10)
+            train("models/36", batch_size=2 ** 14, epochs=2 ** 10)
 # Debug
 # Тест загрузки предиктора
 # TODO Доделать работу с объемами!

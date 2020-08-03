@@ -104,7 +104,7 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
         # loss=keras.losses.KLDivergence(),
         # los s=keras.losses.MeanAbsoluteError(),
         # loss=abs_cat_loss,
-        optimizer=keras.optimizers.Adam(learning_rate=0.01),
+        optimizer=keras.optimizers.SGD(learning_rate=0.01),
         metrics=["mean_absolute_error"],
     )
     print(model.summary())
