@@ -37,8 +37,8 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
 
     # x = layers.experimental.preprocessing.Normalization()(x)
     # x = layers.LocallyConnected1D(1, kernel_size=1)(x)
-
     # x = layers.Reshape((8, 8, 8, 1))(x)
+
     ksize = kernel_size
     f = filters
     i = 0
@@ -57,14 +57,11 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
         )(x)
         x = layers.Dropout(1.0 / 64.0)(x)
         ksize = min(x.shape.as_list()[1:] + [ksize])
-        # if x.shape[-2] >= 3:
-        #     x = layers.MaxPooling1D(2)(x)
         f += 32
 
     x = layers.BatchNormalization()(x)
     x = layers.Reshape((x.shape[-1], 1))(x)
     x = layers.LocallyConnected1D(8, kernel_size=1)(x)
-    #   8.0)(x)
 
     x = layers.Flatten()(x)
     x = layers.Dense(
@@ -74,6 +71,7 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
         bias_regularizer=l1_reg,
         kernel_initializer=keras.initializers.RandomNormal(),
         kernel_regularizer=l1_reg,
+        name="dense_1",
     )(x)
     x = layers.Dense(
         output_shape[0] * 4,
@@ -93,18 +91,13 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
         name="outputs",
     )(x)
 
-    # x = layers.Reshape((x.shape[-1], 1))(x)
-    # x = layers.LocallyConnected1D(8, 8, activation="sigmoid")(x)
-    # x = layers.LocallyConnected1D(8, x.shape[-2], activation="sigmoid")(x)
-    # outputs = layers.Reshape(output_shape)(x)
-
     model = keras.Model(inputs, outputs)
     model.compile(
         loss=keras.losses.CosineSimilarity(),
         # loss=keras.losses.KLDivergence(),
-        # los s=keras.losses.MeanAbsoluteError(),
+        # loss=keras.losses.MeanAbsoluteError(),
         # loss=abs_cat_loss,
-        optimizer=keras.optimizers.SGD(learning_rate=0.01),
+        optimizer=keras.optimizers.Adam(learning_rate=0.01),
         metrics=["mean_absolute_error"],
     )
     print(model.summary())
@@ -241,18 +234,13 @@ def conv2D(input_shape, output_shape, filters, kernel_size, dense_size):
         name="outputs",
     )(x)
 
-    # x = layers.Reshape((x.shape[-1], 1))(x)
-    # x = layers.LocallyConnected1D(8, 8, activation="sigmoid")(x)
-    # x = layers.LocallyConnected1D(8, x.shape[-2], activation="sigmoid")(x)
-    # outputs = layers.Reshape(output_shape)(x)
-
     model = keras.Model(inputs, outputs)
     model.compile(
         loss=keras.losses.CosineSimilarity(),
         # loss=keras.losses.KLDivergence(),
         # los s=keras.losses.MeanAbsoluteError(),
         # loss=abs_cat_loss,
-        optimizer=keras.optimizers.Adam(learning_rate=0.01),
+        optimizer=keras.optimizers.SGD(learning_rate=0.1),
         metrics=["categorical_accuracy", "mean_absolute_error"],
     )
     print(model.summary())

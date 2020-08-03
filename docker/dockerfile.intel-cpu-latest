@@ -69,15 +69,17 @@ ENV OMP_MAX_ACTIVE_LEVELS  2147483647
 ENV OMP_MAX_TASK_PRIORITY  0
 ENV OMP_NESTED  false
 ENV OMP_NUM_THREADS  12
+ENV OMP_PLACES 'cores'
 ENV OMP_PROC_BIND  'intel'
 ENV OMP_SCHEDULE  'static'
 ENV OMP_STACKSIZE  "8M"
 ENV OMP_TARGET_OFFLOAD  "DEFAULT"
 ENV OMP_THREAD_LIMIT  2147483647
 ENV OMP_TOOL  "enabled"
-ENV KMP_AFFINITY  "verbose,warnings,respect,granularityfine,compact,1,0"
+ENV OMP_WAIT_POLICY 'PASSIVE'
+ENV KMP_AFFINITY  "verbose,warnings,respect,granularity=core,compact,1,0"
 
 
 EXPOSE 1979/tcp
 
-ENTRYPOINT /bin/bash -c "python3 ./predictor.py --train"
+ENTRYPOINT /bin/bash -c "python3 ./predictor.py --cpu"

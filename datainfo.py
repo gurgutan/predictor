@@ -60,4 +60,4 @@ class DatasetInfo(object):
         return self.y_std * 4
 
     def _x_inf(self):
-        return self.x_std * 6
+        return self.x_std * 8

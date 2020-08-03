@@ -1,6 +1,6 @@
 import os
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
 import io
 import numpy as np
 import pandas as pd
@@ -21,8 +21,8 @@ import logging
 
 
 # import tflite_runtime.interpreter as tflite
-# import pydot
-# import graphviz
+import pydot
+import graphviz
 
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -166,7 +166,7 @@ class Predictor(object):
         result = np.stack(result_list, axis=0).astype("float32")
         return result
 
-    def load_dataset(self, csv_file, count=0, skip=0):
+    def load_dataset(self, tsv_file, count=0, skip=0):
         """Подготовка обучающей выборки (x,y). Тип x и y - numpy.ndarray.
         Аргументы:
         csv_file - файл с ценами формата csv с колонками: 'date','time','open','high','low','close','tickvol','vol','spread'
@@ -181,12 +181,12 @@ class Predictor(object):
         future = self.datainfo.future
         in_size = self.datainfo._in_size()
         out_size = self.datainfo._out_size()  # out_shape[0]
-        if not path.exists(csv_file):
-            print('Отсутствует файл "' + csv_file + '"\nЗагрузка данных неуспешна')
+        if not path.exists(tsv_file):
+            print('Отсутствует файл "' + tsv_file + '"\nЗагрузка данных неуспешна')
             return None, None
-        print("Чтение файла", csv_file, "и создание обучающей выборки")
+        print("Чтение файла", tsv_file, "и создание обучающей выборки")
         data = pd.read_csv(
-            csv_file,
+            tsv_file,
             sep="\t",
             header=0,
             dtype={
@@ -215,11 +215,8 @@ class Predictor(object):
             open_rates = data["open"][:-skip]
         else:
             open_rates = data["open"][-count - skip : -skip]
-        # получим серию с разницами цен закрытия
         d = np.diff(np.array(open_rates), n=1)
-        # нормируем серию стандартным отклонением
         x_std = d.std()
-        # изменим datainfo
         self.datainfo.x_std = float(x_std)
         d = np.nan_to_num(
             d / x_std, posinf=self.datainfo._x_inf(), neginf=-self.datainfo._x_inf()
@@ -260,7 +257,7 @@ class Predictor(object):
         stride = 1  # шаг "нарезки" входных данных
         in_shape = self.datainfo.input_shape
         out_shape = self.datainfo.output_shape
-        future = self.datainfo.future
+        forward = self.datainfo.future
         in_size = self.datainfo._in_size()
         out_size = self.datainfo._out_size()  # out_shape[0]
         if not path.exists(csv_file):
@@ -301,30 +298,26 @@ class Predictor(object):
         else:
             open_rates = data["open"][-count - skip : -skip]
             vol_rates = data["tickvol"][-count - skip : -skip]
-        # получим серию с разницами цен закрытия
-        d_open = np.diff(np.array(open_rates), n=1)
-        # нормируем серию стандартным отклонением
-        x_std = d_open.std()
-        # изменим datainfo
-        self.datainfo.x_std = float(x_std)
-        d_open = np.nan_to_num(
-            d_open / x_std,
-            posinf=self.datainfo._x_inf(),
-            neginf=-self.datainfo._x_inf(),
-        )
-        d_vol = np.nan_to_num(np.array(vol_rates) / d_vol.std())
-        open_strided = roll(d_open[:-future], in_size, stride)
-        open_forward = roll(d_open[in_size:], future, stride)
-        vol_strided = roll(d_open[:-future], in_size, stride)
-        output_value = np.sum(open_forward * self.datainfo.x_std, axis=1)
-        self.datainfo.y_std = float(output_value.std())
-        stacked = np.column_stack((open_strided, vol_strided))
-        x = np.reshape(stacked, (stacked.shape[0],) + in_shape)
-        y = np.zeros((output_value.shape[0], out_shape[0]))
+        # объемы
+        volumes = np.nan_to_num(np.array(vol_rates))
+        volumes_strided = roll(opens[:-forward], in_size, stride)
+        # цены
+        opens = np.nan_to_num(np.diff(np.array(open_rates), n=1), posinf=8, neginf=-8)
+        opens_strided = roll(opens[:-forward], in_size, stride)
+        forward_values = roll(opens[in_size:], forward, stride).sum(axis=1)
+        opens_std = opens.std()
+        # open_mean = np.mean(opens)
+        forward_values_std = forward_values.std()
+        self.datainfo.x_std = float(opens_std)
+        self.datainfo.y_std = float(forward_values_std)
+        self.datainfo.save(self.name + ".cfg")
 
+        x = np.reshape(opens_strided / opens_std, (opens_strided.shape[0],) + in_shape)
+        v = np.reshape(volumes_strided / volumes_std, (opens_strided.shape[0], in_size))
+        y = np.zeros((forward_values.shape[0], out_shape[0]))
         for i in range(y.shape[0]):
             y[i] = embed(
-                output_value[i],
+                forward_values[i] / forward_values_std,
                 self.datainfo._y_min(),
                 self.datainfo._y_max(),
                 out_size,
@@ -332,13 +325,13 @@ class Predictor(object):
         n = np.arange(len(x))
         rnd = np.random.random(len(x))
         idx = n[
-            (output_value >= self.datainfo.y_std)
-            | (output_value <= -self.datainfo.y_std)
+            (forward_values >= self.datainfo.y_std)
+            | (forward_values <= -self.datainfo.y_std)
             | (rnd < 0.2)
         ]
         x = x[idx]
         y = y[idx]
-        self.datainfo.save(self.name + ".cfg")
+        v = v[idx]
         return x.astype("float32"), y.astype("float32")
 
     def predict(self, opens, verbose=1):
@@ -439,7 +432,7 @@ class Predictor(object):
     def shuffle_dataset(self, x, y):
         n = np.arange(len(x))
         np.random.shuffle(n)
-        return x[n], y[n]
+        return x[n].astype("float32"), y[n].astype("float32")
 
     def train(self, x, y, batch_size, epochs):
         x, y = self.shuffle_dataset(x, y)
@@ -449,6 +442,7 @@ class Predictor(object):
             self.model.load_weights(ckpt)
             print("Загружены веса последней контрольной точки " + self.name)
         except Exception as e:
+            print(f"Не удалось загрузить веса контрольной точки: \n{e}\n")
             pass
         # Функция для tensorboard
         log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -462,7 +456,13 @@ class Predictor(object):
             min_delta=1e-4,
             restore_best_weights=True,
         )
-        cp_save = keras.callbacks.ModelCheckpoint(filepath=ckpt, save_weights_only=True)
+        # backup = tf.keras.callbacks.ex.experimental.BackupAndRestore(backup_dir="backups/")
+        backup = keras.callbacks.ModelCheckpoint(
+            filepath=ckpt,
+            monitor="val_loss",
+            save_weights_only=True,
+            save_best_only=True,
+        )
         history = self.model.fit(
             x,
             y,
@@ -471,35 +471,30 @@ class Predictor(object):
             validation_split=1.0 / 16.0,
             shuffle=True,
             use_multiprocessing=True,
-            callbacks=[early_stop, cp_save, tensorboard_link],
+            callbacks=[backup, early_stop, tensorboard_link],
         )
         self.model.save(self.name + ".h5")
         self.model.save(self.name)
-        # tf.saved_model.save(self.model, self.name + ".saved_model")
         print("Модель " + self.name + " сохранена")
         return history
 
 
-def train(modelname, batch_size, epochs):
-    input_shape = (8, 8, 8, 1)
-    output_shape = (8,)
-    predict_size = 16
+def train(modelname, datafile, input_shape, output_shape, future, batch_size, epochs):
     p = Predictor(
         modelname=modelname,
-        #   datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + '.h5',
         input_shape=input_shape,
         output_shape=output_shape,
-        predict_size=predict_size,
+        predict_size=future,
         filters=64,
         kernel_size=2,
         dense_size=64,
     )
     x, y = p.load_dataset(
-        csv_file="datas/EURUSD_M5_20000103_20200710.csv",
+        tsv_file=datafile,
         count=1513200,  # таймфреймы за последние N лет (1513200)
         skip=0,  # 190,  # 10.07.20 - 70 = 01.05.2020
     )
-    # keras.utils.plot_model(p.model, show_shapes=True)
+    keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     if not x is None:
         history = p.train(x, y, batch_size=batch_size, epochs=epochs)
     else:
@@ -507,9 +502,21 @@ def train(modelname, batch_size, epochs):
 
 
 if __name__ == "__main__":
+    batch_size = 2 ** 10
     for param in sys.argv:
-        if param == "--train":
-            train("models/36", batch_size=2 ** 14, epochs=2 ** 10)
+        if param == "--gpu":
+            batch_size = 2 ** 7
+        elif param == "--cpu":
+            batch_size = 2 ** 15
+    train(
+        modelname="models/36",
+        datafile="datas/EURUSD_M5_20000103_20200710.csv",
+        input_shape=(8, 8, 8, 1),
+        output_shape=(8,),
+        future=16,
+        batch_size=batch_size,
+        epochs=2 ** 12,
+    )
 # Debug
 # Тест загрузки предиктора
 # TODO Доделать работу с объемами!

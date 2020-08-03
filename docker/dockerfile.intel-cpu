@@ -80,4 +80,4 @@ ENV KMP_AFFINITY  "verbose,warnings,respect,granularityfine,compact,1,0"
 
 EXPOSE 1979/tcp
 
-ENTRYPOINT /bin/bash -c "python3 ./predictor.py --train"
+ENTRYPOINT /bin/bash -c "python3 ./predictor.py --cpu"

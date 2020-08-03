@@ -9,4 +9,4 @@ RUN pip3 install --upgrade graphviz tqdm matplotlib
 
 EXPOSE 1979/tcp
 
-ENTRYPOINT /bin/bash -c "python3 ./predictor.py --train"
+ENTRYPOINT /bin/bash -c "python3 ./predictor.py --cpu"
