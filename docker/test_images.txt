@@ -1,0 +1,3 @@
+intelaipg/intel-optimized-tensorflow:2.0.0-mkl-py3   437 sec
+tensorflow/tensorflow:latest-py3  435 sec
+intelaipg/intel-optimized-tensorflow:latest   419 sec
