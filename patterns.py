@@ -53,7 +53,7 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
             bias_initializer=keras.initializers.RandomNormal(),
             bias_regularizer=l1_reg,
             kernel_initializer=keras.initializers.RandomNormal(),
-            # kernel_regularizer=l1_reg,
+            kernel_regularizer=l1_reg,
         )(x)
         x = layers.Dropout(1.0 / 64.0)(x)
         ksize = min(x.shape.as_list()[1:] + [ksize])

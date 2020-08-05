@@ -37,11 +37,11 @@ def roll(a, size, dx=1):
 def embed(v, min_v, max_v, dim):
     """Возвращает бинарный вектор, длины dim"""
     step_size = dim / (max_v - min_v)
-    v = max(min_v, min(max_v - 0.00001, v))
+    v = max(min_v, min(max_v - 0.000001, v))
     n = int((v - min_v) * step_size)
     # result = np.zeros(dim, dtype="float32")
-    result = np.full(dim, 0.01, dtype="float32")
-    result[n] = 0.99
+    result = np.full(dim, 0, dtype="float32")
+    result[n] = 1
     return result
 
 
@@ -237,7 +237,7 @@ class Predictor(object):
         idx = n[
             (y_data >= self.datainfo.y_std)
             | (y_data <= -self.datainfo.y_std)
-            | (rnd < 0.2)
+            | (rnd < 0.1)
         ]
         x = x[idx]
         y = y[idx]
@@ -327,7 +327,7 @@ class Predictor(object):
         idx = n[
             (forward_values >= self.datainfo.y_std)
             | (forward_values <= -self.datainfo.y_std)
-            | (rnd < 0.2)
+            | (rnd < 0.1)
         ]
         x = x[idx]
         y = y[idx]
@@ -507,7 +507,7 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 7
         elif param == "--cpu":
-            batch_size = 2 ** 15
+            batch_size = 2 ** 15 + 2 ** 14
     train(
         modelname="models/36",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",

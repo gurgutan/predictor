@@ -15,7 +15,6 @@ tmp*
 logs/*
 results/.fuse_*
 # модели
-results/*
 *.h5
 *.tf 
 *.ckpt.*
