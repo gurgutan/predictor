@@ -344,6 +344,10 @@ class Predictor(object):
             return None
         y = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
         n = np.argmax(y, axis=1)
+        l1 = np.sum(y, axis=1)
+        y = np.d
+        for i in range(len(y)):
+            y[i] /= l1[i]
         y_n = y[np.arange(len(y)), n]
         result = []
         for i in range(len(y_n)):
@@ -435,7 +439,7 @@ class Predictor(object):
         return x[n].astype("float32"), y[n].astype("float32")
 
     def train(self, x, y, batch_size, epochs):
-        x, y = self.shuffle_dataset(x, y)
+        # x, y = self.shuffle_dataset(x, y)
         # Загрузим веса, если они есть
         ckpt = "ckpt/" + self.name + ".ckpt"
         try:
@@ -451,8 +455,8 @@ class Predictor(object):
         )
         early_stop = keras.callbacks.EarlyStopping(
             # monitor="val_mean_absolute_error",
-            monitor="val_mean_absolute_error",
-            patience=32,
+            monitor="val_loss",
+            patience=16,
             min_delta=1e-4,
             restore_best_weights=True,
         )
@@ -485,14 +489,14 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         input_shape=input_shape,
         output_shape=output_shape,
         predict_size=future,
-        filters=64,
+        filters=256,
         kernel_size=2,
         dense_size=64,
     )
     x, y = p.load_dataset(
         tsv_file=datafile,
         count=1513200,  # таймфреймы за последние N лет (1513200)
-        skip=0,  # 190,  # 10.07.20 - 70 = 01.05.2020
+        skip=4608,  # 16 дней,  # 10.07.20 - 16 дней =24.06.20
     )
     keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     if not x is None:
@@ -505,13 +509,13 @@ if __name__ == "__main__":
     batch_size = 2 ** 10
     for param in sys.argv:
         if param == "--gpu":
-            batch_size = 2 ** 7
+            batch_size = 2 ** 8
         elif param == "--cpu":
             batch_size = 2 ** 15 + 2 ** 14
     train(
-        modelname="models/36",
+        modelname="models/37",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
-        input_shape=(8, 8, 8, 1),
+        input_shape=(4, 4, 4, 1),
         output_shape=(8,),
         future=16,
         batch_size=batch_size,

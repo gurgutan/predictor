@@ -1,5 +1,5 @@
 #FROM tensorflow/tensorflow:latest-gpu
-FROM tensorflow/tensorflow:nightly-gpu
+FROM tensorflow/tensorflow:latest-gpu
 
 RUN apt-get -y update && apt-get install -y graphviz
 RUN pip3 install --upgrade pip setuptools
