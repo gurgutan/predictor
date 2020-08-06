@@ -6,6 +6,9 @@ from server import Server
 def main():
     if len(sys.argv) == 1:
         print("Для справки используйте '-h'")
+        server = Server()
+        if server.ready:
+            server.start()
         return 0
     for param in sys.argv:
         if param in ("-h", "--help"):
