@@ -279,10 +279,10 @@ class Predictor(object):
         y = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
         n = np.argmax(y, axis=1)
         c = self.mass_center(y[-1])
-        print(f"y={np.round(y[-1], 4)} c={round(c,4)}")
-        l1 = np.sum(y, axis=1)
-        for i in range(len(y)):
-            y[i] /= l1[i]
+        print(f"y={np.round(y[-1], 2)} c={round(c,2)}")
+        # l1 = np.sum(y, axis=1)
+        # for i in range(len(y)):
+        #     y[i] /= l1[i]
         y_n = y[np.arange(len(y)), n]
         result = []
         for i in range(len(y_n)):
@@ -304,7 +304,8 @@ class Predictor(object):
                 )
                 * self.datainfo.y_std
             )
-            result.append((low, high, float(y_n[i])))
+            c = self.mass_center(y[i])
+            result.append((low, high, float(y_n[i]), c))
         return result
 
     def eval(self, opens):
@@ -365,7 +366,8 @@ class Predictor(object):
                 )
                 * self.datainfo.y_std
             )
-            result.append((low, high, float(y_n[i])))
+            c = self.mass_center(y[i])
+            result.append((low, high, float(y_n[i]), c))
         return result
 
     def shuffle_dataset(self, x, y):

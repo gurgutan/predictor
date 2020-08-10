@@ -4,7 +4,8 @@ import datetime as dt
 
 def db_open(dbname):
     model_info_ddl = (
-        "CREATE TABLE IF NOT EXISTS model_info(name TEXT NOT NULL PRIMARY KEY,"
+        "CREATE TABLE IF NOT EXISTS model_info("
+        + "name TEXT NOT NULL PRIMARY KEY,"
         + "input_shape STRING,"
         + "output_shape STRING,"
         + "future INTEGER NOT NULL,"
@@ -19,7 +20,8 @@ def db_open(dbname):
         + "pdate INTEGER NOT NULL,"
         + "plow REAL NOT NULL,"
         + "phigh REAL NOT NULL,"
-        + "confidence REAL NOT NULL);"
+        + "confidence REAL NOT NULL,"
+        + "center REAL NOT NULL);"
     )
     symbol_info_ddl = (
         "CREATE TABLE IF NOT EXISTS symbol_info("
@@ -61,7 +63,8 @@ def db_replace(db, data):
         + "pdate, "
         + "plow, "
         + "phigh, "
-        + "confidence) VALUES(?,?,?,?,?,?,?,?)",
+        + "confidence, "
+        + "center) VALUES(?,?,?,?,?,?,?,?,?)",
         data,
     )
     db.commit()

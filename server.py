@@ -123,7 +123,7 @@ class Server(object):
             return None
         # сформируем результирующий список кортежей для записи в БД
         for i in range(shift, count + 1):
-            plow, phigh, confidence = output_data[i - shift]
+            plow, phigh, confidence, center = output_data[i - shift]
             rdate = int(times[i - 1])
             rprice = closes[i - 1]
             pdate = int(
@@ -138,6 +138,7 @@ class Server(object):
                 round(rprice + plow, 8),
                 round(rprice + phigh, 8),
                 round(confidence, 8),
+                round(center, 8),
             )
             results.append(db_row)
         return results
@@ -191,10 +192,10 @@ class Server(object):
                 logging.error("Ошибка вычислений")
                 continue
             dbcommon.db_replace(self.db, results)
-            rdate, rprice, _, _, future, low, high, c = results[-1]
+            rdate, rprice, _, _, future, low, high, conf, center = results[-1]
             d = round(((low + high) / 2.0 - rprice) / self.p.datainfo.y_std / 4, 5)
             logging.debug(
-                f"time={dt.datetime.fromtimestamp(rdate)} price={rprice} d={d} conf={round(c,4)}"
+                f"time={dt.datetime.fromtimestamp(rdate)} price={rprice} d={d} center={center} conf={round(conf,4)}"
             )
 
 
