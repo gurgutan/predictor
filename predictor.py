@@ -245,7 +245,7 @@ class Predictor(object):
         self.datainfo.save(self.name + ".cfg")
         return x.astype("float32"), y.astype("float32")
 
-    def load_dataset2(self, csv_file, count=0, skip=0):
+    def load_dataset2(self, tsv_file, count=0, skip=0):
         """Подготовка обучающей выборки (x,y). Тип x и y - numpy.ndarray.
         Аргументы:
         csv_file - файл с ценами формата csv с колонками: 'date','time','open','high','low','close','tickvol','vol','spread'
@@ -260,10 +260,10 @@ class Predictor(object):
         forward = self.datainfo.future
         in_size = self.datainfo._in_size()
         out_size = self.datainfo._out_size()  # out_shape[0]
-        if not path.exists(csv_file):
-            print('Отсутствует файл "' + csv_file + '"\nЗагрузка данных неуспешна')
+        if not path.exists(tsv_file):
+            print('Отсутствует файл "' + tsv_file + '"\nЗагрузка данных неуспешна')
             return None, None
-        print("Чтение файла", csv_file, "и создание обучающей выборки")
+        print("Чтение файла", tsv_file, "и создание обучающей выборки")
         data = pd.read_csv(
             csv_file,
             sep="\t",
@@ -345,7 +345,6 @@ class Predictor(object):
         y = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
         n = np.argmax(y, axis=1)
         l1 = np.sum(y, axis=1)
-        y = np.d
         for i in range(len(y)):
             y[i] /= l1[i]
         y_n = y[np.arange(len(y)), n]
