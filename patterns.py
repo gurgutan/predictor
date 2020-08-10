@@ -60,29 +60,14 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
         ksize = min(x.shape.as_list()[1:] + [ksize])
         # f *= 2
 
-    x = layers.BatchNormalization()(x)
+    x = layers.LayerNormalization()(x)
+    # x = layers.BatchNormalization()(x)
     x = layers.Dropout(1.0 / 8.0)(x)
     x = layers.Reshape((x.shape[-1], 1))(x)
-    x = layers.LocallyConnected1D(8, kernel_size=x.shape[-2])(x)
+    x = layers.LocallyConnected1D(32, kernel_size=x.shape[-2], activation="relu")(x)
 
     x = layers.Flatten()(x)
-    # x = layers.Dense(
-    #     output_shape[0] * 8,
-    #     activation="softsign",
-    #     bias_initializer=keras.initializers.RandomNormal(),
-    #     bias_regularizer=l1_reg,
-    #     kernel_initializer=keras.initializers.RandomNormal(),
-    #     kernel_regularizer=l1_reg,
-    #     name="dense_1",
-    # )(x)
-    # x = layers.Dense(
-    #     output_shape[0] * 4,
-    #     activation="softsign",
-    #     bias_initializer=keras.initializers.RandomNormal(),
-    #     bias_regularizer=l1_reg,
-    #     kernel_regularizer=l1_reg,
-    #     name="dense_2",
-    # )(x)
+
     outputs = layers.Dense(
         output_shape[0],
         activation="softmax",

@@ -237,7 +237,7 @@ class Predictor(object):
         idx = n[
             (y_data >= self.datainfo.y_std)
             | (y_data <= -self.datainfo.y_std)
-            | (rnd < 0.1)
+            | (rnd < 0.2)
         ]
         x = x[idx]
         y = y[idx]
@@ -245,7 +245,7 @@ class Predictor(object):
         self.datainfo.save(self.name + ".cfg")
         return x.astype("float32"), y.astype("float32")
 
-    def load_dataset2(self, csv_file, count=0, skip=0):
+    def load_dataset2(self, tsv_file, count=0, skip=0):
         """Подготовка обучающей выборки (x,y). Тип x и y - numpy.ndarray.
         Аргументы:
         csv_file - файл с ценами формата csv с колонками: 'date','time','open','high','low','close','tickvol','vol','spread'
@@ -260,12 +260,12 @@ class Predictor(object):
         forward = self.datainfo.future
         in_size = self.datainfo._in_size()
         out_size = self.datainfo._out_size()  # out_shape[0]
-        if not path.exists(csv_file):
-            print('Отсутствует файл "' + csv_file + '"\nЗагрузка данных неуспешна')
+        if not path.exists(tsv_file):
+            print('Отсутствует файл "' + tsv_file + '"\nЗагрузка данных неуспешна')
             return None, None
-        print("Чтение файла", csv_file, "и создание обучающей выборки")
+        print("Чтение файла", tsv_file, "и создание обучающей выборки")
         data = pd.read_csv(
-            csv_file,
+            tsv_file,
             sep="\t",
             header=0,
             dtype={
@@ -300,7 +300,7 @@ class Predictor(object):
             vol_rates = data["tickvol"][-count - skip : -skip]
         # объемы
         volumes = np.nan_to_num(np.array(vol_rates))
-        volumes_strided = roll(opens[:-forward], in_size, stride)
+        volumes_strided = roll(volumes[:-forward], in_size, stride)
         # цены
         opens = np.nan_to_num(np.diff(np.array(open_rates), n=1), posinf=8, neginf=-8)
         opens_strided = roll(opens[:-forward], in_size, stride)
@@ -313,7 +313,9 @@ class Predictor(object):
         self.datainfo.save(self.name + ".cfg")
 
         x = np.reshape(opens_strided / opens_std, (opens_strided.shape[0],) + in_shape)
-        v = np.reshape(volumes_strided / volumes_std, (opens_strided.shape[0], in_size))
+        v = np.reshape(
+            volumes_strided / volumes.std(), (volumes_strided.shape[0], in_size)
+        )
         y = np.zeros((forward_values.shape[0], out_shape[0]))
         for i in range(y.shape[0]):
             y[i] = embed(
@@ -327,12 +329,13 @@ class Predictor(object):
         idx = n[
             (forward_values >= self.datainfo.y_std)
             | (forward_values <= -self.datainfo.y_std)
-            | (rnd < 0.1)
+            | (rnd < 0.2)
         ]
         x = x[idx]
         y = y[idx]
         v = v[idx]
-        return x.astype("float32"), y.astype("float32")
+        print(f"Загружено {len(x)} примеров")
+        return x.astype("float32"), y.astype("float32"), v.astype("float32")
 
     def predict(self, opens, verbose=1):
         """
@@ -495,7 +498,7 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
     )
     x, y = p.load_dataset(
         tsv_file=datafile,
-        count=1513200,  # таймфреймы за последние N лет (1513200)
+        count=1510000,  # таймфреймы за последние N лет (1513200)
         skip=4608,  # 16 дней,  # 10.07.20 - 16 дней =24.06.20
     )
     keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
@@ -511,9 +514,9 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 8
         elif param == "--cpu":
-            batch_size = 2 ** 15 + 2 ** 14
+            batch_size = 2 ** 16 + 2 ** 14
     train(
-        modelname="models/37",
+        modelname="models/38",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
         input_shape=(4, 4, 4, 1),
         output_shape=(8,),

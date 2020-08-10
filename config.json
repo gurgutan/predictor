@@ -2,6 +2,6 @@
     "dbname": "D:/Dev/Alpari MT5/MQL5/Files/predictions.sqlite",
     "initialdate": "2010-01-01T00:00:00",
     "modelname": "models/35.h5",
-    "symbol": "EURUSD_i",
+    "symbol": "EURUSD",
     "delay": 60
 }
