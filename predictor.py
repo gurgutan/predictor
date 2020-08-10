@@ -264,6 +264,10 @@ class Predictor(object):
         print(f"Загружено {len(x)} примеров")
         return x.astype("float32"), y.astype("float32")  # , v.astype("float32")
 
+    def mass_center(self, x):
+        shift = (len(x) - 1) / 2.0
+        return np.sum(x * np.arange(len(x))) - shift
+
     def predict(self, opens, verbose=1):
         """
         Вычисление результата для набора
@@ -274,6 +278,8 @@ class Predictor(object):
             return None
         y = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
         n = np.argmax(y, axis=1)
+        c = self.mass_center(y[-1])
+        print(f"y={np.round(y[-1], 4)} c={round(c,4)}")
         l1 = np.sum(y, axis=1)
         for i in range(len(y)):
             y[i] /= l1[i]

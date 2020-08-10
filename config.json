@@ -3,5 +3,5 @@
     "initialdate": "2010-01-01T00:00:00",
     "modelname": "models/37.h5",
     "symbol": "EURUSD",
-    "delay": 60
+    "delay": 300
 }
