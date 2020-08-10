@@ -178,85 +178,6 @@ class Predictor(object):
         stride = 1  # шаг "нарезки" входных данных
         in_shape = self.datainfo.input_shape
         out_shape = self.datainfo.output_shape
-        future = self.datainfo.future
-        in_size = self.datainfo._in_size()
-        out_size = self.datainfo._out_size()  # out_shape[0]
-        if not path.exists(tsv_file):
-            print('Отсутствует файл "' + tsv_file + '"\nЗагрузка данных неуспешна')
-            return None, None
-        print("Чтение файла", tsv_file, "и создание обучающей выборки")
-        data = pd.read_csv(
-            tsv_file,
-            sep="\t",
-            header=0,
-            dtype={
-                "open": np.float32,
-                "close": np.float32,
-                "tickvol": np.float32,
-                "vol": np.float32,
-            },
-            names=[
-                "date",
-                "time",
-                "open",
-                "high",
-                "low",
-                "close",
-                "tickvol",
-                "vol",
-                "spread",
-            ],
-        )
-        if skip == 0 and count == 0:
-            open_rates = data["open"]
-        elif skip == 0:
-            open_rates = data["open"][-count:]
-        elif count == 0:
-            open_rates = data["open"][:-skip]
-        else:
-            open_rates = data["open"][-count - skip : -skip]
-        d = np.diff(np.array(open_rates), n=1)
-        x_std = d.std()
-        self.datainfo.x_std = float(x_std)
-        d = np.nan_to_num(
-            d / x_std, posinf=self.datainfo._x_inf(), neginf=-self.datainfo._x_inf()
-        )
-        x_data = roll(d[:-future], in_size, stride)
-        x_forward = roll(d[in_size:], future, stride)
-        y_data = np.sum(x_forward * self.datainfo.x_std, axis=1)
-        self.datainfo.y_std = float(y_data.std())
-        x = np.reshape(x_data, (x_data.shape[0],) + in_shape)
-        y = np.zeros((y_data.shape[0], out_shape[0]))
-
-        for i in range(y.shape[0]):
-            y[i] = embed(
-                y_data[i], self.datainfo._y_min(), self.datainfo._y_max(), out_size,
-            )
-        n = np.arange(len(x))
-        rnd = np.random.random(len(x))
-        idx = n[
-            (y_data >= self.datainfo.y_std)
-            | (y_data <= -self.datainfo.y_std)
-            | (rnd < 0.2)
-        ]
-        x = x[idx]
-        y = y[idx]
-        print(f"Загружено {len(x)} примеров")
-        self.datainfo.save(self.name + ".cfg")
-        return x.astype("float32"), y.astype("float32")
-
-    def load_dataset2(self, tsv_file, count=0, skip=0):
-        """Подготовка обучающей выборки (x,y). Тип x и y - numpy.ndarray.
-        Аргументы:
-        csv_file - файл с ценами формата csv с колонками: 'date','time','open','high','low','close','tickvol','vol','spread'
-        count - количество используемых примеров датасета
-        skip - сдвиг относительно конца файла
-        Возврат:
-        x, y - размеченные данные типа numpy.array, сохранные на диск файл dataset_file"""
-        # stride не менять, должно быть =1
-        stride = 1  # шаг "нарезки" входных данных
-        in_shape = self.datainfo.input_shape
-        out_shape = self.datainfo.output_shape
         forward = self.datainfo.future
         in_size = self.datainfo._in_size()
         out_size = self.datainfo._out_size()  # out_shape[0]
@@ -286,6 +207,12 @@ class Predictor(object):
                 "spread",
             ],
         )
+        data_len = len(data.index)
+        if skip > len(data.index):
+            print(f"Число skip строк больше числа строк данных: {skip}>{data_len}")
+            return None, None
+        if count + skip > len(data.index):
+            count = data.index - skip
         if skip == 0 and count == 0:
             open_rates = data["open"]
             vol_rates = data["tickvol"]
@@ -335,7 +262,7 @@ class Predictor(object):
         y = y[idx]
         v = v[idx]
         print(f"Загружено {len(x)} примеров")
-        return x.astype("float32"), y.astype("float32"), v.astype("float32")
+        return x.astype("float32"), y.astype("float32")  # , v.astype("float32")
 
     def predict(self, opens, verbose=1):
         """
