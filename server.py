@@ -73,7 +73,7 @@ class Server(object):
             return False
         return True
 
-    def get_rates_from_date(self, from_date):
+    def __get_rates_from_date__(self, from_date):
         # установим таймзону в UTC
         timezone = pytz.timezone("Etc/UTC")
         rates_count = 0
@@ -91,7 +91,7 @@ class Server(object):
         logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
-    def get_last_rates(self, count):
+    def __get_last_rates__(self, count):
         mt5rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 0, count)
         if mt5rates is None:
             logging.error("Ошибка:" + str(mt5.last_error()))
@@ -143,16 +143,16 @@ class Server(object):
             results.append(db_row)
         return results
 
-    def calc_old(self):
+    def __compute_old__(self):
         from_date = self.initialdate
         # определяем "крайнюю" дату для последующих вычислений
         date = dbcommon.db_get_lowdate(self.db)
-        delta = dt.timedelta(days=4)  # за 4 дня до
+        delta = dt.timedelta(days=2)  # за 4 дня до
         # delta = dt.timedelta(minutes=(self.p.datainfo._in_size() + 1) * 5)
         if not date is None:
             from_date = date - delta
         logging.info(f"Вычисление прошлых значений с даты {from_date}")
-        rates = self.get_rates_from_date(from_date)
+        rates = self.__get_rates_from_date__(from_date)
         if rates is None:
             logging.error("Отсутствуют новые котировки")
             return
@@ -162,40 +162,57 @@ class Server(object):
         # logging.info("Вычислено %d " % len(results))
         dbcommon.db_replace(self.db, results)
 
-    def IsMT5Connected(self):
+    def __is_mt5_connected__(self):
         info = mt5.account_info()
         if mt5.last_error()[0] < 0:
             return False
         return True
 
+    def is_waiting(self, dtimer):
+        if not dtimer.elapsed():
+            remained = dtimer.remained()
+            if remained > 1:
+                sleep(1)
+            return True
+        else:
+            return False
+
+    def is_mt5_ready(self):
+        if not self.__is_mt5_connected__():
+            logging.error("Ошибка подклбчения к МТ5:" + str(mt5.last_error()))
+            if not self.__init_mt5__():
+                return False
+        return True
+
     def start(self):
         dtimer = DelayTimer(self.delay)
-        self.calc_old()  # обновление данных начиная с даты
+        self.__compute_old__()  # обновление данных начиная с даты
         logging.info(f"Запуск таймера с периодом {self.delay}")
         while True:
-            if not dtimer.elapsed():
-                remained = dtimer.remained()
-                if remained > 1:
-                    sleep(1)
+            if self.is_waiting(dtimer):
                 continue
-            if not self.IsMT5Connected():
-                logging.error("Ошибка подклбчения к МТ5:" + str(mt5.last_error()))
-                if not self.__init_mt5__():
-                    continue
-            sleep(0.01)  # задержка, для получения актуальных баров
-            rates = self.get_last_rates(self.p.datainfo._in_size() + 1)
+
+            if not self.is_mt5_ready():
+                continue
+            sleep(0.1)
+            rates = self.__get_last_rates__(self.p.datainfo._in_size() + 1)
             if rates is None:
                 logging.debug("Отсутствуют новые котировки")
                 continue
+
             results = self.compute(rates, verbose=0)
             if results is None:
                 logging.error("Ошибка вычислений")
                 continue
+
+            # Запись в БД
             dbcommon.db_replace(self.db, results)
+
+            # Вывод на экран
             rdate, rprice, _, _, future, low, high, conf, center = results[-1]
             d = round(((low + high) / 2.0 - rprice) / self.p.datainfo.y_std / 4, 5)
             logging.debug(
-                f"time={dt.datetime.fromtimestamp(rdate)} price={rprice} d={d} center={center} conf={round(conf,4)}"
+                f"delta={d} center={round(center, 4)} confidence={round(conf,4)}"
             )
 
 

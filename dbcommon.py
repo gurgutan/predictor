@@ -50,6 +50,10 @@ def db_open(dbname):
         return None
 
 
+def db_close(db):
+    db.close()
+
+
 def db_replace(db, data):
     if data is None:
         return False
