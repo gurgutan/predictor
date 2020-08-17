@@ -212,7 +212,7 @@ class Server(object):
             rdate, rprice, _, _, future, low, high, conf, center = results[-1]
             d = round(((low + high) / 2.0 - rprice) / self.p.datainfo.y_std / 4, 5)
             logging.debug(
-                f"delta={d} center={round(center, 4)} confidence={round(conf,4)}"
+                f"delta={round(d,2)} center={round(center, 2)} confidence={round(conf,2)}"
             )
 
 

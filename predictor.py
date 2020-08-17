@@ -304,7 +304,7 @@ class Predictor(object):
             )
             c = self.mass_center(y[i])
             result.append((low, high, float(y_n[i]), c))
-        logging.debug(f"y={np.round(y,4)}")
+        logging.debug(f"y={np.round(y,2)}")
         return result
 
     def eval(self, opens):
