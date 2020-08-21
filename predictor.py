@@ -212,7 +212,7 @@ class Predictor(object):
             print(f"Число skip строк больше числа строк данных: {skip}>{data_len}")
             return None, None
         if count + skip > len(data.index):
-            count = data.index - skip
+            count = len(data.index) - skip
         if skip == 0 and count == 0:
             open_rates = data["open"]
             vol_rates = data["tickvol"]
@@ -256,7 +256,7 @@ class Predictor(object):
         idx = n[
             (forward_values >= self.datainfo.y_std)
             | (forward_values <= -self.datainfo.y_std)
-            | (rnd < 0.2)
+            | (rnd < 0.1)
         ]
         x = x[idx]
         y = y[idx]
@@ -394,7 +394,7 @@ class Predictor(object):
         early_stop = keras.callbacks.EarlyStopping(
             # monitor="val_mean_absolute_error",
             monitor="val_loss",
-            patience=16,
+            patience=32,
             min_delta=1e-4,
             restore_best_weights=True,
         )
@@ -451,7 +451,7 @@ if __name__ == "__main__":
         elif param == "--cpu":
             batch_size = 2 ** 16 + 2 ** 14
     train(
-        modelname="models/38",
+        modelname="models/37",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
         input_shape=(4, 4, 4, 1),
         output_shape=(8,),

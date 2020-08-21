@@ -60,8 +60,8 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
         ksize = min(x.shape.as_list()[1:] + [ksize])
         # f *= 2
 
-    x = layers.LayerNormalization()(x)
-    # x = layers.BatchNormalization()(x)
+    # x = layers.LayerNormalization()(x)
+    x = layers.BatchNormalization()(x)
     x = layers.Dropout(1.0 / 8.0)(x)
     x = layers.Reshape((x.shape[-1], 1))(x)
     x = layers.LocallyConnected1D(32, kernel_size=x.shape[-2], activation="relu")(x)
@@ -84,7 +84,7 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
         # loss=keras.losses.KLDivergence(),
         # loss=keras.losses.MeanAbsoluteError(),
         # loss=abs_cat_loss,
-        optimizer=keras.optimizers.Adam(learning_rate=0.0001),
+        optimizer=keras.optimizers.Adam(learning_rate=0.001),
         metrics=["mean_absolute_error"],
     )
     print(model.summary())
