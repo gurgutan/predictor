@@ -246,7 +246,7 @@ class Predictor(object):
         y = np.zeros((forward_values.shape[0], out_shape[0]))
         for i in range(y.shape[0]):
             y[i] = embed(
-                forward_values[i] / forward_values_std,
+                forward_values[i],
                 self.datainfo._y_min(),
                 self.datainfo._y_max(),
                 out_size,
