@@ -451,11 +451,11 @@ if __name__ == "__main__":
         elif param == "--cpu":
             batch_size = 2 ** 16 + 2 ** 14
     train(
-        modelname="models/37",
+        modelname="models/39",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
         input_shape=(4, 4, 4, 1),
         output_shape=(8,),
-        future=16,
+        future=8,
         batch_size=batch_size,
         epochs=2 ** 12,
     )

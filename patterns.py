@@ -43,7 +43,6 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
     f = filters
     i = 0
     while ksize > 1 and i < 64:
-
         i += 1
         x = layers.Conv3D(
             min(max_filters, f),
