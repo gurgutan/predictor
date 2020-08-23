@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 class Server(object):
     def __init__(self):
         configname = "config.json"
+        self.version = 1.02
         self.p = None
         self.ready = False
         self.__init_logger__()
@@ -29,13 +30,15 @@ class Server(object):
             self.initialdate = dt.datetime.fromisoformat(data["initialdate"])
             self.modelname = data["modelname"]  # полное имя модели (с путем)
             self.symbol = data["symbol"]  # символ инструмента
+            self.mt5path = data["mt5path"]
             # self.timeframe = int(data["timeframe"])  # тайм-фрэйм в секундах
             self.delay = data["delay"]  # задержка в секундах цикла сервера
         if self.__init_db__() and self.__init_mt5__() and self.__init_predictor__():
             self.ready = True
         else:
-            logging.error("Ошибка инициализации сервера")
+            logger.error("Ошибка инициализации сервера")
             self.ready = False
+        logger.info(f"Робот Аля v{self.version}, автор: Слеповичев Иван Иванович")
 
     def is_tflite(self):
         """
@@ -45,20 +48,20 @@ class Server(object):
         return self.p.is_tflite()
 
     def __init_db__(self):
-        logging.info("Открытие БД " + self.dbname)
+        logger.info("Открытие БД " + self.dbname)
         self.db = dbcommon.db_open(self.dbname)
         if self.db is None:
-            logging.error("Ошибка открытия БД '%s':" % self.dbname)
+            logger.error("Ошибка открытия БД '%s':" % self.dbname)
             return False
         return True
 
     def __init_mt5__(self):
         # подключимся к MetaTrader 5
-        if not mt5.initialize(path="D:/Dev/Alpari MT5/terminal64.exe"):
-            logging.error("Ошибка подключпения к терминалу MT5")
+        if not mt5.initialize(path=self.mt5path):
+            logger.error("Ошибка подключпения к терминалу MT5")
             mt5.shutdown()
             return False
-        logging.info("Подключение к терминалу MT5, версия:" + str(mt5.version()))
+        logger.info("Подключение к терминалу MT5, версия:" + str(mt5.version()))
         return True
 
     def __init_logger__(self):

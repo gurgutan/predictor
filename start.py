@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     if len(sys.argv) == 1:
-        logger.info("Для справки используйте '-h'")
+        print("Для справки используйте '-h'")
         server = Server()
         if server.ready:
             server.start()
@@ -35,7 +35,7 @@ def main():
             if server.ready:
                 server.start()
             else:
-                logger.error("Сервер не запущен из-за ошибки")
+                print("Сервер не запущен из-за ошибки")
                 sys.exit(3)
 
 
