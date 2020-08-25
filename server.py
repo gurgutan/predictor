@@ -14,25 +14,29 @@ import MetaTrader5 as mt5
 import os
 import pytz
 
+logger = logging.getLogger(__name__)
+
 
 class Server(object):
     def __init__(self):
         configname = "config.json"
+        self.version = 1.02
         self.p = None
         self.ready = False
-        self.__init_logger__()
+        logger.info(f"Робот Аля v{self.version}, автор: Слеповичев Иван Иванович")
         with open(configname) as config_file:
             data = json.load(config_file)
             self.dbname = data["dbname"]  # полное имя БД
             self.initialdate = dt.datetime.fromisoformat(data["initialdate"])
             self.modelname = data["modelname"]  # полное имя модели (с путем)
             self.symbol = data["symbol"]  # символ инструмента
+            self.mt5path = data["mt5path"]
             # self.timeframe = int(data["timeframe"])  # тайм-фрэйм в секундах
             self.delay = data["delay"]  # задержка в секундах цикла сервера
         if self.__init_db__() and self.__init_mt5__() and self.__init_predictor__():
             self.ready = True
         else:
-            logging.error("Ошибка инициализации сервера")
+            logger.error("Ошибка инициализации сервера")
             self.ready = False
 
     def is_tflite(self):
@@ -43,33 +47,27 @@ class Server(object):
         return self.p.is_tflite()
 
     def __init_db__(self):
-        logging.info("Открытие БД " + self.dbname)
+        logger.info("Открытие БД " + self.dbname)
         self.db = dbcommon.db_open(self.dbname)
         if self.db is None:
-            logging.error("Ошибка открытия БД '%s':" % self.dbname)
+            logger.error("Ошибка открытия БД '%s':" % self.dbname)
             return False
         return True
 
     def __init_mt5__(self):
         # подключимся к MetaTrader 5
-        if not mt5.initialize(path="D:/Dev/Alpari MT5/terminal64.exe"):
-            logging.error("Ошибка подключпения к терминалу MT5")
+        if not mt5.initialize(path=self.mt5path):
+            logger.error("Ошибка подключпения к терминалу MT5")
             mt5.shutdown()
             return False
-        logging.info("Подключение к терминалу MT5, версия:" + str(mt5.version()))
-        return True
-
-    def __init_logger__(self):
-        logging.basicConfig(
-            level=logging.DEBUG, format="%(asctime)s %(levelname)-6s :: %(message)s",
-        )
+        logger.info("Подключение к терминалу MT5, версия:" + str(mt5.version()))
         return True
 
     def __init_predictor__(self):
-        logging.info("Загрузка и инициализация модели '%s'" % self.modelname)
+        logger.info("Загрузка и инициализация модели '%s'" % self.modelname)
         self.p = Predictor(modelname=self.modelname)
         if not self.p.trained:
-            logging.error("Ошибка инициализации модели '%s'" % self.modelname)
+            logger.error("Ошибка инициализации модели '%s'" % self.modelname)
             return False
         return True
 
@@ -82,19 +80,19 @@ class Server(object):
                 self.symbol, mt5.TIMEFRAME_M5, from_date, dt.datetime.now(tz=timezone)
             )
             if mt5rates is None:
-                logging.error("Ошибка:" + str(mt5.last_error()))
+                logger.error("Ошибка:" + str(mt5.last_error()))
                 return None
             rates_count = len(mt5rates)
             if rates_count < self.p.datainfo._in_size() + 1:
                 from_date = from_date - dt.timedelta(days=1)
         rates = pd.DataFrame(mt5rates)
-        logging.debug("Получено " + str(len(rates)) + " котировок")
+        logger.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
     def __get_last_rates__(self, count):
         mt5rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 0, count)
         if mt5rates is None:
-            logging.error("Ошибка:" + str(mt5.last_error()))
+            logger.error("Ошибка:" + str(mt5.last_error()))
             return None
         rates = pd.DataFrame(mt5rates)
         # logging.debug("Получено " + str(len(rates)) + " котировок")
@@ -102,7 +100,7 @@ class Server(object):
 
     def compute(self, rates, verbose=0):
         if len(rates) == 0:
-            loggin.error(f"Ошибка: пустой список котировок")
+            logger.error(f"Ошибка: пустой список котировок")
             return None
         closes, times = rates["close"], rates["time"]
         count = len(closes)
@@ -119,7 +117,7 @@ class Server(object):
         else:
             output_data = self.p.predict(input_data, verbose=verbose)
         if output_data is None:
-            logging.error(f"Ошибка: не удалось получить прогноз для {times[-1]}")
+            logger.error(f"Ошибка: не удалось получить прогноз для {times[-1]}")
             return None
         # сформируем результирующий список кортежей для записи в БД
         for i in range(shift, count + 1):
@@ -151,10 +149,10 @@ class Server(object):
         # delta = dt.timedelta(minutes=(self.p.datainfo._in_size() + 1) * 5)
         if not date is None:
             from_date = date - delta
-        logging.info(f"Вычисление прошлых значений с даты {from_date}")
+        logger.info(f"Вычисление прошлых значений с даты {from_date}")
         rates = self.__get_rates_from_date__(from_date)
         if rates is None:
-            logging.error("Отсутствуют новые котировки")
+            logger.error("Отсутствуют новые котировки")
             return
         results = self.compute(rates, verbose=1)
         if results is None:
@@ -179,7 +177,7 @@ class Server(object):
 
     def is_mt5_ready(self):
         if not self.__is_mt5_connected__():
-            logging.error("Ошибка подклбчения к МТ5:" + str(mt5.last_error()))
+            logger.error("Ошибка подклбчения к МТ5:" + str(mt5.last_error()))
             if not self.__init_mt5__():
                 return False
         return True
@@ -187,22 +185,22 @@ class Server(object):
     def start(self):
         dtimer = DelayTimer(self.delay)
         self.__compute_old__()  # обновление данных начиная с даты
-        logging.info(f"Запуск таймера с периодом {self.delay}")
+        logger.info(f"Запуск таймера с периодом {self.delay}")
         while True:
             if self.is_waiting(dtimer):
                 continue
 
             if not self.is_mt5_ready():
                 continue
-            sleep(0.1)
+            sleep(2)  # задержка для получения последнего бара
             rates = self.__get_last_rates__(self.p.datainfo._in_size() + 1)
             if rates is None:
-                logging.debug("Отсутствуют новые котировки")
+                logger.debug("Отсутствуют новые котировки")
                 continue
 
             results = self.compute(rates, verbose=0)
             if results is None:
-                logging.error("Ошибка вычислений")
+                logger.error("Ошибка вычислений")
                 continue
 
             # Запись в БД
@@ -211,7 +209,7 @@ class Server(object):
             # Вывод на экран
             rdate, rprice, _, _, future, low, high, conf, center = results[-1]
             d = round(((low + high) / 2.0 - rprice) / self.p.datainfo.y_std / 4, 5)
-            logging.debug(
+            logger.debug(
                 f"delta={round(d,2)} center={round(center, 2)} confidence={round(conf,2)}"
             )
 

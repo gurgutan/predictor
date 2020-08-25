@@ -27,6 +27,8 @@ import graphviz
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
+logger = logging.getLogger(__name__)
+
 
 def roll(a, size, dx=1):
     shape = a.shape[:-1] + (int((a.shape[-1] - size) / dx) + 1, size)
@@ -313,7 +315,9 @@ class Predictor(object):
             )
             c = self.mass_center(y[i])
             result.append((low, high, float(y_n[i]), c))
-        logging.debug(f"y={np.round(y,2)}")
+        logging.debug(
+            f"y={np.array2string(np.round(y[-1],2), max_line_width=120, separator=' ')}"
+        )
         return result
 
     def eval(self, opens):

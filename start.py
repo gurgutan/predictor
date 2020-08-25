@@ -4,7 +4,19 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import sys
 import getopt
+import logging
 from server import Server
+
+logging.basicConfig(
+    handlers=(
+        logging.FileHandler("psrv.log", encoding="utf-8", mode="a"),
+        logging.StreamHandler(),
+    ),
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)-7s | %(message)-120s",
+    datefmt="%d.%m.%Y %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 
 def main():
@@ -16,7 +28,7 @@ def main():
         return 0
     for param in sys.argv:
         if param in ("-h", "--help"):
-            print(__doc__)
+            logger.info(__doc__)
             sys.exit(0)
         if param in ("-r", "--run"):
             server = Server()
