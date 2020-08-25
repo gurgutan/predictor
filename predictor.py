@@ -166,6 +166,11 @@ class Predictor(object):
         result = np.stack(result_list, axis=0).astype("float32")
         return result
 
+    def __moving_average__(self, a, n=3):
+        ret = np.cumsum(a, dtype=float)
+        ret[n:] = ret[n:] - ret[:-n]
+        return ret[n - 1 :] / n
+
     def load_dataset(self, tsv_file, count=0, skip=0):
         """Подготовка обучающей выборки (x,y). Тип x и y - numpy.ndarray.
         Аргументы:
@@ -176,6 +181,8 @@ class Predictor(object):
         x, y - размеченные данные типа numpy.array, сохранные на диск файл dataset_file"""
         # stride не менять, должно быть =1
         stride = 1  # шаг "нарезки" входных данных
+        # количество элементов для скользящего среднего
+        mva_len = 3
         in_shape = self.datainfo.input_shape
         out_shape = self.datainfo.output_shape
         forward = self.datainfo.future
@@ -228,8 +235,10 @@ class Predictor(object):
         # объемы
         volumes = np.nan_to_num(np.array(vol_rates))
         volumes_strided = roll(volumes[:-forward], in_size, stride)
-        # цены
-        opens = np.nan_to_num(np.diff(np.array(open_rates), n=1), posinf=8, neginf=-8)
+        # скользящее среднее цен открытия
+        opens_mva = self.__moving_average__(np.array(open_rates), mva_len)
+        opens = np.nan_to_num(np.diff(np.array(opens_mva)), posinf=1, neginf=-1)
+        # opens_old = np.nan_to_num(np.diff(np.array(open_rates)), posinf=1, neginf=-1)
         opens_strided = roll(opens[:-forward], in_size, stride)
         forward_values = roll(opens[in_size:], forward, stride).sum(axis=1)
         opens_std = opens.std()
@@ -260,7 +269,7 @@ class Predictor(object):
         ]
         x = x[idx]
         y = y[idx]
-        v = v[idx]
+        # v = v[idx]
         print(f"Загружено {len(x)} примеров")
         return x.astype("float32"), y.astype("float32")  # , v.astype("float32")
 
@@ -394,7 +403,7 @@ class Predictor(object):
         early_stop = keras.callbacks.EarlyStopping(
             # monitor="val_mean_absolute_error",
             monitor="val_loss",
-            patience=32,
+            patience=64,
             min_delta=1e-4,
             restore_best_weights=True,
         )
@@ -451,7 +460,7 @@ if __name__ == "__main__":
         elif param == "--cpu":
             batch_size = 2 ** 16 + 2 ** 14
     train(
-        modelname="models/39",
+        modelname="models/40",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
         input_shape=(4, 4, 4, 1),
         output_shape=(8,),
