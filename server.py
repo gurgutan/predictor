@@ -23,7 +23,7 @@ class Server(object):
         self.version = 1.02
         self.p = None
         self.ready = False
-        self.__init_logger__()
+        logger.info(f"Робот Аля v{self.version}, автор: Слеповичев Иван Иванович")
         with open(configname) as config_file:
             data = json.load(config_file)
             self.dbname = data["dbname"]  # полное имя БД
@@ -38,7 +38,6 @@ class Server(object):
         else:
             logger.error("Ошибка инициализации сервера")
             self.ready = False
-        logger.info(f"Робот Аля v{self.version}, автор: Слеповичев Иван Иванович")
 
     def is_tflite(self):
         """
@@ -62,13 +61,6 @@ class Server(object):
             mt5.shutdown()
             return False
         logger.info("Подключение к терминалу MT5, версия:" + str(mt5.version()))
-        return True
-
-    def __init_logger__(self):
-
-        # logging.basicConfig(
-        #     level=logging.DEBUG, format="%(asctime)s %(levelname)-6s :: %(message)s",
-        # )
         return True
 
     def __init_predictor__(self):
@@ -200,7 +192,7 @@ class Server(object):
 
             if not self.is_mt5_ready():
                 continue
-            sleep(0.1)
+            sleep(2)  # задержка для получения последнего бара
             rates = self.__get_last_rates__(self.p.datainfo._in_size() + 1)
             if rates is None:
                 logger.debug("Отсутствуют новые котировки")
