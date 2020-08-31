@@ -1,1 +1,0 @@
-D:\Python\Python3.8.3\python.exe D:\Dev\python\predictor\start.py -r
