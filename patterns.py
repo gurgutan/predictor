@@ -29,41 +29,45 @@ def rnn_block(n, inputs):
 def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
     # [32,32,64,64,128,128,256,256,256,256,256,256,256,512]:  # 13
     # [16,16,32,32,64,64,128,128,256,256,512,512,1024,1024,1024]:  # 10
-    max_filters = 2 ** 9
-    l1_reg = keras.regularizers.l1(l=1e-6)
-    l2_reg = keras.regularizers.l2(l=1e-6)
+    max_filters = 2 ** 10
+    l1_reg = keras.regularizers.l1(l=1e-8)
+    l2_reg = keras.regularizers.l2(l=1e-8)
     inputs = keras.Input(shape=input_shape, name="inputs")
     x = inputs
 
     # x = layers.experimental.preprocessing.Normalization()(x)
     # x = layers.LocallyConnected1D(1, kernel_size=1)(x)
     # x = layers.Reshape((8, 8, 8, 1))(x)
-    x = layers.BatchNormalization()(x)
+    # x = layers.BatchNormalization()(x)
+    x = layers.LayerNormalization(axis=[1, 2, 3, 4])(x)
+
     ksize = kernel_size
     f = filters
     i = 0
     while ksize > 1 and i < 64:
-        i += 1
         x = layers.Conv3D(
             min(max_filters, f),
             ksize,
             input_shape=input_shape,
             padding="valid",
-            activation="relu",
+            # strides=ksize,
+            activation="softsign",
             bias_initializer=keras.initializers.RandomNormal(),
             bias_regularizer=l1_reg,
             kernel_initializer=keras.initializers.RandomNormal(),
             kernel_regularizer=l1_reg,
         )(x)
-
         ksize = min(x.shape.as_list()[1:] + [ksize])
-        # f *= 2
+        f *= 1
+        i += 1
 
+    x = layers.Dropout(1.0 / 16.0)(x)
     # x = layers.LayerNormalization()(x)
     x = layers.BatchNormalization()(x)
-    x = layers.Dropout(1.0 / 8.0)(x)
-    x = layers.Reshape((x.shape[-1], 1))(x)
-    x = layers.LocallyConnected1D(32, kernel_size=x.shape[-2], activation="relu")(x)
+    # x = layers.Reshape((x.shape[-1], 1))(x)
+    # outputs = layers.LocallyConnected1D(
+    #     output_shape[0], kernel_size=x.shape[-2], activation="softmax"
+    # )(x)
 
     x = layers.Flatten()(x)
 
