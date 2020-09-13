@@ -1,7 +1,7 @@
 # При использовании оптимизированного Intel образа производительность деградирует более чем в 2 раза
 # FROM docker.io/intelaipg/intel-optimized-tensorflow:2.0.0-mkl-py3
 # FROM docker.io/intelaipg/intel-optimized-tensorflow:latest-mkl-py3
-FROM docker.io/intelaipg/intel-optimized-tensorflow:2.0.0-mkl-py3
+FROM docker.io/intel/intel-optimized-tensorflow:2.0.0-mkl-py3
 
 RUN apt-get -y update && apt-get install -y graphviz
 RUN pip3 install --upgrade pip setuptools

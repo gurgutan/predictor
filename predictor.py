@@ -3,6 +3,7 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
 import io
 import numpy as np
+from numpy import linalg
 import pandas as pd
 import tensorflow as tf
 
@@ -156,12 +157,13 @@ class Predictor(object):
                 x = np.zeros(self.datainfo.input_shape)
             else:
                 opens = np.array(c[-in_size - 1 :])
-                d = np.nan_to_num(
-                    np.diff(opens) / self.datainfo.x_std,
-                    posinf=self.datainfo._x_inf(),
-                    neginf=-self.datainfo._x_inf(),
-                )
-                x = np.reshape(d, self.datainfo.input_shape,)
+                # d = np.nan_to_num(
+                #     np.diff(opens) / self.datainfo.x_std,
+                #     posinf=self.datainfo._x_inf(),
+                #     neginf=-self.datainfo._x_inf(),
+                # )
+                d = np.nan_to_num(np.diff(opens), posinf=0, neginf=0,)
+                x = np.reshape(d, self.datainfo.input_shape)
             result_list.append(x)
         if len(result_list) == 0:
             return None
@@ -184,7 +186,7 @@ class Predictor(object):
         # stride не менять, должно быть =1
         stride = 1  # шаг "нарезки" входных данных
         # количество элементов для скользящего среднего
-        mva_len = 3
+        mva_len = 2
         in_shape = self.datainfo.input_shape
         out_shape = self.datainfo.output_shape
         forward = self.datainfo.future
@@ -238,11 +240,14 @@ class Predictor(object):
         volumes = np.nan_to_num(np.array(vol_rates))
         volumes_strided = roll(volumes[:-forward], in_size, stride)
         # скользящее среднее цен открытия
-        opens_mva = self.__moving_average__(np.array(open_rates), mva_len)
-        opens = np.nan_to_num(np.diff(np.array(opens_mva)), posinf=1, neginf=-1)
-        # opens_old = np.nan_to_num(np.diff(np.array(open_rates)), posinf=1, neginf=-1)
+        # opens_mva = self.__moving_average__(np.array(open_rates), mva_len)
+        # opens = np.nan_to_num(np.diff(np.array(opens_mva)), posinf=1, neginf=-1)
+        opens = np.nan_to_num(np.diff(np.array(open_rates)), posinf=0, neginf=0)
         opens_strided = roll(opens[:-forward], in_size, stride)
         forward_values = roll(opens[in_size:], forward, stride).sum(axis=1)
+        # forward_norms1 = linalg.norm(
+        #     roll(opens[in_size - forward : -forward], forward, stride), ord=1, axis=1
+        # )
         opens_std = opens.std()
         # open_mean = np.mean(opens)
         forward_values_std = forward_values.std()
@@ -250,10 +255,11 @@ class Predictor(object):
         self.datainfo.y_std = float(forward_values_std)
         self.datainfo.save(self.name + ".cfg")
 
-        x = np.reshape(opens_strided / opens_std, (opens_strided.shape[0],) + in_shape)
-        v = np.reshape(
-            volumes_strided / volumes.std(), (volumes_strided.shape[0], in_size)
-        )
+        # x = np.reshape(opens_strided / opens_std, (opens_strided.shape[0],) + in_shape)
+        x = np.reshape(opens_strided, (opens_strided.shape[0],) + in_shape)
+        # v = np.reshape(
+        #     volumes_strided / volumes.std(), (volumes_strided.shape[0], in_size)
+        # )
         y = np.zeros((forward_values.shape[0], out_shape[0]))
         for i in range(y.shape[0]):
             y[i] = embed(
@@ -262,6 +268,7 @@ class Predictor(object):
                 self.datainfo._y_max(),
                 out_size,
             )
+            # y[i] = embed(forward_values[i] / forward_norms1[i], -1, 1, out_size)
         n = np.arange(len(x))
         rnd = np.random.random(len(x))
         idx = n[
@@ -269,6 +276,8 @@ class Predictor(object):
             | (forward_values <= -self.datainfo.y_std)
             | (rnd < 0.1)
         ]
+        # forward_normed = np.abs(forward_values / forward_norms1)
+        # idx = n[(forward_normed >= 0.5) | (rnd < forward_normed)]
         x = x[idx]
         y = y[idx]
         # v = v[idx]
@@ -405,11 +414,7 @@ class Predictor(object):
             log_dir=log_dir, histogram_freq=1, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
-            # monitor="val_mean_absolute_error",
-            monitor="val_loss",
-            patience=64,
-            min_delta=1e-4,
-            restore_best_weights=True,
+            monitor="val_loss", patience=64, min_delta=1e-4, restore_best_weights=True,
         )
         # backup = tf.keras.callbacks.ex.experimental.BackupAndRestore(backup_dir="backups/")
         backup = keras.callbacks.ModelCheckpoint(
@@ -440,14 +445,14 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         input_shape=input_shape,
         output_shape=output_shape,
         predict_size=future,
-        filters=256,
-        kernel_size=2,
-        dense_size=64,
+        filters=2 ** 13,
+        kernel_size=64,
+        dense_size=256,
     )
     x, y = p.load_dataset(
         tsv_file=datafile,
-        count=1510000,  # таймфреймы за последние N лет (1513200)
-        skip=4608,  # 16 дней,  # 10.07.20 - 16 дней =24.06.20
+        count=1510000,  # таймфреймы за5 последние N лет (1513200)
+        skip=11520,  # 40 дней,  # 10.07.20 - 40 дней = 01.06.20
     )
     keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     if not x is None:
@@ -464,11 +469,11 @@ if __name__ == "__main__":
         elif param == "--cpu":
             batch_size = 2 ** 16 + 2 ** 14
     train(
-        modelname="models/40",
+        modelname="models/41",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
-        input_shape=(4, 4, 4, 1),
-        output_shape=(8,),
-        future=8,
+        input_shape=(64, 1),
+        output_shape=(16,),
+        future=16,
         batch_size=batch_size,
         epochs=2 ** 12,
     )
