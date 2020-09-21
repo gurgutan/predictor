@@ -255,8 +255,8 @@ class Predictor(object):
         self.datainfo.y_std = float(forward_values_std)
         self.datainfo.save(self.name + ".cfg")
 
+        x = np.reshape(opens_strided / opens_std, (opens_strided.shape[0],) + in_shape)
         # x = np.reshape(opens_strided / opens_std, (opens_strided.shape[0],) + in_shape)
-        x = np.reshape(opens_strided, (opens_strided.shape[0],) + in_shape)
         # v = np.reshape(
         #     volumes_strided / volumes.std(), (volumes_strided.shape[0], in_size)
         # )
@@ -274,7 +274,7 @@ class Predictor(object):
         idx = n[
             (forward_values >= self.datainfo.y_std)
             | (forward_values <= -self.datainfo.y_std)
-            | (rnd < 0.1)
+            | (rnd < 0.8)
         ]
         # forward_normed = np.abs(forward_values / forward_norms1)
         # idx = n[(forward_normed >= 0.5) | (rnd < forward_normed)]
@@ -445,8 +445,8 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         input_shape=input_shape,
         output_shape=output_shape,
         predict_size=future,
-        filters=2 ** 13,
-        kernel_size=64,
+        filters=2 ** 8,
+        kernel_size=4,
         dense_size=256,
     )
     x, y = p.load_dataset(
@@ -467,13 +467,13 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 8
         elif param == "--cpu":
-            batch_size = 2 ** 16 + 2 ** 14
+            batch_size = 2 ** 12
     train(
-        modelname="models/41",
+        modelname="models/43",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
-        input_shape=(64, 1),
-        output_shape=(16,),
-        future=16,
+        input_shape=(16, 1),
+        output_shape=(8,),
+        future=2,
         batch_size=batch_size,
         epochs=2 ** 12,
     )
