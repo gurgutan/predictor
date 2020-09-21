@@ -30,7 +30,7 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
     max_filters = 2 ** 12
     l1_reg = keras.regularizers.l1(l=1e-8)
     l2_reg = keras.regularizers.l2(l=1e-8)
-    inputs = keras.Input(shape=input_shape, name="inputs")
+    inputs = keras.Input(shape=(input_shape[1], input_shape[0], 1), name="inputs")
     x = inputs
     x = layers.BatchNormalization()(x)
     # x = layers.LayerNormalization(axis=1)(x)

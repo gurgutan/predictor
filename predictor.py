@@ -255,13 +255,23 @@ class Predictor(object):
         self.datainfo.y_std = float(forward_values_std)
         self.datainfo.save(self.name + ".cfg")
 
+        n = np.arange(data_size)
+        rnd = np.random.random(data_size)
+        idx = n[
+            (forward_values >= self.datainfo.y_std)
+            | (forward_values <= -self.datainfo.y_std)
+            | (rnd <= 0.1)
+        ]
+        opens_strided = opens_strided[idx]
+        forward_values = forward_values[idx]
+        data_size = opens_strided.shape[0]
+
         scales = range(1, in_shape[1] + 1)
         x = np.ndarray(shape=(data_size, len(scales), in_shape[0], 1))
         print("Вычисление примеров")
         for i in tqdm(range(data_size)):
-            signal = opens_strided[i]
-            coeff, freq = pywt.cwt(signal, scales, "gaus1", 1)
-            x[i, :, :, 0] = coeff
+            x[i, :, :, 0], freq = pywt.cwt(opens_strided[i], scales, "gaus5", 1)
+            # x[i, :, :, 0] = coeff
         # x = np.reshape(opens_strided / opens_std, (opens_strided.shape[0],) + in_shape)
         # v = np.reshape(
         #     volumes_strided / volumes.std(), (volumes_strided.shape[0], in_size)
@@ -275,17 +285,8 @@ class Predictor(object):
                 out_size,
             )
             # y[i] = embed(forward_values[i] / forward_norms1[i], -1, 1, out_size)
-        n = np.arange(len(x))
-        rnd = np.random.random(len(x))
-        idx = n[
-            (forward_values >= self.datainfo.y_std)
-            | (forward_values <= -self.datainfo.y_std)
-            | (rnd <= 1)
-        ]
-        # forward_normed = np.abs(forward_values / forward_norms1)
-        # idx = n[(forward_normed >= 0.5) | (rnd < forward_normed)]
-        x = x[idx]
-        y = y[idx]
+
+        # y = y[idx]
         # v = v[idx]
         print(f"Загружено {len(x)} примеров")
         return x.astype("float32"), y.astype("float32")  # , v.astype("float32")
@@ -451,14 +452,14 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         input_shape=input_shape,
         output_shape=output_shape,
         predict_size=future,
-        filters=2 ** 8,
+        filters=2 ** 6,
         kernel_size=4,
         dense_size=256,
     )
     # keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     x, y = p.load_dataset(
         tsv_file=datafile,
-        count=105120,  # таймфреймы за 1 года
+        count=105120 * 2,  # таймфреймы за 1 год
         skip=11520,  # 40 дней,  # 10.07.20 - 40 дней = 01.06.20
     )
     if not x is None:
@@ -473,13 +474,13 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 8
         elif param == "--cpu":
-            batch_size = 2 ** 12
+            batch_size = 2 ** 8
     train(
         modelname="models/43",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
-        input_shape=(64, 16, 1),
+        input_shape=(64, 128, 1),
         output_shape=(8,),
-        future=4,
+        future=8,
         batch_size=batch_size,
         epochs=2 ** 12,
     )

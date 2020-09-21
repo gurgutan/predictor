@@ -4,10 +4,10 @@
 
 FROM  docker.io/intel/intel-optimized-tensorflow:2.2.0-ubuntu-18.04
 
-RUN apt-get -y update && apt-get install -y graphviz
-RUN pip3 install pip setuptools
-RUN pip3 install pandas pydot pydotplus
-RUN pip3 install graphviz tqdm matplotlib
+RUN apt-get -y update && apt-get install -y graphviz 
+RUN pip3 install --upgrade pip setuptools PyWavelets
+RUN pip3 install --upgrade pandas pydot pydotplus
+RUN pip3 install --upgrade graphviz tqdm matplotlib
 
 
 # Переменные окружения для настройки параллелизма intel cpu

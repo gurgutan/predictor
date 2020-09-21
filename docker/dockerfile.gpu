@@ -1,8 +1,8 @@
 #FROM tensorflow/tensorflow:latest-gpu
 FROM tensorflow/tensorflow:latest-gpu
 
-RUN apt-get -y update && apt-get install -y graphviz
-RUN pip3 install --upgrade pip setuptools
+RUN apt-get -y update && apt-get install -y graphviz 
+RUN pip3 install --upgrade pip setuptools PyWavelets
 RUN pip3 install --upgrade pandas pydot pydotplus
 RUN pip3 install --upgrade graphviz tqdm matplotlib
 
