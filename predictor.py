@@ -6,9 +6,7 @@ import numpy as np
 from numpy import linalg
 import pandas as pd
 import tensorflow as tf
-
-# tf.compat.v1.disable_eager_execution()
-
+import pywt
 from tensorflow import keras
 import random
 from os import path
@@ -218,7 +216,7 @@ class Predictor(object):
                 "spread",
             ],
         )
-        data_len = len(data.index)
+        data_size = len(data.index)
         if skip > len(data.index):
             print(f"Число skip строк больше числа строк данных: {skip}>{data_len}")
             return None, None
@@ -243,8 +241,10 @@ class Predictor(object):
         # opens_mva = self.__moving_average__(np.array(open_rates), mva_len)
         # opens = np.nan_to_num(np.diff(np.array(opens_mva)), posinf=1, neginf=-1)
         opens = np.nan_to_num(np.diff(np.array(open_rates)), posinf=0, neginf=0)
-        opens_strided = roll(opens[:-forward], in_size, stride)
-        forward_values = roll(opens[in_size:], forward, stride).sum(axis=1)
+        opens_strided = roll(opens[:-forward], in_shape[0], stride)
+        # opens_strided = roll(opens[:-forward], in_size, stride)
+        forward_values = roll(opens[in_shape[0] :], forward, stride).sum(axis=1)
+        data_size = opens_strided.shape[0]
         # forward_norms1 = linalg.norm(
         #     roll(opens[in_size - forward : -forward], forward, stride), ord=1, axis=1
         # )
@@ -255,13 +255,19 @@ class Predictor(object):
         self.datainfo.y_std = float(forward_values_std)
         self.datainfo.save(self.name + ".cfg")
 
-        x = np.reshape(opens_strided / opens_std, (opens_strided.shape[0],) + in_shape)
+        scales = range(1, in_shape[1] + 1)
+        x = np.ndarray(shape=(data_size, len(scales), in_shape[0], 1))
+        print("Вычисление примеров")
+        for i in tqdm(range(data_size)):
+            signal = opens_strided[i]
+            coeff, freq = pywt.cwt(signal, scales, "gaus1", 1)
+            x[i, :, :, 0] = coeff
         # x = np.reshape(opens_strided / opens_std, (opens_strided.shape[0],) + in_shape)
         # v = np.reshape(
         #     volumes_strided / volumes.std(), (volumes_strided.shape[0], in_size)
         # )
         y = np.zeros((forward_values.shape[0], out_shape[0]))
-        for i in range(y.shape[0]):
+        for i in tqdm(range(y.shape[0])):
             y[i] = embed(
                 forward_values[i],
                 self.datainfo._y_min(),
@@ -274,7 +280,7 @@ class Predictor(object):
         idx = n[
             (forward_values >= self.datainfo.y_std)
             | (forward_values <= -self.datainfo.y_std)
-            | (rnd < 0.8)
+            | (rnd <= 1)
         ]
         # forward_normed = np.abs(forward_values / forward_norms1)
         # idx = n[(forward_normed >= 0.5) | (rnd < forward_normed)]
@@ -449,12 +455,12 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         kernel_size=4,
         dense_size=256,
     )
+    # keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     x, y = p.load_dataset(
         tsv_file=datafile,
-        count=1510000,  # таймфреймы за5 последние N лет (1513200)
+        count=105120,  # таймфреймы за 1 года
         skip=11520,  # 40 дней,  # 10.07.20 - 40 дней = 01.06.20
     )
-    keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     if not x is None:
         history = p.train(x, y, batch_size=batch_size, epochs=epochs)
     else:
@@ -471,9 +477,9 @@ if __name__ == "__main__":
     train(
         modelname="models/43",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
-        input_shape=(16, 1),
+        input_shape=(64, 16, 1),
         output_shape=(8,),
-        future=2,
+        future=4,
         batch_size=batch_size,
         epochs=2 ** 12,
     )

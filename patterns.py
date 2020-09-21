@@ -39,7 +39,7 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
     f = filters
     i = 0
     while ksize > 1 and i < 64:
-        x = layers.Conv1D(
+        x = layers.Conv2D(
             min(max_filters, f),
             ksize,
             input_shape=input_shape,
@@ -52,9 +52,9 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
             kernel_regularizer=l1_reg,
         )(x)
         if ksize > 1:
-            x = layers.MaxPool1D()(x)
+            x = layers.MaxPool2D(pool_size=(2, 2))(x)
         ksize = min(x.shape.as_list()[1:] + [ksize])
-        f *= 2
+        # f *= 2
         i += 1
 
     # x = layers.Conv1D(
