@@ -27,24 +27,47 @@ def rnn_block(n, inputs):
 
 
 def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
-    max_filters = 2 ** 10
+    max_filters = 2 ** 12
     l1_reg = keras.regularizers.l1(l=1e-8)
     l2_reg = keras.regularizers.l2(l=1e-8)
     inputs = keras.Input(shape=input_shape, name="inputs")
     x = inputs
-    x = layers.LayerNormalization(axis=1)(x)
+    x = layers.BatchNormalization()(x)
+    # x = layers.LayerNormalization(axis=1)(x)
     # x = layers.Dropout(1.0 / 16.0)(x)
-    x = layers.Conv1D(
-        filters,
-        kernel_size,
-        input_shape=input_shape,
-        padding="valid",
-        activation="relu",
-        bias_initializer=keras.initializers.RandomNormal(),
-        bias_regularizer=l1_reg,
-        kernel_initializer=keras.initializers.RandomNormal(),
-        kernel_regularizer=l1_reg,
-    )(x)
+    ksize = kernel_size
+    f = filters
+    i = 0
+    while ksize > 1 and i < 64:
+        x = layers.Conv1D(
+            min(max_filters, f),
+            ksize,
+            input_shape=input_shape,
+            padding="valid",
+            # strides=ksize,
+            activation="relu",
+            bias_initializer=keras.initializers.RandomNormal(),
+            bias_regularizer=l1_reg,
+            kernel_initializer=keras.initializers.RandomNormal(),
+            kernel_regularizer=l1_reg,
+        )(x)
+        if ksize > 1:
+            x = layers.MaxPool1D()(x)
+        ksize = min(x.shape.as_list()[1:] + [ksize])
+        f *= 2
+        i += 1
+
+    # x = layers.Conv1D(
+    #     filters,
+    #     kernel_size,
+    #     input_shape=input_shape,
+    #     padding="valid",
+    #     activation="relu",
+    #     bias_initializer=keras.initializers.RandomNormal(),
+    #     bias_regularizer=l1_reg,
+    #     kernel_initializer=keras.initializers.RandomNormal(),
+    #     kernel_regularizer=l1_reg,
+    # )(x)
 
     x = layers.Flatten()(x)
     x = layers.Dropout(1.0 / 32.0)(x)
