@@ -32,7 +32,7 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
     l2_reg = keras.regularizers.l2(l=1e-8)
     inputs = keras.Input(shape=(input_shape[1], input_shape[0], 1), name="inputs")
     x = inputs
-    x = layers.BatchNormalization()(x)
+    # x = layers.BatchNormalization()(x)
     # x = layers.LayerNormalization(axis=1)(x)
     # x = layers.Dropout(1.0 / 16.0)(x)
     ksize = kernel_size
@@ -46,10 +46,10 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
             padding="valid",
             # strides=ksize,
             activation="relu",
-            bias_initializer=keras.initializers.RandomNormal(),
-            bias_regularizer=l1_reg,
-            kernel_initializer=keras.initializers.RandomNormal(),
-            kernel_regularizer=l1_reg,
+            # bias_initializer=keras.initializers.RandomNormal(),
+            # bias_regularizer=l1_reg,
+            # kernel_initializer=keras.initializers.RandomNormal(),
+            # kernel_regularizer=l1_reg,
         )(x)
         if ksize > 1:
             x = layers.MaxPool2D(pool_size=(2, 2))(x)
@@ -57,23 +57,21 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
         # f *= 2
         i += 1
 
-    # x = layers.Conv1D(
-    #     filters,
-    #     kernel_size,
-    #     input_shape=input_shape,
-    #     padding="valid",
-    #     activation="relu",
-    #     bias_initializer=keras.initializers.RandomNormal(),
-    #     bias_regularizer=l1_reg,
-    #     kernel_initializer=keras.initializers.RandomNormal(),
-    #     kernel_regularizer=l1_reg,
-    # )(x)
+    # x = layers.Reshape((x.shape[1] * x.shape[3], 1))(x)
+    # x = layers.Conv1D(filters, kernel_size, padding="valid", activation="relu")(x)
+    # x = layers.MaxPool1D(pool_size=kernel_size)(x)
+    # x = layers.Conv1D(filters, kernel_size, padding="valid", activation="relu")(x)
+    # x = layers.MaxPool1D(pool_size=kernel_size)(x)
+    # x = layers.Conv1D(filters, kernel_size, padding="valid", activation="relu")(x)
+    # x = layers.MaxPool1D(pool_size=kernel_size)(x)
+    # x = layers.Conv1D(filters, kernel_size, padding="valid", activation="relu")(x)
+    # x = layers.MaxPool1D(pool_size=kernel_size)(x)
 
     x = layers.Flatten()(x)
     x = layers.Dropout(1.0 / 32.0)(x)
     x = layers.Dense(
         dense_size,
-        activation="softsign",
+        activation="relu",
         bias_initializer=keras.initializers.RandomNormal(),
         bias_regularizer=l1_reg,
         kernel_initializer=keras.initializers.RandomNormal(),
@@ -91,8 +89,9 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
 
     model = keras.Model(inputs, outputs)
     model.compile(
+        loss=keras.losses.CategoricalCrossentropy(),
         # loss=keras.losses.MeanSquaredError(),
-        loss=keras.losses.CosineSimilarity(),
+        # loss=keras.losses.CosineSimilarity(),
         # loss=keras.losses.KLDivergence(),
         # loss=keras.losses.MeanAbsoluteError(),
         # loss=abs_cat_loss,

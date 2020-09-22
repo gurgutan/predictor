@@ -240,7 +240,8 @@ class Predictor(object):
         # скользящее среднее цен открытия
         # opens_mva = self.__moving_average__(np.array(open_rates), mva_len)
         # opens = np.nan_to_num(np.diff(np.array(opens_mva)), posinf=1, neginf=-1)
-        opens = np.nan_to_num(np.diff(np.array(open_rates)), posinf=0, neginf=0)
+        # opens = np.nan_to_num(np.diff(np.array(open_rates)), posinf=0, neginf=0)
+        opens = np.nan_to_num(np.array(open_rates), posinf=0, neginf=0)
         opens_strided = roll(opens[:-forward], in_shape[0], stride)
         # opens_strided = roll(opens[:-forward], in_size, stride)
         forward_values = roll(opens[in_shape[0] :], forward, stride).sum(axis=1)
@@ -270,7 +271,9 @@ class Predictor(object):
         x = np.ndarray(shape=(data_size, len(scales), in_shape[0], 1))
         print("Вычисление примеров")
         for i in tqdm(range(data_size)):
-            x[i, :, :, 0], freq = pywt.cwt(opens_strided[i], scales, "gaus5", 1)
+            x[i, :, :, 0], freq = pywt.cwt(
+                opens_strided[i] - opens_strided[i][0], scales, "gaus5", 1
+            )
             # x[i, :, :, 0] = coeff
         # x = np.reshape(opens_strided / opens_std, (opens_strided.shape[0],) + in_shape)
         # v = np.reshape(
@@ -421,7 +424,7 @@ class Predictor(object):
             log_dir=log_dir, histogram_freq=1, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
-            monitor="val_loss", patience=64, min_delta=1e-4, restore_best_weights=True,
+            monitor="val_loss", patience=16, min_delta=1e-4, restore_best_weights=True,
         )
         # backup = tf.keras.callbacks.ex.experimental.BackupAndRestore(backup_dir="backups/")
         backup = keras.callbacks.ModelCheckpoint(
@@ -454,12 +457,12 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         predict_size=future,
         filters=2 ** 6,
         kernel_size=4,
-        dense_size=256,
+        dense_size=64,
     )
-    # keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
+    keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     x, y = p.load_dataset(
         tsv_file=datafile,
-        count=105120 * 2,  # таймфреймы за 1 год
+        count=105120,  # таймфреймы за 4 года
         skip=11520,  # 40 дней,  # 10.07.20 - 40 дней = 01.06.20
     )
     if not x is None:
@@ -474,13 +477,13 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 8
         elif param == "--cpu":
-            batch_size = 2 ** 8
+            batch_size = 2 ** 10
     train(
         modelname="models/43",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
-        input_shape=(64, 128, 1),
+        input_shape=(64, 64, 1),
         output_shape=(8,),
-        future=8,
+        future=4,
         batch_size=batch_size,
         epochs=2 ** 12,
     )
