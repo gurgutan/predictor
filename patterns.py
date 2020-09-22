@@ -89,9 +89,9 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
 
     model = keras.Model(inputs, outputs)
     model.compile(
-        loss=keras.losses.CategoricalCrossentropy(),
+        # loss=keras.losses.CategoricalCrossentropy(),
         # loss=keras.losses.MeanSquaredError(),
-        # loss=keras.losses.CosineSimilarity(),
+        loss=keras.losses.CosineSimilarity(),
         # loss=keras.losses.KLDivergence(),
         # loss=keras.losses.MeanAbsoluteError(),
         # loss=abs_cat_loss,

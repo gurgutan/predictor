@@ -52,6 +52,12 @@ def unembed(n: int, min_v: float, max_v: float, dim: int) -> float:
     return v
 
 
+def moving_average(a, n=3):
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1 :] / n
+
+
 class Predictor(object):
     def __init__(
         self,
@@ -137,41 +143,27 @@ class Predictor(object):
         )
         return self.model
 
-    def get_input(self, close_list):
+    def get_input(self, prices):
         """
         Возвращает входной вектор для сети по массиву close_list.
-        Размерность close_list: (любая, input_size+1)
+        Размерность prices: (любая, input_size)
         """
         result_list = []
-        in_size = self.datainfo._in_size()
-        for c in close_list:
-            if len(c) < in_size + 1:
-                print(
-                    "Ошибка размерности input_data: "
-                    + str(len(c))
-                    + "<"
-                    + str(in_size + 1)
-                )
-                x = np.zeros(self.datainfo.input_shape)
+        in_shape = self.datainfo.input_shape
+        scales = range(1, in_shape[1] + 1)
+        for p in prices:
+            if len(p) < in_shape:
+                print("Размер prices: " + str(len(p)) + "<" + str(in_shape[1]))
+                x = np.zeros(shape=(1, len(scales), in_shape[1], 1))
             else:
-                opens = np.array(c[-in_size - 1 :])
-                # d = np.nan_to_num(
-                #     np.diff(opens) / self.datainfo.x_std,
-                #     posinf=self.datainfo._x_inf(),
-                #     neginf=-self.datainfo._x_inf(),
-                # )
-                d = np.nan_to_num(np.diff(opens), posinf=0, neginf=0,)
-                x = np.reshape(d, self.datainfo.input_shape)
+                input_p = np.array(p[in_shape[1] :])
+                x = np.ndarray(shape=(len(scales), in_shape[1], 1))
+                x[:, :, 0], _ = pywt.cwt(input_p - input_p[0], scales, "gaus5")
             result_list.append(x)
         if len(result_list) == 0:
             return None
         result = np.stack(result_list, axis=0).astype("float32")
         return result
-
-    def __moving_average__(self, a, n=3):
-        ret = np.cumsum(a, dtype=float)
-        ret[n:] = ret[n:] - ret[:-n]
-        return ret[n - 1 :] / n
 
     def load_dataset(self, tsv_file, count=0, skip=0):
         """Подготовка обучающей выборки (x,y). Тип x и y - numpy.ndarray.
@@ -183,8 +175,6 @@ class Predictor(object):
         x, y - размеченные данные типа numpy.array, сохранные на диск файл dataset_file"""
         # stride не менять, должно быть =1
         stride = 1  # шаг "нарезки" входных данных
-        # количество элементов для скользящего среднего
-        mva_len = 2
         in_shape = self.datainfo.input_shape
         out_shape = self.datainfo.output_shape
         forward = self.datainfo.future
@@ -216,9 +206,8 @@ class Predictor(object):
                 "spread",
             ],
         )
-        data_size = len(data.index)
         if skip > len(data.index):
-            print(f"Число skip строк больше числа строк данных: {skip}>{data_len}")
+            print(f"Число skip больше числа строк данных: {skip}>{len(data.index)}")
             return None, None
         if count + skip > len(data.index):
             count = len(data.index) - skip
@@ -236,53 +225,40 @@ class Predictor(object):
             vol_rates = data["tickvol"][-count - skip : -skip]
         # объемы
         volumes = np.nan_to_num(np.array(vol_rates))
-        volumes_strided = roll(volumes[:-forward], in_size, stride)
-        # скользящее среднее цен открытия
-        # opens_mva = self.__moving_average__(np.array(open_rates), mva_len)
-        # opens = np.nan_to_num(np.diff(np.array(opens_mva)), posinf=1, neginf=-1)
-        # opens = np.nan_to_num(np.diff(np.array(open_rates)), posinf=0, neginf=0)
-        opens = np.nan_to_num(np.array(open_rates), posinf=0, neginf=0)
-        opens_strided = roll(opens[:-forward], in_shape[0], stride)
-        # opens_strided = roll(opens[:-forward], in_size, stride)
-        forward_values = roll(opens[in_shape[0] :], forward, stride).sum(axis=1)
-        data_size = opens_strided.shape[0]
-        # forward_norms1 = linalg.norm(
-        #     roll(opens[in_size - forward : -forward], forward, stride), ord=1, axis=1
-        # )
-        opens_std = opens.std()
-        # open_mean = np.mean(opens)
-        forward_values_std = forward_values.std()
-        self.datainfo.x_std = float(opens_std)
-        self.datainfo.y_std = float(forward_values_std)
-        self.datainfo.save(self.name + ".cfg")
+        volumes_strided = roll(volumes[:-forward], in_shape[1], stride)
+        # цены
+        prices = np.nan_to_num(np.array(open_rates), posinf=0, neginf=0)
+        prices_strided = roll(prices[:-forward], in_shape[1], stride)
+        # будущие цены
+        forward_prices = roll(prices[in_shape[1] :], forward, stride).sum(axis=1)
 
-        n = np.arange(data_size)
-        rnd = np.random.random(data_size)
+        self.datainfo.x_std = float(prices.std())
+        self.datainfo.y_std = float(forward_prices.std())
+        self.datainfo.save(self.name + ".cfg")
+        # убираем все лишние примеры из обучающей выборки
+        n = np.arange(len(prices_strided))
+        rnd = np.random.random(len(prices_strided))
         idx = n[
-            (forward_values >= self.datainfo.y_std)
-            | (forward_values <= -self.datainfo.y_std)
+            (forward_prices >= self.datainfo.y_std)
+            | (forward_prices <= -self.datainfo.y_std)
             | (rnd <= 0.1)
         ]
-        opens_strided = opens_strided[idx]
-        forward_values = forward_values[idx]
-        data_size = opens_strided.shape[0]
+        prices_strided = prices_strided[idx]
+        forward_prices = forward_prices[idx]
+        data_size = len(prices_strided)
 
-        scales = range(1, in_shape[1] + 1)
-        x = np.ndarray(shape=(data_size, len(scales), in_shape[0], 1))
+        scales = range(1, in_shape[0] + 1)
+        # оси x: (индекс примера, масштабирования, сигналы, каналы)
+        x = np.ndarray(shape=(data_size, len(scales), in_shape[1], 1))
         print("Вычисление примеров")
         for i in tqdm(range(data_size)):
-            x[i, :, :, 0], freq = pywt.cwt(
-                opens_strided[i] - opens_strided[i][0], scales, "gaus5", 1
+            x[i, :, :, 0], _ = pywt.cwt(
+                prices_strided[i] - prices_strided[i][0], scales, "gaus5"
             )
-            # x[i, :, :, 0] = coeff
-        # x = np.reshape(opens_strided / opens_std, (opens_strided.shape[0],) + in_shape)
-        # v = np.reshape(
-        #     volumes_strided / volumes.std(), (volumes_strided.shape[0], in_size)
-        # )
-        y = np.zeros((forward_values.shape[0], out_shape[0]))
+        y = np.zeros((forward_prices.shape[0], out_shape[0]))
         for i in tqdm(range(y.shape[0])):
             y[i] = embed(
-                forward_values[i],
+                forward_prices[i],
                 self.datainfo._y_min(),
                 self.datainfo._y_max(),
                 out_size,
@@ -477,9 +453,9 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 8
         elif param == "--cpu":
-            batch_size = 2 ** 10
+            batch_size = 2 ** 12
     train(
-        modelname="models/43",
+        modelname="models/44",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
         input_shape=(64, 64, 1),
         output_shape=(8,),
