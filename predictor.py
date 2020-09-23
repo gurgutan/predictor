@@ -229,31 +229,33 @@ class Predictor(object):
         # цены
         prices = np.nan_to_num(np.array(open_rates), posinf=0, neginf=0)
         prices_strided = roll(prices[:-forward], in_shape[1], stride)
-        # будущие цены
-        forward_prices = roll(prices[in_shape[1] :], forward, stride).sum(axis=1)
+        prices_diff = np.diff(prices)
+        data_size = len(prices_strided)
 
-        self.datainfo.x_std = float(prices.std())
+        # будущие цены
+        forward_prices = roll(prices_diff[in_shape[1] :], forward, stride).sum(axis=1)
+
+        self.datainfo.x_std = float(prices_strided.std())
         self.datainfo.y_std = float(forward_prices.std())
         self.datainfo.save(self.name + ".cfg")
-        # убираем все лишние примеры из обучающей выборки
-        n = np.arange(len(prices_strided))
-        rnd = np.random.random(len(prices_strided))
-        idx = n[
-            (forward_prices >= self.datainfo.y_std)
-            | (forward_prices <= -self.datainfo.y_std)
-            | (rnd <= 0.1)
-        ]
-        prices_strided = prices_strided[idx]
-        forward_prices = forward_prices[idx]
-        data_size = len(prices_strided)
+        # # убираем все лишние примеры из обучающей выборки
+        # n = np.arange(len(prices_strided))
+        # rnd = np.random.random(len(prices_strided))
+        # idx = n[
+        #     (forward_prices >= self.datainfo.y_std)
+        #     | (forward_prices <= -self.datainfo.y_std)
+        #     | (rnd <= 0.1)
+        # ]
+        # prices_strided = prices_strided[idx]
+        # forward_prices = forward_prices[idx]
 
         scales = range(1, in_shape[0] + 1)
         # оси x: (индекс примера, масштабирования, сигналы, каналы)
-        x = np.ndarray(shape=(data_size, len(scales), in_shape[1], 1))
+        x = np.ndarray(shape=(data_size - 1, len(scales), in_shape[1], 1))
         print("Вычисление примеров")
-        for i in tqdm(range(data_size)):
+        for i in tqdm(range(data_size - 1)):
             x[i, :, :, 0], _ = pywt.cwt(
-                prices_strided[i] - prices_strided[i][0], scales, "gaus5"
+                prices_strided[i] - prices_strided[i][0], scales, "morl"
             )
         y = np.zeros((forward_prices.shape[0], out_shape[0]))
         for i in tqdm(range(y.shape[0])):
@@ -400,7 +402,7 @@ class Predictor(object):
             log_dir=log_dir, histogram_freq=1, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
-            monitor="val_loss", patience=16, min_delta=1e-4, restore_best_weights=True,
+            monitor="val_loss", patience=64, min_delta=1e-4, restore_best_weights=True,
         )
         # backup = tf.keras.callbacks.ex.experimental.BackupAndRestore(backup_dir="backups/")
         backup = keras.callbacks.ModelCheckpoint(
@@ -432,8 +434,8 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         output_shape=output_shape,
         predict_size=future,
         filters=2 ** 6,
-        kernel_size=4,
-        dense_size=64,
+        kernel_size=8,
+        dense_size=256,
     )
     keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     x, y = p.load_dataset(
@@ -453,12 +455,12 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 8
         elif param == "--cpu":
-            batch_size = 2 ** 12
+            batch_size = 2 ** 10
     train(
         modelname="models/44",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
         input_shape=(64, 64, 1),
-        output_shape=(8,),
+        output_shape=(64,),
         future=4,
         batch_size=batch_size,
         epochs=2 ** 12,
