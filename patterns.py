@@ -27,32 +27,32 @@ def rnn_block(n, inputs):
 
 
 def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
-    max_filters = 2 ** 12
-    l1_reg = keras.regularizers.l1(l=1e-8)
-    l2_reg = keras.regularizers.l2(l=1e-8)
-    inputs = keras.Input(shape=(input_shape[1], input_shape[0], 1), name="inputs")
+    max_filters = 2 ** 10
+    l1_reg = keras.regularizers.l1(l=1e-6)
+    l2_reg = keras.regularizers.l2(l=1e-6)
+    inputs = keras.Input(shape=input_shape, name="inputs")
     x = inputs
     # x = layers.BatchNormalization()(x)
-    x = layers.LayerNormalization(axis=[1, 2])(x)
+    # x = layers.LayerNormalization(axis=2)(x)
     # x = layers.Dropout(1.0 / 16.0)(x)
     ksize = kernel_size
     f = filters
     i = 0
     while ksize > 1 and i < 64:
-        x = layers.Conv2D(
+        x = layers.SeparableConv1D(
             min(max_filters, f),
             ksize,
             input_shape=input_shape,
             padding="valid",
             # strides=ksize,
-            activation="relu",
+            activation="softsign",
             bias_initializer=keras.initializers.RandomNormal(),
             bias_regularizer=l1_reg,
             kernel_initializer=keras.initializers.RandomNormal(),
             kernel_regularizer=l1_reg,
         )(x)
         if ksize > 1:
-            x = layers.MaxPool2D(pool_size=(2, 2))(x)
+            x = layers.MaxPool1D(pool_size=2)(x)
         ksize = min(x.shape.as_list()[1:] + [ksize])
         f *= 2
         i += 1
@@ -68,7 +68,7 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
     # x = layers.MaxPool1D(pool_size=kernel_size)(x)
 
     x = layers.Flatten()(x)
-    x = layers.Dropout(1.0 / 32.0)(x)
+    x = layers.Dropout(1.0 / 4.0)(x)
     x = layers.Dense(
         dense_size,
         activation="relu",
@@ -89,9 +89,9 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
 
     model = keras.Model(inputs, outputs)
     model.compile(
-        loss=keras.losses.CategoricalCrossentropy(),
+        # loss=keras.losses.CategoricalCrossentropy(),
         # loss=keras.losses.MeanSquaredError(),
-        # loss=keras.losses.CosineSimilarity(),
+        loss=keras.losses.CosineSimilarity(),
         # loss=keras.losses.KLDivergence(),
         # loss=keras.losses.MeanAbsoluteError(),
         # loss=abs_cat_loss,

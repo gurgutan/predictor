@@ -225,7 +225,7 @@ class Predictor(object):
             vol_rates = data["tickvol"][-count - skip : -skip]
         # объемы
         volumes = np.nan_to_num(np.array(vol_rates))
-        volumes_strided = roll(volumes[:-forward], in_shape[1], stride)
+        volumes_strided = roll(volumes[:-forward], in_shape[0], stride)
         # цены
         prices = np.nan_to_num(np.array(open_rates), posinf=0, neginf=0)
         prices_strided = roll(prices[:-forward], in_shape[1], stride)
@@ -238,34 +238,49 @@ class Predictor(object):
         self.datainfo.x_std = float(prices_strided.std())
         self.datainfo.y_std = float(forward_prices.std())
         self.datainfo.save(self.name + ".cfg")
-        # # убираем все лишние примеры из обучающей выборки
-        # n = np.arange(len(prices_strided))
-        # rnd = np.random.random(len(prices_strided))
-        # idx = n[
-        #     (forward_prices >= self.datainfo.y_std)
-        #     | (forward_prices <= -self.datainfo.y_std)
-        #     | (rnd <= 0.1)
-        # ]
-        # prices_strided = prices_strided[idx]
-        # forward_prices = forward_prices[idx]
+        # убираем все лишние примеры из обучающей выборки
+        n = np.arange(data_size - 1)
+        rnd = np.random.random(data_size - 1)
+        idx = n[
+            (forward_prices >= self.datainfo.y_std)
+            | (forward_prices <= -self.datainfo.y_std)
+            | (rnd <= 0.1)
+        ]
+        prices_strided = prices_strided[idx]
+        forward_prices = forward_prices[idx]
+        data_size = len(prices_strided)
 
-        scales = range(1, in_shape[0] + 1)
+        # scales = range(1, in_shape[0] + 1)
         # оси x: (индекс примера, масштабирования, сигналы, каналы)
-        x = np.ndarray(shape=(data_size - 1, len(scales), in_shape[1], 1))
+        x = np.ndarray(shape=(data_size, in_shape[0], in_shape[1]))
+        y = np.zeros((data_size, out_shape[0]))
         print("Вычисление примеров")
-        for i in tqdm(range(data_size - 1)):
-            x[i, :, :, 0], _ = pywt.cwt(
-                prices_strided[i] - prices_strided[i][0], scales, "morl"
-            )
-        y = np.zeros((forward_prices.shape[0], out_shape[0]))
-        for i in tqdm(range(y.shape[0])):
+        for i in tqdm(range(data_size - in_shape[0] - in_shape[1] - forward)):
+            for j in range(in_shape[0]):
+                x[i, j, :], _ = pywt.coeffs_to_array(
+                    pywt.wavedecn(
+                        prices_strided[i + j] - prices_strided[i + j][0],
+                        wavelet="db4",
+                        mode="per",
+                    )
+                )
             y[i] = embed(
-                forward_prices[i],
+                prices[i + in_shape[0] + in_shape[1] + forward]
+                - prices[i + in_shape[0] + in_shape[1]],
                 self.datainfo._y_min(),
                 self.datainfo._y_max(),
                 out_size,
             )
-            # y[i] = embed(forward_values[i] / forward_norms1[i], -1, 1, out_size)
+            # x[i, :, :, 0], _ = pywt.cwt(prices_strided[i] - prices_strided[i][0], scales, "morl")
+
+        # for i in tqdm(range(y.shape[0])):
+        #     y[i] = embed(
+        #         forward_prices[i],
+        #         self.datainfo._y_min(),
+        #         self.datainfo._y_max(),
+        #         out_size,
+        #     )
+        # y[i] = embed(forward_values[i] / forward_norms1[i], -1, 1, out_size)
 
         # y = y[idx]
         # v = v[idx]
@@ -402,21 +417,18 @@ class Predictor(object):
             log_dir=log_dir, histogram_freq=1, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
-            monitor="val_loss", patience=64, min_delta=1e-4, restore_best_weights=True,
+            monitor="val_loss", patience=64, min_delta=1e-5, restore_best_weights=True,
         )
         # backup = tf.keras.callbacks.ex.experimental.BackupAndRestore(backup_dir="backups/")
         backup = keras.callbacks.ModelCheckpoint(
-            filepath=ckpt,
-            monitor="val_loss",
-            save_weights_only=True,
-            save_best_only=True,
+            filepath=ckpt, monitor="loss", save_weights_only=True, save_best_only=True,
         )
         history = self.model.fit(
             x,
             y,
             batch_size=batch_size,
             epochs=epochs,
-            validation_split=1.0 / 16.0,
+            validation_split=1.0 / 8.0,
             shuffle=True,
             use_multiprocessing=True,
             callbacks=[backup, early_stop, tensorboard_link],
@@ -434,13 +446,13 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         output_shape=output_shape,
         predict_size=future,
         filters=2 ** 6,
-        kernel_size=8,
+        kernel_size=4,
         dense_size=256,
     )
     keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     x, y = p.load_dataset(
         tsv_file=datafile,
-        count=105120,  # таймфреймы за 4 года
+        count=105120 * 4,  # таймфреймы за 1 года
         skip=11520,  # 40 дней,  # 10.07.20 - 40 дней = 01.06.20
     )
     if not x is None:
@@ -457,13 +469,13 @@ if __name__ == "__main__":
         elif param == "--cpu":
             batch_size = 2 ** 10
     train(
-        modelname="models/44",
+        modelname="models/45",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
-        input_shape=(64, 64, 1),
-        output_shape=(64,),
-        future=4,
+        input_shape=(32, 64),
+        output_shape=(8,),
+        future=8,
         batch_size=batch_size,
-        epochs=2 ** 12,
+        epochs=2 ** 15,
     )
 # Debug
 # Тест загрузки предиктора
