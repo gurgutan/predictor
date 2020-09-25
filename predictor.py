@@ -145,25 +145,40 @@ class Predictor(object):
 
     def get_input(self, prices):
         """
-        Возвращает входной вектор для сети по массиву close_list.
-        Размерность prices: (любая, input_size)
+        Возвращает входной вектор для сети по массиву prices.
         """
-        result_list = []
+        stride = 1
+        forward = self.datainfo.future
         in_shape = self.datainfo.input_shape
-        scales = range(1, in_shape[1] + 1)
-        for p in prices:
-            if len(p) < in_shape:
-                print("Размер prices: " + str(len(p)) + "<" + str(in_shape[1]))
-                x = np.zeros(shape=(1, len(scales), in_shape[1], 1))
-            else:
-                input_p = np.array(p[in_shape[1] :])
-                x = np.ndarray(shape=(len(scales), in_shape[1], 1))
-                x[:, :, 0], _ = pywt.cwt(input_p - input_p[0], scales, "gaus5")
-            result_list.append(x)
-        if len(result_list) == 0:
-            return None
-        result = np.stack(result_list, axis=0).astype("float32")
-        return result
+        prices_strided = roll(np.array(prices), in_shape[1], stride)
+        data_size = len(prices_strided) - in_shape[0]
+        x = np.ndarray(shape=(data_size, in_shape[0], in_shape[1]))
+        for i in tqdm(range(data_size)):
+            for j in range(in_shape[0]):
+                x[i, j, :], _ = pywt.coeffs_to_array(
+                    pywt.wavedecn(
+                        prices_strided[i + j] - prices_strided[i + j][0],
+                        wavelet="db4",
+                        mode="per",
+                    )
+                )
+
+        # result_list = []
+        # in_shape = self.datainfo.input_shape
+        # scales = range(1, in_shape[1] + 1)
+        # for p in prices:
+        #     if len(p) < in_shape:
+        #         print("Размер prices: " + str(len(p)) + "<" + str(in_shape[1]))
+        #         x = np.zeros(shape=(1, len(scales), in_shape[1], 1))
+        #     else:
+        #         input_p = np.array(p[in_shape[1] :])
+        #         x = np.ndarray(shape=(len(scales), in_shape[1], 1))
+        #         x[:, :, 0], _ = pywt.cwt(input_p - input_p[0], scales, "gaus5")
+        #     result_list.append(x)
+        # if len(result_list) == 0:
+        #     return None
+        # result = np.stack(result_list, axis=0).astype("float32")
+        return x.astype("float32")
 
     def load_dataset(self, tsv_file, count=0, skip=0):
         """Подготовка обучающей выборки (x,y). Тип x и y - numpy.ndarray.
@@ -248,14 +263,14 @@ class Predictor(object):
         ]
         prices_strided = prices_strided[idx]
         forward_prices = forward_prices[idx]
-        data_size = len(prices_strided)
+        data_size = len(prices_strided) - in_shape[0] - in_shape[1] - forward
 
         # scales = range(1, in_shape[0] + 1)
         # оси x: (индекс примера, масштабирования, сигналы, каналы)
         x = np.ndarray(shape=(data_size, in_shape[0], in_shape[1]))
         y = np.zeros((data_size, out_shape[0]))
         print("Вычисление примеров")
-        for i in tqdm(range(data_size - in_shape[0] - in_shape[1] - forward)):
+        for i in tqdm(range(data_size)):
             for j in range(in_shape[0]):
                 x[i, j, :], _ = pywt.coeffs_to_array(
                     pywt.wavedecn(

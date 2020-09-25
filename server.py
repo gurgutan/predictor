@@ -103,24 +103,19 @@ class Server(object):
             logger.error(f"Ошибка: пустой список котировок")
             return None
         closes, times = rates["close"], rates["time"]
-        count = len(closes)
-        shift = self.p.datainfo._in_size() + 1
+        count = len(closes) + 1
+        shift = self.p.datainfo.input_shape[0] + self.p.datainfo.input_shape[1]
         results = []
-        # сделаем "нарезку" входных векторов
-        input_data = []
-        for i in range(shift, count + 1):
-            x = closes[i - shift : i].to_numpy()
-            input_data.append(x)
         # вычисляем прогноз
         if self.is_tflite():
-            output_data = self.p.tflite_predict(input_data, verbose=verbose)
+            output_data = self.p.tflite_predict(closes, verbose=verbose)
         else:
-            output_data = self.p.predict(input_data, verbose=verbose)
+            output_data = self.p.predict(closes, verbose=verbose)
         if output_data is None:
             logger.error(f"Ошибка: не удалось получить прогноз для {times[-1]}")
             return None
         # сформируем результирующий список кортежей для записи в БД
-        for i in range(shift, count + 1):
+        for i in range(shift, count):
             plow, phigh, confidence, center = output_data[i - shift]
             rdate = int(times[i - 1])
             rprice = closes[i - 1]
@@ -193,13 +188,15 @@ class Server(object):
             if not self.is_mt5_ready():
                 continue
             sleep(2)  # задержка для получения последнего бара
-            rates = self.__get_last_rates__(self.p.datainfo._in_size() + 1)
+            rates = self.__get_last_rates__(
+                self.p.datainfo.input_shape[0] + self.p.datainfo.input_shape[1]
+            )
             if rates is None:
                 logger.debug("Отсутствуют новые котировки")
                 continue
 
             results = self.compute(rates, verbose=0)
-            if results is None:
+            if results is None or len(results) == 0:
                 logger.error("Ошибка вычислений")
                 continue
 
