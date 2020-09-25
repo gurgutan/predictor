@@ -27,13 +27,13 @@ def rnn_block(n, inputs):
 
 
 def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
-    max_filters = 2 ** 10
-    l1_reg = keras.regularizers.l1(l=1e-6)
-    l2_reg = keras.regularizers.l2(l=1e-6)
+    max_filters = 2 ** 9
+    l1_reg = keras.regularizers.l1(l=1e-7)
+    l2_reg = keras.regularizers.l2(l=1e-7)
     inputs = keras.Input(shape=input_shape, name="inputs")
     x = inputs
     # x = layers.BatchNormalization()(x)
-    # x = layers.LayerNormalization(axis=2)(x)
+    x = layers.LayerNormalization(axis=[1, 2])(x)
     # x = layers.Dropout(1.0 / 16.0)(x)
     ksize = kernel_size
     f = filters
@@ -51,8 +51,8 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
             kernel_initializer=keras.initializers.RandomNormal(),
             kernel_regularizer=l1_reg,
         )(x)
-        if ksize > 1:
-            x = layers.MaxPool1D(pool_size=2)(x)
+        # if ksize > 1:
+        #     x = layers.MaxPool1D(pool_size=2)(x)
         ksize = min(x.shape.as_list()[1:] + [ksize])
         f *= 2
         i += 1
@@ -68,7 +68,7 @@ def conv1D(input_shape, output_shape, filters, kernel_size, dense_size):
     # x = layers.MaxPool1D(pool_size=kernel_size)(x)
 
     x = layers.Flatten()(x)
-    x = layers.Dropout(1.0 / 4.0)(x)
+    x = layers.Dropout(1.0 / 8.0)(x)
     x = layers.Dense(
         dense_size,
         activation="relu",

@@ -244,7 +244,7 @@ class Predictor(object):
         idx = n[
             (forward_prices >= self.datainfo.y_std)
             | (forward_prices <= -self.datainfo.y_std)
-            | (rnd <= 0.1)
+            | (rnd <= 0.01)
         ]
         prices_strided = prices_strided[idx]
         forward_prices = forward_prices[idx]
@@ -417,7 +417,7 @@ class Predictor(object):
             log_dir=log_dir, histogram_freq=1, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
-            monitor="val_loss", patience=64, min_delta=1e-5, restore_best_weights=True,
+            monitor="val_loss", patience=64, min_delta=1e-4, restore_best_weights=True,
         )
         # backup = tf.keras.callbacks.ex.experimental.BackupAndRestore(backup_dir="backups/")
         backup = keras.callbacks.ModelCheckpoint(
@@ -428,7 +428,7 @@ class Predictor(object):
             y,
             batch_size=batch_size,
             epochs=epochs,
-            validation_split=1.0 / 8.0,
+            validation_split=1.0 / 4.0,
             shuffle=True,
             use_multiprocessing=True,
             callbacks=[backup, early_stop, tensorboard_link],
@@ -452,7 +452,7 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
     keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     x, y = p.load_dataset(
         tsv_file=datafile,
-        count=105120 * 4,  # таймфреймы за 1 года
+        count=105120,  # таймфреймы за 1 года
         skip=11520,  # 40 дней,  # 10.07.20 - 40 дней = 01.06.20
     )
     if not x is None:
@@ -469,13 +469,13 @@ if __name__ == "__main__":
         elif param == "--cpu":
             batch_size = 2 ** 10
     train(
-        modelname="models/45",
+        modelname="models/46",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
-        input_shape=(32, 64),
+        input_shape=(32, 32),
         output_shape=(8,),
-        future=8,
+        future=16,
         batch_size=batch_size,
-        epochs=2 ** 15,
+        epochs=2 ** 14,
     )
 # Debug
 # Тест загрузки предиктора
