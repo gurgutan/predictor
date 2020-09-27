@@ -13,7 +13,7 @@ from os import path
 import time
 import datetime
 import sys
-from patterns import conv2D, multiConv2D, conv1D
+from patterns import conv2D, multiConv2D, conv1D, reslike
 from datainfo import DatasetInfo
 from tqdm import tqdm
 import logging
@@ -134,7 +134,7 @@ class Predictor(object):
     def create_model(
         self, input_shape, output_shape, filters, kernel_size, dense_size,
     ):
-        self.model = conv1D(
+        self.model = reslike(
             input_shape=input_shape,
             output_shape=output_shape,
             filters=filters,
@@ -275,8 +275,8 @@ class Predictor(object):
                 x[i, j, :], _ = pywt.coeffs_to_array(
                     pywt.wavedecn(
                         prices_strided[i + j] - prices_strided[i + j][0],
-                        wavelet="db4",
-                        mode="per",
+                        wavelet="db2",
+                        mode="periodization",
                     )
                 )
             y[i] = embed(
@@ -286,18 +286,6 @@ class Predictor(object):
                 self.datainfo._y_max(),
                 out_size,
             )
-            # x[i, :, :, 0], _ = pywt.cwt(prices_strided[i] - prices_strided[i][0], scales, "morl")
-
-        # for i in tqdm(range(y.shape[0])):
-        #     y[i] = embed(
-        #         forward_prices[i],
-        #         self.datainfo._y_min(),
-        #         self.datainfo._y_max(),
-        #         out_size,
-        #     )
-        # y[i] = embed(forward_values[i] / forward_norms1[i], -1, 1, out_size)
-
-        # y = y[idx]
         # v = v[idx]
         print(f"Загружено {len(x)} примеров")
         return x.astype("float32"), y.astype("float32")  # , v.astype("float32")
@@ -436,7 +424,10 @@ class Predictor(object):
         )
         # backup = tf.keras.callbacks.ex.experimental.BackupAndRestore(backup_dir="backups/")
         backup = keras.callbacks.ModelCheckpoint(
-            filepath=ckpt, monitor="loss", save_weights_only=True, save_best_only=True,
+            filepath=ckpt,
+            monitor="val_loss",
+            save_weights_only=True,
+            save_best_only=True,
         )
         history = self.model.fit(
             x,
@@ -460,14 +451,14 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         input_shape=input_shape,
         output_shape=output_shape,
         predict_size=future,
-        filters=2 ** 6,
+        filters=2 ** 7,
         kernel_size=4,
-        dense_size=256,
+        dense_size=64,
     )
     keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     x, y = p.load_dataset(
         tsv_file=datafile,
-        count=105120,  # таймфреймы за 1 года
+        count=105120 * 4,  # таймфреймы за 1*N лет
         skip=11520,  # 40 дней,  # 10.07.20 - 40 дней = 01.06.20
     )
     if not x is None:
@@ -482,15 +473,15 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 8
         elif param == "--cpu":
-            batch_size = 2 ** 10
+            batch_size = 2 ** 15
     train(
         modelname="models/46",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
         input_shape=(32, 32),
-        output_shape=(8,),
-        future=16,
+        output_shape=(16,),
+        future=4,
         batch_size=batch_size,
-        epochs=2 ** 14,
+        epochs=2 ** 15,
     )
 # Debug
 # Тест загрузки предиктора
