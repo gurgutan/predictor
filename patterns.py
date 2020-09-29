@@ -46,16 +46,19 @@ def reslike(input_shape, output_shape, filters, kernel_size, dense_size):
     l2_reg = keras.regularizers.l2(l=1e-5)
     rnd_uniform = keras.initializers.RandomUniform()
     inputs = keras.Input(shape=(input_shape[0], input_shape[1]), name="inputs")
-    x = inputs[:, :, : input_shape[0] // 2]
+    # x = inputs[:, :, : input_shape[0] // 2]
+    x = inputs
     x = layers.LayerNormalization(axis=[1, 2])(x)
+    # x = layers.BatchNormalization()(x)
     ksize = kernel_size
     f = filters
     i = 0
     while ksize > 1 and i < 64:
+        x = sep_conv1d(f, ksize)(x)
         residual = x
-        for i in range(12):
+        for i in range(4):
             x = sep_conv1d(f, ksize)(x)
-        x = layers.Concatenate()([x, residual])
+        x = layers.Add()([x, residual])
         x = layers.SeparableConv1D(
             f,
             ksize,
@@ -66,25 +69,28 @@ def reslike(input_shape, output_shape, filters, kernel_size, dense_size):
             bias_initializer=rnd_uniform,
             kernel_initializer=rnd_uniform,
         )(x)
+        ksize = min(x.shape.as_list()[1:] + [ksize])
         if ksize > 1:
             x = layers.MaxPool1D(pool_size=2)(x)
         ksize = min(x.shape.as_list()[1:] + [ksize])
-        x = layers.BatchNormalization()(x)
+        # x = layers.Dropout(1.0 / 16.0)(x)
+        # x = layers.BatchNormalization()(x)
         f *= 2
         i += 1
 
-    x = layers.GlobalAveragePooling1D()(x)
+    # x = layers.LSTM(128, return_sequences=True)(x)
+    # x = layers.GlobalAveragePooling1D()(x)
 
     x = layers.Flatten()(x)
-    x = layers.Dropout(1.0 / 2.0)(x)
-    # x = layers.Dense(
-    #     dense_size,
-    #     activation="relu",
-    #     bias_initializer=keras.initializers.RandomNormal(),
-    #     bias_regularizer=l1_reg,
-    #     kernel_initializer=keras.initializers.RandomNormal(),
-    #     kernel_regularizer=l1_reg,
-    # )(x)
+    x = layers.Dropout(1.0 / 4.0)(x)
+    x = layers.Dense(
+        dense_size,
+        activation="relu",
+        bias_initializer=keras.initializers.RandomNormal(),
+        bias_regularizer=l1_reg,
+        kernel_initializer=keras.initializers.RandomNormal(),
+        kernel_regularizer=l1_reg,
+    )(x)
     outputs = layers.Dense(
         output_shape[0],
         activation="softmax",
@@ -96,15 +102,17 @@ def reslike(input_shape, output_shape, filters, kernel_size, dense_size):
     )(x)
 
     model = keras.Model(inputs, outputs)
+
+    ROC = keras.metrics.AUC()
     model.compile(
-        loss=keras.losses.CategoricalCrossentropy(),
+        # loss=keras.losses.CategoricalCrossentropy(),
         # loss=keras.losses.MeanSquaredError(),
-        # loss=keras.losses.CosineSimilarity(),
+        loss=keras.losses.CosineSimilarity(),
         # loss=keras.losses.KLDivergence(),
         # loss=keras.losses.MeanAbsoluteError(),
         # loss=abs_cat_loss,
-        optimizer=keras.optimizers.Adam(learning_rate=0.001),
-        metrics=["accuracy"],
+        optimizer=keras.optimizers.SGD(learning_rate=0.1),
+        metrics=[ROC],
     )
     print(model.summary())
     return model

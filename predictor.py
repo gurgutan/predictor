@@ -272,13 +272,13 @@ class Predictor(object):
         print("Вычисление примеров")
         for i in tqdm(range(data_size)):
             for j in range(in_shape[0]):
-                x[i, j, :], _ = pywt.coeffs_to_array(
+                x[i, j, :] = pywt.coeffs_to_array(
                     pywt.wavedecn(
                         prices_strided[i + j] - prices_strided[i + j][0],
-                        wavelet="db2",
-                        mode="periodization",
+                        wavelet="coif8",
+                        mode="zero",
                     )
-                )
+                )[0][: in_shape[1]]
             y[i] = embed(
                 prices[i + in_shape[0] + in_shape[1] + forward]
                 - prices[i + in_shape[0] + in_shape[1]],
@@ -434,7 +434,7 @@ class Predictor(object):
             y,
             batch_size=batch_size,
             epochs=epochs,
-            validation_split=1.0 / 4.0,
+            validation_split=1.0 / 8.0,
             shuffle=True,
             use_multiprocessing=True,
             callbacks=[backup, early_stop, tensorboard_link],
@@ -473,13 +473,13 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 8
         elif param == "--cpu":
-            batch_size = 2 ** 15
+            batch_size = 2 ** 12
     train(
-        modelname="models/46",
+        modelname="models/47",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
-        input_shape=(32, 32),
-        output_shape=(16,),
-        future=4,
+        input_shape=(64, 1),
+        output_shape=(8,),
+        future=8,
         batch_size=batch_size,
         epochs=2 ** 15,
     )
