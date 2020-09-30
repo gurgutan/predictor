@@ -13,7 +13,7 @@ from os import path
 import time
 import datetime
 import sys
-from patterns import conv2D, multiConv2D, conv1D, reslike
+from patterns import conv2D, multiConv2D, conv1D, reslike, loc1d
 from datainfo import DatasetInfo
 from tqdm import tqdm
 import logging
@@ -150,18 +150,30 @@ class Predictor(object):
         stride = 1
         forward = self.datainfo.future
         in_shape = self.datainfo.input_shape
-        prices_strided = roll(np.array(prices), in_shape[1], stride)
-        data_size = len(prices_strided) - in_shape[0]
-        x = np.ndarray(shape=(data_size, in_shape[0], in_shape[1]))
+        prices_strided = roll(np.array(prices, dtype="float32"), in_shape[0], stride)
+        data_size = len(prices_strided)
+        shift = in_shape[0]
+        wavelet_len = pywt.swt_max_level(in_shape[0]) * in_shape[0]
+        x = np.ndarray(shape=(data_size, wavelet_len, 1))
         for i in tqdm(range(data_size)):
-            for j in range(in_shape[0]):
-                x[i, j, :], _ = pywt.coeffs_to_array(
-                    pywt.wavedecn(
-                        prices_strided[i + j] - prices_strided[i + j][0],
-                        wavelet="db4",
-                        mode="per",
-                    )
-                )
+            coeff = pywt.swt(
+                prices_strided[i] - prices_strided[i][0],
+                wavelet="db10",
+                trim_approx=True,
+                norm=False,
+            )
+            x[k, :, 0] = pywt.coeffs_to_array(coeff)[0][:wavelet_len]
+
+        # x = np.ndarray(shape=(data_size, in_shape[0], in_shape[1]))
+        # for i in tqdm(range(data_size)):
+        #     for j in range(in_shape[0]):
+        #         x[i, j, :], _ = pywt.coeffs_to_array(
+        #             pywt.wavedecn(
+        #                 prices_strided[i + j] - prices_strided[i + j][0],
+        #                 wavelet="db4",
+        #                 mode="per",
+        #             )
+        #         )
 
         # result_list = []
         # in_shape = self.datainfo.input_shape
@@ -243,49 +255,77 @@ class Predictor(object):
         volumes_strided = roll(volumes[:-forward], in_shape[0], stride)
         # цены
         prices = np.nan_to_num(np.array(open_rates), posinf=0, neginf=0)
-        prices_strided = roll(prices[:-forward], in_shape[1], stride)
+        prices_strided = roll(prices[:-forward], in_shape[0], stride)
         prices_diff = np.diff(prices)
         data_size = len(prices_strided)
 
         # будущие цены
-        forward_prices = roll(prices_diff[in_shape[1] :], forward, stride).sum(axis=1)
+        forward_prices = roll(prices_diff[in_shape[0] :], forward, stride).sum(axis=1)
 
         self.datainfo.x_std = float(prices_strided.std())
         self.datainfo.y_std = float(forward_prices.std())
         self.datainfo.save(self.name + ".cfg")
         # убираем все лишние примеры из обучающей выборки
-        n = np.arange(data_size - 1)
-        rnd = np.random.random(data_size - 1)
-        idx = n[
-            (forward_prices >= self.datainfo.y_std)
-            | (forward_prices <= -self.datainfo.y_std)
-            | (rnd <= 0.01)
-        ]
-        prices_strided = prices_strided[idx]
-        forward_prices = forward_prices[idx]
+        # n = np.arange(data_size - 1)
+        # rnd = np.random.random(data_size - 1)
+        # idx = n[
+        #     (forward_prices > self.datainfo.y_std)
+        #     | (forward_prices < -self.datainfo.y_std)
+        #     | (rnd <= 0.0001)
+        # ]
+        # prices_strided = prices_strided[idx]
+        # forward_prices = forward_prices[idx]
         data_size = len(prices_strided) - in_shape[0] - in_shape[1] - forward
 
         # scales = range(1, in_shape[0] + 1)
         # оси x: (индекс примера, масштабирования, сигналы, каналы)
-        x = np.ndarray(shape=(data_size, in_shape[0], in_shape[1]))
+        # x = np.ndarray(shape=(data_size, in_shape[0], 1))
+        # y = np.zeros((data_size, out_shape[0]))
+        # print("Вычисление примеров")
+        # for i in tqdm(range(data_size)):
+        #     for j in range(in_shape[0]):
+        #         x[i, j, :] = pywt.coeffs_to_array(
+        #             pywt.wavedecn(
+        #                 prices_strided[i + j] - prices_strided[i + j][0],
+        #                 wavelet="coif8",
+        #                 mode="zero",
+        #             )
+        #         )[0][: in_shape[1]]
+        #     y[i] = embed(
+        #         prices[i + in_shape[0] + in_shape[1] + forward]
+        #         - prices[i + in_shape[0] + in_shape[1]],
+        #         self.datainfo._y_min(),
+        #         self.datainfo._y_max(),
+        #         out_size,
+        #     )
+        shift = in_shape[0]
+        wavelet_len = pywt.swt_max_level(in_shape[0]) * in_shape[0]
+        x = np.ndarray(shape=(data_size, wavelet_len, 1))
         y = np.zeros((data_size, out_shape[0]))
-        print("Вычисление примеров")
+        k = 0
         for i in tqdm(range(data_size)):
-            for j in range(in_shape[0]):
-                x[i, j, :] = pywt.coeffs_to_array(
-                    pywt.wavedecn(
-                        prices_strided[i + j] - prices_strided[i + j][0],
-                        wavelet="coif8",
-                        mode="zero",
-                    )
-                )[0][: in_shape[1]]
-            y[i] = embed(
-                prices[i + in_shape[0] + in_shape[1] + forward]
-                - prices[i + in_shape[0] + in_shape[1]],
-                self.datainfo._y_min(),
-                self.datainfo._y_max(),
+            if (
+                abs(prices[i + shift + forward] - prices[i + shift])
+                < self.datainfo.y_std
+            ):
+                continue
+            coeff = pywt.swt(
+                prices_strided[i] - prices_strided[i][0],
+                wavelet="db10",
+                trim_approx=True,
+                norm=False,
+            )
+            output = embed(
+                prices[i + shift + forward] - prices[i + shift],
+                -2 * self.datainfo.y_std,
+                2 * self.datainfo.y_std,
                 out_size,
             )
+            x[k, :, 0] = pywt.coeffs_to_array(coeff)[0][:wavelet_len]
+            y[k] = output
+            k += 1
+        x = x[:k]
+        y = y[:k]
         # v = v[idx]
         print(f"Загружено {len(x)} примеров")
         return x.astype("float32"), y.astype("float32")  # , v.astype("float32")
@@ -453,7 +493,7 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         predict_size=future,
         filters=2 ** 7,
         kernel_size=4,
-        dense_size=64,
+        dense_size=2 ** 10,
     )
     keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     x, y = p.load_dataset(
@@ -475,13 +515,13 @@ if __name__ == "__main__":
         elif param == "--cpu":
             batch_size = 2 ** 12
     train(
-        modelname="models/47",
+        modelname="models/49 ",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
-        input_shape=(64, 1),
+        input_shape=(32, 1),
         output_shape=(8,),
-        future=8,
+        future=2,
         batch_size=batch_size,
-        epochs=2 ** 15,
+        epochs=2 ** 1,
     )
 # Debug
 # Тест загрузки предиктора

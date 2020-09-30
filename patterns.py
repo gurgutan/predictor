@@ -4,6 +4,7 @@ from tensorflow import keras
 from tensorflow.keras.models import Sequential
 from tensorflow.keras import layers
 from functools import reduce
+import pywt
 import operator
 
 # tf.compat.v1.disable_eager_execution()
@@ -26,26 +27,11 @@ def rnn_block(n, inputs):
     return x
 
 
-def sep_conv1d(f, ksize):
-    l2_reg = keras.regularizers.l2(l=1e-5)
+def loc1d(input_shape, output_shape, filters, kernel_size, dense_size):
+    l2_reg = keras.regularizers.l2(l=1e-7)
     rnd_uniform = keras.initializers.RandomUniform()
-    return layers.SeparableConv1D(
-        f,
-        ksize,
-        padding="same",
-        activation="relu",
-        bias_regularizer=l2_reg,
-        kernel_regularizer=l2_reg,
-        bias_initializer=rnd_uniform,
-        kernel_initializer=rnd_uniform,
-    )
-
-
-def reslike(input_shape, output_shape, filters, kernel_size, dense_size):
-    l1_reg = keras.regularizers.l1(l=1e-5)
-    l2_reg = keras.regularizers.l2(l=1e-5)
-    rnd_uniform = keras.initializers.RandomUniform()
-    inputs = keras.Input(shape=(input_shape[0], input_shape[1]), name="inputs")
+    wavelet_len = pywt.swt_max_level(input_shape[0]) * input_shape[0]
+    inputs = keras.Input(shape=(wavelet_len, 1), name="inputs")
     # x = inputs[:, :, : input_shape[0] // 2]
     x = inputs
     x = layers.LayerNormalization(axis=[1, 2])(x)
@@ -54,16 +40,10 @@ def reslike(input_shape, output_shape, filters, kernel_size, dense_size):
     f = filters
     i = 0
     while ksize > 1 and i < 64:
-        x = sep_conv1d(f, ksize)(x)
-        residual = x
-        for i in range(4):
-            x = sep_conv1d(f, ksize)(x)
-        x = layers.Add()([x, residual])
-        x = layers.SeparableConv1D(
+        x = layers.LocallyConnected1D(
             f,
             ksize,
-            padding="valid",
-            activation="relu",
+            activation="elu",
             bias_regularizer=l2_reg,
             kernel_regularizer=l2_reg,
             bias_initializer=rnd_uniform,
@@ -73,23 +53,98 @@ def reslike(input_shape, output_shape, filters, kernel_size, dense_size):
         if ksize > 1:
             x = layers.MaxPool1D(pool_size=2)(x)
         ksize = min(x.shape.as_list()[1:] + [ksize])
-        # x = layers.Dropout(1.0 / 16.0)(x)
-        # x = layers.BatchNormalization()(x)
         f *= 2
         i += 1
 
-    # x = layers.LSTM(128, return_sequences=True)(x)
-    # x = layers.GlobalAveragePooling1D()(x)
-
     x = layers.Flatten()(x)
-    x = layers.Dropout(1.0 / 4.0)(x)
+    x = layers.Dropout(1.0 / 2.0)(x)
     x = layers.Dense(
         dense_size,
         activation="relu",
-        bias_initializer=keras.initializers.RandomNormal(),
-        bias_regularizer=l1_reg,
-        kernel_initializer=keras.initializers.RandomNormal(),
-        kernel_regularizer=l1_reg,
+        bias_initializer=rnd_uniform,
+        bias_regularizer=l2_reg,
+        kernel_initializer=rnd_uniform,
+        kernel_regularizer=l2_reg,
+    )(x)
+    outputs = layers.Dense(
+        output_shape[0],
+        activation="softmax",
+        bias_initializer=rnd_uniform,
+        bias_regularizer=l2_reg,
+        kernel_initializer=rnd_uniform,
+        kernel_regularizer=l2_reg,
+        name="outputs",
+    )(x)
+
+    model = keras.Model(inputs, outputs)
+
+    ROC = keras.metrics.AUC()
+    model.compile(
+        loss=keras.losses.CosineSimilarity(),
+        optimizer=keras.optimizers.SGD(learning_rate=0.1),
+        metrics=[ROC],
+    )
+    print(model.summary())
+    return model
+
+
+def sep_conv1d(f, ksize, padding="same"):
+    l2_reg = keras.regularizers.l2(l=1e-5)
+    rnd_uniform = keras.initializers.RandomUniform()
+    return layers.SeparableConv1D(
+        f,
+        ksize,
+        padding=padding,
+        activation="elu",
+        bias_regularizer=l2_reg,
+        kernel_regularizer=l2_reg,
+        bias_initializer=rnd_uniform,
+        kernel_initializer=rnd_uniform,
+    )
+
+
+def sepconv1d_block(x, f, ksize, padding="same", count=8):
+    for i in range(count):
+        x = sep_conv1d(f, ksize, padding)(x)
+    return x
+
+
+def reslike(input_shape, output_shape, filters, kernel_size, dense_size):
+    l2_reg = keras.regularizers.l2(l=1e-5)
+    rnd_uniform = keras.initializers.RandomUniform()
+    wavelet_len = pywt.swt_max_level(input_shape[0]) * input_shape[0]
+    inputs = keras.Input(shape=(wavelet_len, 1), name="inputs")
+    x = inputs
+    x = layers.LayerNormalization(axis=[1, 2])(x)
+    ksize = kernel_size
+    f = filters
+    i = 0
+    while ksize > 1:
+        x = sep_conv1d(f, ksize)(x)
+        residual = x
+        x = sepconv1d_block(x, f, ksize, "same", 4)
+        x = layers.Add()([x, residual])
+        x = sep_conv1d(f, ksize, padding="valid")(x)
+        ksize = min(x.shape.as_list()[1:] + [ksize])
+        if ksize > 1:
+            x = layers.AveragePooling1D(pool_size=4)(x)
+        ksize = min(x.shape.as_list()[1:] + [ksize])
+        x = layers.BatchNormalization()(x)
+        # x = layers.Dropout(1.0 / 16.0)(x)
+        f *= 2
+        i += 1
+
+    x = layers.BatchNormalization()(x)
+
+    x = layers.Flatten()(x)
+    x = layers.Dropout(1.0 / 8.0)(x)
+    x = layers.Dense(
+        dense_size,
+        activation="relu",
+        bias_initializer=rnd_uniform,
+        bias_regularizer=l2_reg,
+        kernel_initializer=rnd_uniform,
+        kernel_regularizer=l2_reg,
     )(x)
     outputs = layers.Dense(
         output_shape[0],
@@ -111,7 +166,7 @@ def reslike(input_shape, output_shape, filters, kernel_size, dense_size):
         # loss=keras.losses.KLDivergence(),
         # loss=keras.losses.MeanAbsoluteError(),
         # loss=abs_cat_loss,
-        optimizer=keras.optimizers.SGD(learning_rate=0.1),
+        optimizer=keras.optimizers.SGD(learning_rate=1),
         metrics=[ROC],
     )
     print(model.summary())
