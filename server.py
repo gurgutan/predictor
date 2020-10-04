@@ -104,7 +104,7 @@ class Server(object):
             return None
         closes, times = rates["close"], rates["time"]
         count = len(closes) + 1
-        shift = self.p.datainfo.input_shape[0] + self.p.datainfo.input_shape[1]
+        shift = self.p.datainfo.input_shape[0] #+ self.p.datainfo.input_shape[1]
         results = []
         # вычисляем прогноз
         if self.is_tflite():

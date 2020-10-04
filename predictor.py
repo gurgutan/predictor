@@ -162,7 +162,7 @@ class Predictor(object):
                 trim_approx=True,
                 norm=False,
             )
-            x[k, :, 0] = pywt.coeffs_to_array(coeff)[0][:wavelet_len]
+            x[i, :, 0] = pywt.coeffs_to_array(coeff)[0][:wavelet_len]
 
         # x = np.ndarray(shape=(data_size, in_shape[0], in_shape[1]))
         # for i in tqdm(range(data_size)):
