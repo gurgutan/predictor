@@ -106,6 +106,7 @@ class Server(object):
         input_size = self.p.datainfo.input_shape[0]
         count = len(closes) - input_size + 1
         results = []
+
         # вычисляем прогноз
         if self.is_tflite():
             output_data = self.p.tflite_predict(closes, verbose=verbose)
