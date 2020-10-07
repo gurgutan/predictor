@@ -104,7 +104,7 @@ class Server(object):
             return None
         closes, times = rates["close"], rates["time"]
         input_size = self.p.datainfo.input_shape[0]
-        count = len(closes) - input_size + 1
+        count = len(closes) - input_size
         results = []
 
         # вычисляем прогноз

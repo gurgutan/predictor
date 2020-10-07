@@ -169,16 +169,8 @@ class Predictor(object):
         stride = 1
         shift = self.datainfo.future
         in_shape = self.datainfo.input_shape
-        prices = np.array(prices)
-        prices_diff = np.diff(prices[: -in_shape[0]])
-        std = self.datainfo.x_std
-        bins_count = 16
-        bins = [
-            2 * std / bins_count * (i - bins_count // 2) for i in range(bins_count + 1)
-        ]
-        layer = tf.keras.layers.experimental.preprocessing.Discretization(bins=bins)
-        x = layer(roll(prices_diff, in_shape[0], stride))
-        return x
+        prices_diff = np.diff(np.array(prices)) / self.datainfo.x_std
+        return roll(prices_diff, in_shape[0], stride)
 
     def load_dataset(
         self, tsv_file, count=0, skip=0, batch_size=256, validation_split=0.25
@@ -297,12 +289,12 @@ class Predictor(object):
         shift = (len(x) - 1) / 2.0
         return np.sum(x * np.arange(len(x))) - shift
 
-    def predict(self, opens, verbose=1):
+    def predict(self, prices, verbose=1):
         """
         Вычисление результата для набора
         opens - массив размерности (n, input_size+1)
         """
-        x = self.get_input(opens)
+        x = self.get_input(prices)
         if x is None:
             return None
         y = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
@@ -332,9 +324,9 @@ class Predictor(object):
             #     * self.datainfo.y_std
             # )
             # c = self.mass_center(y[i])
-            low = y[i] - 1
-            high = y[i] + 1
-            result.append((low, high, 1, 1))
+            low = float(y[i, 0] * self.datainfo.y_std)
+            high = float(y[i, 0] * self.datainfo.y_std)
+            result.append((low, high, 0, float(y[i, 0])))
         # logging.debug(
         #     f"y={np.array2string(np.round(y[-1],2), max_line_width=120, separator=' ')}"
         # )
