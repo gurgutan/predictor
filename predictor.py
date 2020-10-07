@@ -22,12 +22,14 @@ from patterns import (
     multicol_conv1d_block,
     dense_block,
     wave_len,
+    lstm_block,
 )
 from datainfo import DatasetInfo
 from tqdm import tqdm
 import logging
 import pydot
 import graphviz
+import sklearn.preprocessing as preprocessing
 
 # import tflite_runtime.interpreter as tflite
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -79,6 +81,7 @@ class Predictor(object):
         self.trained = False
         self.interpreter = None
         self.name = modelname
+        self.Scaler = preprocessing.RobustScaler()
         if modelname == None:
             self.name = "default"
         else:
@@ -144,37 +147,42 @@ class Predictor(object):
         # self.model = multicol_conv1d_block(
         #     input_shape, output_shape, filters, kernel_size, dense_size,
         # )
-        self.model = dense_block(input_shape, output_shape, dense_size)
+        self.model = lstm_block(input_shape, output_shape, dense_size)
         return self.model
+
+    def batch_generator(self, x_train, y_train, data_size, batch_size, sequence_length):
+        while True:
+            x_shape = (batch_size, sequence_length, 1)
+            x_batch = np.zeroes(shape=x_shape, dtype=np.float)
+            y_shape = (batch_size, sequence_length, 1)
+            y_batch = np.zeros(shape=y_shape, dtype=np.float)
+            for i in range(batch_size):
+                idx = np.random.randint(data_size - sequence_length)
+                x_batch[i] = x_train[idx : idx + sequence_length]
+                y_batch[i] = y_train[idx : idx + sequence_length]
+            yield (x_batch, y_batch)
 
     def get_input(self, prices):
         """
         Возвращает входной вектор для сети по массиву prices.
         """
         stride = 1
-        forward = self.datainfo.future
+        shift = self.datainfo.future
         in_shape = self.datainfo.input_shape
-        prices_strided = roll(np.array(prices, dtype="float64"), in_shape[0], stride)
-        data_size = len(prices_strided)
-        w = pywt.Wavelet("rbio3.1")
-        mode = "zero"
-        level = 4
-        wavelet_len = wave_len(in_shape, w, mode)
-        shift = in_shape[0]
-        x = np.ndarray(shape=(data_size, wavelet_len, 1))
-        for i in tqdm(range(data_size)):
-            coeff_prices = pywt.wavedec(
-                prices_strided[i] - prices_strided[i][0],
-                wavelet=w,
-                mode=mode,
-                level=level,
-            )
-            x[k, :, 0] = pywt.coeffs_to_array(coeff_prices)[0][:wavelet_len]
-            # x[k, :, 1] = pywt.coeffs_to_array(coeff_volumes)[0][:wavelet_len]
+        prices = np.array(prices)
+        prices_diff = np.diff(prices[: -in_shape[0]])
+        std = self.datainfo.x_std
+        bins_count = 16
+        bins = [
+            2 * std / bins_count * (i - bins_count // 2) for i in range(bins_count + 1)
+        ]
+        layer = tf.keras.layers.experimental.preprocessing.Discretization(bins=bins)
+        x = layer(roll(prices_diff, in_shape[0], stride))
+        return x
 
-        return x.astype("float64")
-
-    def load_dataset(self, tsv_file, count=0, skip=0):
+    def load_dataset(
+        self, tsv_file, count=0, skip=0, batch_size=256, validation_split=0.25
+    ):
         """Подготовка обучающей выборки (x,y). Тип x и y - numpy.ndarray.
         Аргументы:
         csv_file - файл с ценами формата csv с колонками: 'date','time','open','high','low','close','tickvol','vol','spread'
@@ -186,7 +194,7 @@ class Predictor(object):
         stride = 1  # шаг "нарезки" входных данных
         in_shape = self.datainfo.input_shape
         out_shape = self.datainfo.output_shape
-        forward = self.datainfo.future
+        shift = self.datainfo.future
         in_size = self.datainfo._in_size()
         out_size = self.datainfo._out_size()  # out_shape[0]
         if not path.exists(tsv_file):
@@ -221,72 +229,69 @@ class Predictor(object):
         if count + skip > len(data.index):
             count = len(data.index) - skip
         if skip == 0 and count == 0:
+            times = data["time"]
             open_rates = data["open"]
             vol_rates = data["tickvol"]
         elif skip == 0:
+            times = data["time"][-count:]
             open_rates = data["open"][-count:]
             vol_rates = data["tickvol"][-count:]
         elif count == 0:
+            times = data["time"][:-skip]
             open_rates = data["open"][:-skip]
             vol_rates = data["tickvol"][:-skip]
         else:
+            times = data["time"][:-skip]
             open_rates = data["open"][-count - skip : -skip]
             vol_rates = data["tickvol"][-count - skip : -skip]
         # объемы
         volumes = np.nan_to_num(np.array(vol_rates))
-        volumes_strided = roll(volumes[:-forward], in_shape[0], stride)
+        volumes_strided = roll(volumes[:-shift], in_shape[0], stride)
         # цены
         prices = np.nan_to_num(np.array(open_rates), posinf=0, neginf=0)
-        prices_strided = roll(prices[:-forward], in_shape[0], stride)
-        prices_diff = np.diff(prices)
-        data_size = len(prices_strided)
+        prices_diff = np.diff(prices[: -in_shape[0] - shift])
+        prices_diff_shifted = np.diff(prices[in_shape[0] + shift :])
 
-        # будущие цены
-        forward_prices = roll(prices_diff[in_shape[0] :], forward, stride).sum(axis=1)
+        data_size = len(prices_diff)
+        dataset_len = int((1 - validation_split) * data_size)
+        std = prices_diff.std()
 
-        self.datainfo.x_std = float(prices_strided.std())
-        self.datainfo.y_std = float(forward_prices.std())
+        x = np.reshape(prices_diff[: -in_shape[0] - shift], (-1, 1))
+        y = np.reshape(prices_diff[in_shape[0] + shift :], (-1, 1))
+
+        self.Scaler.fit(x[-8640:, :])
+        x_scaled = self.Scaler.transform(x)
+        y_scaled = self.Scaler.transform(y)
+
+        print(f"min={np.min(x_scaled[-8640:, :])}, max={np.max(x_scaled[-8640:, :])}")
+
+        x_scaled = np.reshape(x_scaled, (-1,))
+        y_scaled = np.reshape(x_scaled, (-1,))
+
+        dataset = tf.keras.preprocessing.timeseries_dataset_from_array(
+            x_scaled[:dataset_len],
+            y_scaled[:dataset_len],
+            sequence_length=in_shape[0],
+            batch_size=batch_size,
+            shuffle=True,
+        )
+
+        val_dataset = tf.keras.preprocessing.timeseries_dataset_from_array(
+            x_scaled[dataset_len:],
+            y_scaled[dataset_len:],
+            sequence_length=in_shape[0],
+            batch_size=batch_size,
+        )
+
+        # x_train = discretize(roll(prices_diff, in_shape[0], stride))
+        # y_train = discretize(roll(prices_diff_shifted, 1, stride))
+
+        self.datainfo.x_std = std
+        self.datainfo.y_std = std
         self.datainfo.save(self.name + ".cfg")
-        # убираем все лишние примеры из обучающей выборки
-        # n = np.arange(data_size - 1)
-        # rnd = np.random.random(data_size - 1)
-        # idx = n[
-        #     (forward_prices > self.datainfo.y_std)
-        #     | (forward_prices < -self.datainfo.y_std)
-        #     | (rnd <= 0.0001)
-        # ]
-        # prices_strided = prices_strided[idx]
-        # forward_prices = forward_prices[idx]
-        data_size = len(prices_strided) - in_shape[0] - forward
-        w = pywt.Wavelet("rbio3.1")
-        mode = "zero"
-        level = 4
-        wavelet_len = wave_len(in_shape, w, mode)
-        shift = in_shape[0]
-        x = np.ndarray(shape=(data_size, wavelet_len, 1))
-        y = np.zeros((data_size, out_shape[0]))
-        k = 0
-        for i in tqdm(range(data_size)):
-            coeff_prices = pywt.wavedec(
-                prices_strided[i] - prices_strided[i][0],
-                wavelet=w,
-                mode=mode,
-                level=level,
-            )
-            x[k, :, 0] = pywt.coeffs_to_array(coeff_prices)[0][:wavelet_len]
-            # x[k, :, 1] = pywt.coeffs_to_array(coeff_volumes)[0][:wavelet_len]
-            y[k] = embed(
-                prices[i + shift + forward] - prices[i + shift],
-                -2 * self.datainfo.y_std,
-                2 * self.datainfo.y_std,
-                out_size,
-            )
-            k += 1
-        x = x[:k]
-        y = y[:k]
-        # v = v[idx]
-        print(f"Загружено {len(x)} примеров")
-        return x.astype("float64"), y.astype("float64")  # , v.astype("float64")
+
+        print(f"Загружено {data_size} примеров")
+        return dataset, val_dataset
 
     def mass_center(self, x):
         shift = (len(x) - 1) / 2.0
@@ -301,36 +306,38 @@ class Predictor(object):
         if x is None:
             return None
         y = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
-        n = np.argmax(y, axis=1)
+        # n = np.argmax(y, axis=1)
         # l1 = np.sum(y, axis=1)
         # for i in range(len(y)):
         #     y[i] /= l1[i]
-        y_n = y[np.arange(len(y)), n]
+        # y_n = y[np.arange(len(y)), n]
         result = []
-        for i in range(len(y_n)):
-            low = (
-                unembed(
-                    n[i],
-                    self.datainfo._y_min() / self.datainfo.y_std,
-                    self.datainfo._y_max() / self.datainfo.y_std,
-                    self.datainfo._out_size(),
-                )
-                * self.datainfo.y_std
-            )
-            high = (
-                unembed(
-                    n[i] + 1,
-                    self.datainfo._y_min() / self.datainfo.y_std,
-                    self.datainfo._y_max() / self.datainfo.y_std,
-                    self.datainfo._out_size(),
-                )
-                * self.datainfo.y_std
-            )
-            c = self.mass_center(y[i])
-            result.append((low, high, float(y_n[i]), c))
-        logging.debug(
-            f"y={np.array2string(np.round(y[-1],2), max_line_width=120, separator=' ')}"
-        )
+        for i in range(len(y)):
+            # low = (
+            #     unembed(
+            #         n[i],
+            #         self.datainfo._y_min() / self.datainfo.y_std,
+            #         self.datainfo._y_max() / self.datainfo.y_std,
+            #         self.datainfo._out_size(),
+            #     )
+            #     * self.datainfo.y_std
+            # )
+            # high = (
+            #     unembed(
+            #         n[i] + 1,
+            #         self.datainfo._y_min() / self.datainfo.y_std,
+            #         self.datainfo._y_max() / self.datainfo.y_std,
+            #         self.datainfo._out_size(),
+            #     )
+            #     * self.datainfo.y_std
+            # )
+            # c = self.mass_center(y[i])
+            low = y[i] - 1
+            high = y[i] + 1
+            result.append((low, high, 1, 1))
+        # logging.debug(
+        #     f"y={np.array2string(np.round(y[-1],2), max_line_width=120, separator=' ')}"
+        # )
         return result
 
     def eval(self, opens):
@@ -402,7 +409,7 @@ class Predictor(object):
         np.random.shuffle(n)
         return x[n].astype("float64"), y[n].astype("float64")
 
-    def train(self, x, y, batch_size, epochs):
+    def train(self, dataset, val_datatset, batch_size, epochs):
         # x, y = self.shuffle_dataset(x, y)
         # Загрузим веса, если они есть
         ckpt = "ckpt/" + self.name + ".ckpt"
@@ -418,10 +425,10 @@ class Predictor(object):
             log_dir=log_dir, histogram_freq=1, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            patience=2 ** 8,
-            min_delta=1e-4,
-            restore_best_weights=True,
+            monitor="loss", patience=2 ** 8, min_delta=1e-4, restore_best_weights=True,
+        )
+        reduceLR = keras.callbacks.ReduceLROnPlateau(
+            monitor="val_loss", factor=0.2, patience=8, min_lr=0.0001
         )
         # backup = tf.keras.callbacks.ex.experimental.BackupAndRestore(backup_dir="backups/")
         backup = keras.callbacks.ModelCheckpoint(
@@ -431,11 +438,11 @@ class Predictor(object):
             save_best_only=True,
         )
         history = self.model.fit(
-            x,
-            y,
+            dataset,
+            validation_data=val_datatset,
             batch_size=batch_size,
             epochs=epochs,
-            validation_split=1.0 / 4.0,
+            # validation_split=1.0 / 4.0,
             shuffle=True,
             use_multiprocessing=True,
             callbacks=[backup, early_stop, tensorboard_link],
@@ -452,18 +459,19 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         input_shape=input_shape,
         output_shape=output_shape,
         predict_size=future,
-        filters=2 ** 6,
+        filters=2 ** 7,
         kernel_size=4,
-        dense_size=2 ** 8,
+        dense_size=2 ** 10,
     )
     keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
-    x, y = p.load_dataset(
+    dataset, val_datatset = p.load_dataset(
         tsv_file=datafile,
+        batch_size=batch_size,
         count=105120,  # таймфреймы за 1*N лет
         skip=11520,  # 40 дней,  # 10.07.20 - 40 дней = 01.06.20
     )
-    if not x is None:
-        history = p.train(x, y, batch_size=batch_size, epochs=epochs)
+    if not dataset is None:
+        history = p.train(dataset, val_datatset, batch_size=batch_size, epochs=epochs)
     else:
         print("Выполнение прервано из-за ошибки входных данных")
 
@@ -476,13 +484,13 @@ if __name__ == "__main__":
         elif param == "--cpu":
             batch_size = 2 ** 12
     train(
-        modelname="models/50",
+        modelname="models/52",
         datafile="datas/EURUSD_M5_20000103_20200710.csv",
-        input_shape=(64, 1),
-        output_shape=(256,),
-        future=8,
+        input_shape=(16, 1),
+        output_shape=(16,),
+        future=1,
         batch_size=batch_size,
-        epochs=2 ** 13,
+        epochs=2 ** 12,
     )
 # Debug
 # Тест загрузки предиктора

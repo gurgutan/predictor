@@ -28,6 +28,34 @@ def wave_len(input_shape, wavelet, mode):
     return pywt.dwt_coeff_len(input_shape[0], filter_len, mode=mode)
 
 
+def lstm_block(input_shape, output_shape, units, count=1):
+    inputs = keras.Input(shape=(input_shape[0], 1), name="inputs")
+    x = inputs
+    for i in range(count - 1):
+        # x = layers.Conv1D(units, 4, input_shape=input_shape, activation="relu")(x)
+        x = layers.LSTM(units, return_sequences=True)(x)
+        # x = layers.BatchNormalization()(x)
+
+    x = layers.LSTM(units, return_sequences=False)(x)
+    x = layers.Dense(32, activation="softsign")(x)
+    x = layers.Flatten()(x)
+    x = layers.Dense(1)(x)
+    outputs = layers.Activation("linear")(x)
+    model = keras.Model(inputs, outputs)
+
+    MAE = keras.metrics.MeanAbsoluteError()
+    MSE = keras.metrics.MeanSquaredError()
+    model.compile(
+        # loss=keras.losses.MeanSquaredError(),
+        loss=keras.losses.MeanAbsoluteError(),
+        # loss=keras.losses.CosineSimilarity(),
+        optimizer=keras.optimizers.Adam(learning_rate=0.0001),
+        metrics=[MSE],
+    )
+    print(model.summary())
+    return model
+
+
 def dense_block(input_shape, output_shape, units, count=3):
     l2_reg = keras.regularizers.l2(l=1e-6)
     wavelet_len = wave_len(input_shape, pywt.Wavelet("rbio3.1"), mode="zero")
@@ -57,7 +85,7 @@ def dense_block(input_shape, output_shape, units, count=3):
 
     model = keras.Model(inputs, outputs)
     AUC = keras.metrics.AUC()
-    MSE = keras.metrics.MeanAbsoluteError()
+    MAE = keras.metrics.MeanAbsoluteError()
     model.compile(
         # loss=keras.losses.CategoricalCrossentropy(),
         loss=keras.losses.CosineSimilarity(),
@@ -65,7 +93,7 @@ def dense_block(input_shape, output_shape, units, count=3):
         # loss=keras.losses.Hinge(),
         # loss=keras.losses.MeanAbsoluteError(),
         optimizer=keras.optimizers.SGD(learning_rate=0.01),
-        metrics=['accuracy'],
+        metrics=[MAE],
     )
     print(model.summary())
     return model

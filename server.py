@@ -103,8 +103,8 @@ class Server(object):
             logger.error(f"Ошибка: пустой список котировок")
             return None
         closes, times = rates["close"], rates["time"]
-        count = len(closes) + 1
-        shift = self.p.datainfo.input_shape[0] + self.p.datainfo.input_shape[1]
+        input_size = self.p.datainfo.input_shape[0]
+        count = len(closes) - input_size + 1
         results = []
         # вычисляем прогноз
         if self.is_tflite():
@@ -115,10 +115,10 @@ class Server(object):
             logger.error(f"Ошибка: не удалось получить прогноз для {times[-1]}")
             return None
         # сформируем результирующий список кортежей для записи в БД
-        for i in range(shift, count):
-            plow, phigh, confidence, center = output_data[i - shift]
-            rdate = int(times[i - 1])
-            rprice = closes[i - 1]
+        for i in range(count):
+            plow, phigh, confidence, center = output_data[i]
+            rdate = int(times[i + input_size])
+            rprice = closes[i + input_size]
             pdate = int(
                 rdate + self.p.datainfo.timeunit * self.p.datainfo.future
             )  # секунды*M5*future
