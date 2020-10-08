@@ -77,7 +77,7 @@ class Server(object):
         rates_count = 0
         while rates_count < self.p.datainfo._in_size() + 1:
             mt5rates = mt5.copy_rates_range(
-                self.symbol, mt5.TIMEFRAME_M5, from_date, dt.datetime.now(tz=timezone)
+                self.symbol, mt5.TIMEFRAME_H1, from_date, dt.datetime.now(tz=timezone)
             )
             if mt5rates is None:
                 logger.error("Ошибка:" + str(mt5.last_error()))
