@@ -77,7 +77,7 @@ class Server(object):
         rates_count = 0
         while rates_count < self.p.datainfo._in_size() + 1:
             mt5rates = mt5.copy_rates_range(
-                self.symbol, mt5.TIMEFRAME_M5, from_date, dt.datetime.now(tz=timezone)
+                self.symbol, mt5.TIMEFRAME_H1, from_date, dt.datetime.now(tz=timezone)
             )
             if mt5rates is None:
                 logger.error("Ошибка:" + str(mt5.last_error()))
@@ -90,7 +90,7 @@ class Server(object):
         return rates
 
     def __get_last_rates__(self, count):
-        mt5rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 0, count)
+        mt5rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_H1, 0, count)
         if mt5rates is None:
             logger.error("Ошибка:" + str(mt5.last_error()))
             return None
@@ -102,16 +102,16 @@ class Server(object):
         if len(rates) == 0:
             logger.error(f"Ошибка: пустой список котировок")
             return None
-        closes, times = rates["close"], rates["time"]
+        opens, times = rates["open"], rates["time"]
         input_size = self.p.datainfo.input_shape[0]
-        count = len(closes) - input_size
+        count = len(opens) - input_size
         results = []
 
         # вычисляем прогноз
         if self.is_tflite():
-            output_data = self.p.tflite_predict(closes, verbose=verbose)
+            output_data = self.p.tflite_predict(opens, verbose=verbose)
         else:
-            output_data = self.p.predict(closes, verbose=verbose)
+            output_data = self.p.predict(opens, verbose=verbose)
         if output_data is None:
             logger.error(f"Ошибка: не удалось получить прогноз для {times[-1]}")
             return None
@@ -119,7 +119,7 @@ class Server(object):
         for i in range(count):
             plow, phigh, confidence, center = output_data[i]
             rdate = int(times[i + input_size])
-            rprice = closes[i + input_size]
+            rprice = opens[i + input_size]
             pdate = int(
                 rdate + self.p.datainfo.timeunit * self.p.datainfo.future
             )  # секунды*M5*future
