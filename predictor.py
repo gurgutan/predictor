@@ -81,7 +81,7 @@ class Predictor(object):
         self.trained = False
         self.interpreter = None
         self.name = modelname
-        self.Scaler = preprocessing.RobustScaler()
+        self.Scaler = preprocessing.StandardScaler()
 
         if modelname == None:
             self.name = "default"
@@ -474,7 +474,7 @@ if __name__ == "__main__":
         elif param == "--cpu":
             batch_size = 2 ** 14
     train(
-        modelname="models/54",
+        modelname="models/55",
         datafile="datas/EURUSD_H1.csv",
         input_shape=(32, 1),
         output_shape=(16,),
