@@ -3,11 +3,13 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.models import Sequential
 from tensorflow.keras import layers
+import tensorflow.keras.layers
 from functools import reduce
 import pywt
 import operator
 
 from rbflayer import RBFLayerExp
+from tensorflow.python.keras.layers.recurrent import LSTM
 
 # tf.compat.v1.disable_eager_execution()
 
@@ -31,13 +33,15 @@ def wave_len(input_shape, wavelet, mode):
 def lstm_block(input_shape, output_shape, units, count=1):
     inputs = keras.Input(shape=(input_shape[0], 1), name="inputs")
     x = inputs
-    for i in range(count - 1):
-        # x = layers.Conv1D(units, 4, input_shape=input_shape, activation="relu")(x)
-        x = layers.LSTM(units, return_sequences=True)(x)
-        # x = layers.BatchNormalization()(x)
+    # for i in range(count - 1):
+    #     x = layers.LSTM(units, return_sequences=True)(x)
+    # x = layers.LSTM(units, return_sequences=False)(x)
 
-    x = layers.LSTM(units, return_sequences=False)(x)
-    x = layers.Dense(32, activation="softsign")(x)
+    forward_layer = LSTM(units, return_sequences=True)
+    backward_layer = LSTM(units, return_sequences=True, go_backwards=True)
+    x = layers.Bidirectional(forward_layer, backward_layer=backward_layer)(x)
+
+    x = layers.Dense(32, activation="softsign",)(x)
     x = layers.Flatten()(x)
     x = layers.Dense(1)(x)
     outputs = layers.Activation("linear")(x)
@@ -49,7 +53,7 @@ def lstm_block(input_shape, output_shape, units, count=1):
         # loss=keras.losses.MeanSquaredError(),
         loss=keras.losses.MeanAbsoluteError(),
         # loss=keras.losses.CosineSimilarity(),
-        optimizer=keras.optimizers.Adam(learning_rate=0.0001),
+        optimizer=keras.optimizers.Adam(learning_rate=0.1),
         metrics=[MSE],
     )
     print(model.summary())

@@ -1,6 +1,6 @@
 import os
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import io
 import numpy as np
 from numpy import linalg
@@ -82,6 +82,7 @@ class Predictor(object):
         self.interpreter = None
         self.name = modelname
         self.Scaler = preprocessing.RobustScaler()
+
         if modelname == None:
             self.name = "default"
         else:
@@ -113,9 +114,9 @@ class Predictor(object):
                 input_shape=input_shape,
                 output_shape=output_shape,
                 predict_size=predict_size,
-                x_std=0.0004,
-                y_std=0.0014,
-                timeunit=300,
+                x_std=0.001,
+                y_std=0.001,
+                timeunit=3600,
             )
         else:
             self.datainfo = DatasetInfo().load(self.name + ".cfg")
@@ -251,11 +252,11 @@ class Predictor(object):
         x = np.reshape(prices_diff[: -in_shape[0] - shift], (-1, 1))
         y = np.reshape(prices_diff[in_shape[0] + shift :], (-1, 1))
 
-        self.Scaler.fit(x[-8640:, :])
+        self.Scaler.fit(x)
         x_scaled = self.Scaler.transform(x)
         y_scaled = self.Scaler.transform(y)
 
-        print(f"min={np.min(x_scaled[-8640:, :])}, max={np.max(x_scaled[-8640:, :])}")
+        print(f"min={np.min(x_scaled)}, max={np.max(x_scaled)}")
 
         x_scaled = np.reshape(x_scaled, (-1,))
         y_scaled = np.reshape(x_scaled, (-1,))
@@ -274,9 +275,6 @@ class Predictor(object):
             sequence_length=in_shape[0],
             batch_size=batch_size,
         )
-
-        # x_train = discretize(roll(prices_diff, in_shape[0], stride))
-        # y_train = discretize(roll(prices_diff_shifted, 1, stride))
 
         self.datainfo.x_std = std
         self.datainfo.y_std = std
@@ -420,7 +418,7 @@ class Predictor(object):
             monitor="loss", patience=2 ** 8, min_delta=1e-4, restore_best_weights=True,
         )
         reduceLR = keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss", factor=0.2, patience=8, min_lr=0.0001
+            monitor="val_loss", factor=0.2, patience=8, min_lr=0.000001
         )
         # backup = tf.keras.callbacks.ex.experimental.BackupAndRestore(backup_dir="backups/")
         backup = keras.callbacks.ModelCheckpoint(
@@ -437,7 +435,7 @@ class Predictor(object):
             # validation_split=1.0 / 4.0,
             shuffle=True,
             use_multiprocessing=True,
-            callbacks=[backup, early_stop, tensorboard_link],
+            callbacks=[backup, early_stop, reduceLR, tensorboard_link],
         )
         self.model.save(self.name + ".h5")
         self.model.save(self.name)
@@ -453,14 +451,14 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         predict_size=future,
         filters=2 ** 7,
         kernel_size=4,
-        dense_size=2 ** 10,
+        dense_size=2 ** 9,
     )
     keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     dataset, val_datatset = p.load_dataset(
         tsv_file=datafile,
         batch_size=batch_size,
-        count=105120,  # таймфреймы за 1*N лет
-        skip=11520,  # 40 дней,  # 10.07.20 - 40 дней = 01.06.20
+        count=8760 * 8,  # таймфреймы за 1*N лет
+        skip=2160,  # в часах
     )
     if not dataset is None:
         history = p.train(dataset, val_datatset, batch_size=batch_size, epochs=epochs)
@@ -474,17 +472,16 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 8
         elif param == "--cpu":
-            batch_size = 2 ** 12
+            batch_size = 2 ** 14
     train(
-        modelname="models/52",
-        datafile="datas/EURUSD_M5_20000103_20200710.csv",
-        input_shape=(16, 1),
+        modelname="models/54",
+        datafile="datas/EURUSD_H1.csv",
+        input_shape=(32, 1),
         output_shape=(16,),
         future=1,
         batch_size=batch_size,
-        epochs=2 ** 12,
+        epochs=2 ** 16,
     )
 # Debug
 # Тест загрузки предиктора
-# TODO Доделать работу с объемами!
 
