@@ -1,12 +1,8 @@
 {
     "dbname": "D:/Dev/Alpari MT5/MQL5/Files/predictions.sqlite",
     "mt5path": "D:/Dev/Alpari MT5/terminal64.exe",
-<<<<<<< HEAD
     "initialdate": "2010-01-01T00:00:00",
-=======
-    "initialdate": "2018-01-01T00:00:00",
->>>>>>> 243e7f8f4217379808d70db5a243b9b1480144a9
-    "modelname": "models/53.h5",
+    "modelname": "models/55.h5",
     "symbol": "EURUSD",
     "delay": 3600
 }
