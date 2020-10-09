@@ -30,16 +30,18 @@ def wave_len(input_shape, wavelet, mode):
     return pywt.dwt_coeff_len(input_shape[0], filter_len, mode=mode)
 
 
-def lstm_block(input_shape, output_shape, units, count=1):
+def lstm_block(input_shape, output_shape, units, count=2):
     inputs = keras.Input(shape=(input_shape[0], 1), name="inputs")
     x = inputs
-    # for i in range(count - 1):
-    #     x = layers.LSTM(units, return_sequences=True)(x)
-    # x = layers.LSTM(units, return_sequences=False)(x)
+    for i in range(count - 1):
+        x = layers.LSTM(units, return_sequences=True)(x)
 
-    forward_layer = LSTM(units, return_sequences=True)
-    backward_layer = LSTM(units, return_sequences=True, go_backwards=True)
-    x = layers.Bidirectional(forward_layer, backward_layer=backward_layer)(x)
+    x = layers.LSTM(units, return_sequences=False)(x)
+
+    # forward_layer = LSTM(units, return_sequences=True)
+    # backward_layer = LSTM(units, return_sequences=True, go_backwards=True)
+    # x = layers.Bidirectional(forward_layer, backward_layer=backward_layer)(x)
+    # x = layers.Dropout(1 / 16)(x)
 
     x = layers.Dense(32, activation="softsign",)(x)
     x = layers.Flatten()(x)
