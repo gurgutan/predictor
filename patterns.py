@@ -7,7 +7,6 @@ import tensorflow.keras.layers
 from functools import reduce
 import pywt
 import operator
-
 from rbflayer import RBFLayerExp
 from tensorflow.python.keras.layers.recurrent import LSTM
 
@@ -35,9 +34,7 @@ def lstm_block(input_shape, output_shape, units, count=2):
     x = inputs
     for i in range(count - 1):
         x = layers.LSTM(units, return_sequences=True)(x)
-
     x = layers.LSTM(units, return_sequences=False)(x)
-
     # forward_layer = LSTM(units, return_sequences=True)
     # backward_layer = LSTM(units, return_sequences=True, go_backwards=True)
     # x = layers.Bidirectional(forward_layer, backward_layer=backward_layer)(x)
@@ -55,7 +52,7 @@ def lstm_block(input_shape, output_shape, units, count=2):
         # loss=keras.losses.MeanSquaredError(),
         loss=keras.losses.MeanAbsoluteError(),
         # loss=keras.losses.CosineSimilarity(),
-        optimizer=keras.optimizers.Adam(learning_rate=0.1),
+        optimizer=keras.optimizers.Adam(learning_rate=0.00001),
         metrics=[MSE],
     )
     print(model.summary())

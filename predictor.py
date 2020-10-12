@@ -30,6 +30,7 @@ import logging
 import pydot
 import graphviz
 import sklearn.preprocessing as preprocessing
+import joblib
 
 # import tflite_runtime.interpreter as tflite
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -100,14 +101,9 @@ class Predictor(object):
             if os.path.isfile(self.name + ".cfg"):
                 os.remove(self.name + ".cfg")
         else:
-            if self.is_tflite():
-                self.interpreter = tf.lite.Interpreter(
-                    model_path=self.name
-                )  # tf.lite.Interpreter(model_path=self.name)
-                self.interpreter.allocate_tensors()
+            self.model = keras.models.load_model(self.name)
+            self.Scaler = joblib.load(self.name + ".scaler")
 
-            else:
-                self.model = keras.models.load_model(self.name)
         self.trained = True
         if not os.path.isfile(self.name + ".cfg"):
             self.datainfo = self.create_datainfo(
@@ -120,13 +116,6 @@ class Predictor(object):
             )
         else:
             self.datainfo = DatasetInfo().load(self.name + ".cfg")
-
-    def is_tflite(self):
-        """
-        Возвращает True, если используется модель tflite, иначе False
-        Определяется по расширению имени модели
-        """
-        return self.name.split(".")[-1] == "tflite"
 
     def create_datainfo(
         self, input_shape, output_shape, predict_size, x_std, y_std, timeunit
@@ -163,15 +152,22 @@ class Predictor(object):
                 y_batch[i] = y_train[idx : idx + sequence_length]
             yield (x_batch, y_batch)
 
-    def get_input(self, prices):
+    def get_input(self, prices, highs, lows):
         """
         Возвращает входной вектор для сети по массиву prices.
         """
         stride = 1
         shift = self.datainfo.future
         in_shape = self.datainfo.input_shape
-        prices_diff = np.diff(np.array(prices)) / self.datainfo.x_std
-        return roll(prices_diff, in_shape[0], stride)
+        prices_diff = np.diff(np.array(prices))
+        x = np.reshape(prices_diff, (-1, 1))
+        x_scaled = self.Scaler.transform(x)
+        x_scaled = np.reshape(x_scaled, (-1,))
+        data = tf.keras.preprocessing.timeseries_dataset_from_array(
+            x_scaled, sequence_length=in_shape[0], batch_size=batch_size,
+        )
+        # return roll(x_scaled, in_shape[0], stride)
+        return data
 
     def load_dataset(
         self, tsv_file, count=0, skip=0, batch_size=256, validation_split=0.25
@@ -221,113 +217,109 @@ class Predictor(object):
             return None, None
         if count + skip > len(data.index):
             count = len(data.index) - skip
+
+        times = data["time"]
+        open_rates = data["open"]
+        high_rates = data["high"]
+        low_rates = data["low"]
+        vol_rates = data["tickvol"]
+
         if skip == 0 and count == 0:
-            times = data["time"]
-            open_rates = data["open"]
-            vol_rates = data["tickvol"]
+            left_bound = 0
+            right_vound = len(times)
         elif skip == 0:
-            times = data["time"][-count:]
-            open_rates = data["open"][-count:]
-            vol_rates = data["tickvol"][-count:]
+            left_bound = -count
+            right_vound = len(times)
         elif count == 0:
-            times = data["time"][:-skip]
-            open_rates = data["open"][:-skip]
-            vol_rates = data["tickvol"][:-skip]
+            left_bound = 0
+            right_bound = -skip
         else:
-            times = data["time"][:-skip]
-            open_rates = data["open"][-count - skip : -skip]
-            vol_rates = data["tickvol"][-count - skip : -skip]
-        # объемы
-        volumes = np.nan_to_num(np.array(vol_rates))
-        volumes_strided = roll(volumes[:-shift], in_shape[0], stride)
-        # цены
-        prices = np.nan_to_num(np.array(open_rates), posinf=0, neginf=0)
-        prices_diff = np.diff(prices[: -in_shape[0] - shift])
-        prices_diff_shifted = np.diff(prices[in_shape[0] + shift :])
+            left_bound = -count - skip
+            right_bound = -skip
 
-        data_size = len(prices_diff)
-        dataset_len = int((1 - validation_split) * data_size)
-        std = prices_diff.std()
+        times = np.array(data["time"])[left_bound:right_bound]
 
-        x = np.reshape(prices_diff[: -in_shape[0] - shift], (-1, 1))
-        y = np.reshape(prices_diff[in_shape[0] + shift :], (-1, 1))
+        opens = np.array(data["open"])[left_bound:right_bound]
+        opens_diff = np.diff(opens[: -in_shape[0] - shift])
 
+        highs = np.array(data["high"])[left_bound:right_bound]
+        highs_diff = np.diff(highs[: -in_shape[0] - shift])
+
+        lows = np.array(data["low"])[left_bound:right_bound]
+        lows_diff = np.diff(lows[: -in_shape[0] - shift])
+
+        vols = np.array(data["tickvol"])[left_bound:right_bound]
+        lows_diff = np.diff(vols[: -in_shape[0] - shift])
+
+        data_size = len(opens_diff)
+        train_size = int((1 - validation_split) * data_size)
+
+        # input_data = np.column_stack((opens_diff, highs_diff, lows_diff))
+        x = opens_diff[: -in_shape[0] - shift]
+        y = opens_diff[in_shape[0] + shift :]
+
+        x_mean = x.mean()
+        x_std = x.std()
+        y_mean = y.mean()
+        y_std = y.std()
+
+        # x_scaled = (x - x_mean) / x_std
+        # y_scaled = (y - y_mean) / y_std
+
+        x = np.reshape(x, (-1, 1))
+        y = np.reshape(y, (-1, 1))
         self.Scaler.fit(x)
         x_scaled = self.Scaler.transform(x)
         y_scaled = self.Scaler.transform(y)
-
-        print(f"min={np.min(x_scaled)}, max={np.max(x_scaled)}")
-
+        joblib.dump(self.Scaler, self.name + ".scaler")
         x_scaled = np.reshape(x_scaled, (-1,))
         y_scaled = np.reshape(x_scaled, (-1,))
 
-        dataset = tf.keras.preprocessing.timeseries_dataset_from_array(
-            x_scaled[:dataset_len],
-            y_scaled[:dataset_len],
+        print(x_mean, x_std)
+
+        train_data = tf.keras.preprocessing.timeseries_dataset_from_array(
+            x_scaled[:train_size],
+            y_scaled[:train_size],
             sequence_length=in_shape[0],
+            sequence_stride=stride,
             batch_size=batch_size,
             shuffle=True,
         )
 
-        val_dataset = tf.keras.preprocessing.timeseries_dataset_from_array(
-            x_scaled[dataset_len:],
-            y_scaled[dataset_len:],
+        val_data = tf.keras.preprocessing.timeseries_dataset_from_array(
+            x_scaled[train_size:],
+            y_scaled[train_size:],
             sequence_length=in_shape[0],
+            sequence_stride=stride,
             batch_size=batch_size,
         )
 
-        self.datainfo.x_std = std
-        self.datainfo.y_std = std
+        self.datainfo.x_std = x_std
+        self.datainfo.y_std = y_std
         self.datainfo.save(self.name + ".cfg")
 
         print(f"Загружено {data_size} примеров")
-        return dataset, val_dataset
+        return train_data, val_data
 
     def mass_center(self, x):
         shift = (len(x) - 1) / 2.0
         return np.sum(x * np.arange(len(x))) - shift
 
-    def predict(self, prices, verbose=1):
+    def predict(self, prices, highs, lows, verbose=1):
         """
         Вычисление результата для набора
         opens - массив размерности (n, input_size+1)
         """
-        x = self.get_input(prices)
+        x = self.get_input(prices, highs, lows)
         if x is None:
             return None
         y = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
-        # n = np.argmax(y, axis=1)
-        # l1 = np.sum(y, axis=1)
-        # for i in range(len(y)):
-        #     y[i] /= l1[i]
-        # y_n = y[np.arange(len(y)), n]
         result = []
         for i in range(len(y)):
-            # low = (
-            #     unembed(
-            #         n[i],
-            #         self.datainfo._y_min() / self.datainfo.y_std,
-            #         self.datainfo._y_max() / self.datainfo.y_std,
-            #         self.datainfo._out_size(),
-            #     )
-            #     * self.datainfo.y_std
-            # )
-            # high = (
-            #     unembed(
-            #         n[i] + 1,
-            #         self.datainfo._y_min() / self.datainfo.y_std,
-            #         self.datainfo._y_max() / self.datainfo.y_std,
-            #         self.datainfo._out_size(),
-            #     )
-            #     * self.datainfo.y_std
-            # )
-            # c = self.mass_center(y[i])
-            low = float(y[i, 0] * self.datainfo.y_std)
-            high = float(y[i, 0] * self.datainfo.y_std)
-            result.append((low, high, 0, float(y[i, 0])))
-        # logging.debug(
-        #     f"y={np.array2string(np.round(y[-1],2), max_line_width=120, separator=' ')}"
-        # )
+            price = float(y[i, 0] * self.datainfo.x_std)
+            high = float(y[i, 0] * self.datainfo.x_std)
+            low = float(y[i, 0] * self.datainfo.x_std)
+            result.append((price, low, high, 0))
         return result
 
     def eval(self, opens):
@@ -338,61 +330,6 @@ class Predictor(object):
             return self.tflite_predict([opens])[0]
         else:
             return self.predict([opens], verbose=0)[0]
-
-    def tflite_predict(self, opens, verbose):
-        # logging.debug("Подготовка входных данных")
-        x = self.get_input(opens)
-        if x is None:
-            return None
-        input_details = self.interpreter.get_input_details()
-        output_details = self.interpreter.get_output_details()
-        y = np.zeros((len(x), 8), dtype="float64")
-        # logging.debug("Вычисление")
-        if verbose == 0:
-            for i in range(len(x)):
-                self.interpreter.set_tensor(
-                    input_details[0]["index"],
-                    np.reshape(x[i], (1, x[i].shape[0], x[i].shape[1], x[i].shape[2])),
-                )
-                self.interpreter.invoke()
-                output = self.interpreter.get_tensor(output_details[0]["index"])
-                y[i] = output
-        else:
-            for i in tqdm(range(len(x))):
-                self.interpreter.set_tensor(
-                    input_details[0]["index"], np.reshape(x[i], (1,) + x[i].shape),
-                )
-                self.interpreter.invoke()
-                output = self.interpreter.get_tensor(output_details[0]["index"])
-                y[i] = output
-        n = np.argmax(y, axis=1)
-        y_n = y[np.arange(len(y)), n]
-        result = []
-        # logging.debug("Формирование списка для записи в БД")
-        for i in range(len(y_n)):
-            low = (
-                unembed(
-                    n[i],
-                    self.datainfo._y_min() / self.datainfo.y_std,
-                    self.datainfo._y_max() / self.datainfo.y_std,
-                    self.datainfo._out_size(),
-                )
-                * self.datainfo.y_std
-            )
-            high = (
-                unembed(
-                    n[i] + 1,
-                    self.datainfo._y_min() / self.datainfo.y_std,
-                    self.datainfo._y_max() / self.datainfo.y_std,
-                    self.datainfo._out_size(),
-                )
-                * self.datainfo.y_std
-            )
-            c = self.mass_center(y[i])
-            result.append((low, high, float(y_n[i]), c))
-            # logging.DEBUG(f"y={y}")
-            print(f"y={y}")
-        return result
 
     def shuffle_dataset(self, x, y):
         n = np.arange(len(x))
@@ -418,7 +355,7 @@ class Predictor(object):
             monitor="loss", patience=2 ** 8, min_delta=1e-4, restore_best_weights=True,
         )
         reduceLR = keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss", factor=0.2, patience=8, min_lr=0.000001
+            monitor="val_loss", factor=0.2, patience=16, min_lr=0.000001
         )
         # backup = tf.keras.callbacks.ex.experimental.BackupAndRestore(backup_dir="backups/")
         backup = keras.callbacks.ModelCheckpoint(
@@ -451,14 +388,15 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         predict_size=future,
         filters=2 ** 7,
         kernel_size=4,
-        dense_size=2 ** 9,
+        dense_size=2 ** 10,
     )
     keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     dataset, val_datatset = p.load_dataset(
         tsv_file=datafile,
         batch_size=batch_size,
-        count=8760 * 8,  # таймфреймы за 1*N лет
+        count=8760 * 8,  # таймфреймы за x*N лет
         skip=2160,  # в часах
+        validation_split=1 / 4,
     )
     if not dataset is None:
         history = p.train(dataset, val_datatset, batch_size=batch_size, epochs=epochs)
@@ -474,7 +412,7 @@ if __name__ == "__main__":
         elif param == "--cpu":
             batch_size = 2 ** 14
     train(
-        modelname="models/55",
+        modelname="models/57",
         datafile="datas/EURUSD_H1.csv",
         input_shape=(32, 1),
         output_shape=(16,),

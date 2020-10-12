@@ -18,10 +18,10 @@ def db_open(dbname):
         + "symbol TEXT,"
         + "model TEXT NOT NULL,"
         + "pdate INTEGER NOT NULL,"
-        + "plow REAL NOT NULL,"
-        + "phigh REAL NOT NULL,"
-        + "confidence REAL NOT NULL,"
-        + "center REAL NOT NULL);"
+        + "price REAL NOT NULL,"
+        + "low REAL NOT NULL,"
+        + "high REAL NOT NULL,"
+        + "confidence REAL NOT NULL)"
     )
     symbol_info_ddl = (
         "CREATE TABLE IF NOT EXISTS symbol_info("
@@ -65,10 +65,10 @@ def db_replace(db, data):
         + "symbol, "
         + "model, "
         + "pdate, "
-        + "plow, "
-        + "phigh, "
-        + "confidence, "
-        + "center) VALUES(?,?,?,?,?,?,?,?,?)",
+        + "price, "
+        + "low, "
+        + "high, "
+        + "confidence) VALUES(?,?,?,?,?,?,?,?,?)",
         data,
     )
     db.commit()
