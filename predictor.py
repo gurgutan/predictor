@@ -23,6 +23,7 @@ from patterns import (
     dense_block,
     wave_len,
     lstm_block,
+    shifted_mse,
 )
 from datainfo import DatasetInfo
 from tqdm import tqdm
@@ -101,7 +102,9 @@ class Predictor(object):
             if os.path.isfile(self.name + ".cfg"):
                 os.remove(self.name + ".cfg")
         else:
-            self.model = keras.models.load_model(self.name)
+            self.model = keras.models.load_model(
+                self.name, custom_objects={"shifted_mse": shifted_mse}
+            )
             self.Scaler = joblib.load(self.name + ".scaler")
 
         self.trained = True
@@ -389,15 +392,15 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         predict_size=future,
         filters=2 ** 7,
         kernel_size=4,
-        dense_size=2 ** 10,
+        dense_size=2 ** 8,
     )
     # keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     dataset, val_datatset = p.load_dataset(
         tsv_file=datafile,
         batch_size=batch_size,
-        count=8760 * 8,  # таймфреймы за x*N лет
-        skip=2160,  # в часах
-        validation_split=1 / 4,
+        count=8760 * 4,  # таймфреймы за x*N лет
+        skip=1440,  # в часах
+        validation_split=1 / 8,
     )
     if not dataset is None:
         history = p.train(dataset, val_datatset, batch_size=batch_size, epochs=epochs)
@@ -413,13 +416,13 @@ if __name__ == "__main__":
         elif param == "--cpu":
             batch_size = 2 ** 14
     train(
-        modelname="models/57",
+        modelname="models/58",
         datafile="datas/EURUSD_H1.csv",
-        input_shape=(32, 1),
+        input_shape=(16, 1),
         output_shape=(16,),
         future=1,
         batch_size=batch_size,
-        epochs=2 ** 16,
+        epochs=2 ** 12,
     )
 # Debug
 # Тест загрузки предиктора

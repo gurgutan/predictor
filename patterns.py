@@ -17,8 +17,11 @@ def reduce_mul(t: tuple) -> int:
     return reduce(operator.mul, self.output_shape)
 
 
-def abs_cat_loss(y_true, y_pred):
-    d = tf.keras.losses.cosine_similarity(y_true, y_pred)
+def shifted_mse(y_true, y_pred):
+    # d = tf.keras.losses.cosine_similarity(y_true, y_pred)
+    y_true_sign = tf.math.sign(y_true)
+    y_pred_sign = tf.math.sign(y_pred)
+    d = tf.keras.losses.mean_squared_error(y_true + y_true_sign, y_pred + y_pred_sign)
     return d  # tf.reduce_mean(d, axis=-1)
 
 
@@ -40,6 +43,7 @@ def lstm_block(input_shape, output_shape, units, count=2):
     # x = layers.Bidirectional(forward_layer, backward_layer=backward_layer)(x)
     # x = layers.Dropout(1 / 16)(x)
 
+    # x = layers.Dense(64, activation="relu",)(x)
     x = layers.Dense(32, activation="softsign",)(x)
     x = layers.Flatten()(x)
     x = layers.Dense(1)(x)
@@ -49,11 +53,12 @@ def lstm_block(input_shape, output_shape, units, count=2):
     MAE = keras.metrics.MeanAbsoluteError()
     MSE = keras.metrics.MeanSquaredError()
     model.compile(
+        loss=shifted_mse,
         # loss=keras.losses.MeanSquaredError(),
-        loss=keras.losses.MeanAbsoluteError(),
+        # loss=keras.losses.MeanAbsoluteError(),
         # loss=keras.losses.CosineSimilarity(),
-        optimizer=keras.optimizers.Adam(learning_rate=0.00001),
-        metrics=[MSE],
+        optimizer=keras.optimizers.Adam(learning_rate=0.01),
+        metrics=[MAE],
     )
     print(model.summary())
     return model
