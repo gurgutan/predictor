@@ -19,8 +19,8 @@ def reduce_mul(t: tuple) -> int:
 
 def shifted_mse(y_true, y_pred):
     # d = tf.keras.losses.cosine_similarity(y_true, y_pred)
-    y_true_sign = tf.math.sign(y_true)
-    y_pred_sign = tf.math.sign(y_pred)
+    y_true_sign = tf.math.softsign(y_true) * 2
+    y_pred_sign = tf.math.softsign(y_pred) * 2
     d = tf.keras.losses.mean_squared_error(y_true + y_true_sign, y_pred + y_pred_sign)
     return d  # tf.reduce_mean(d, axis=-1)
 
@@ -35,6 +35,7 @@ def wave_len(input_shape, wavelet, mode):
 def lstm_block(input_shape, output_shape, units, count=2):
     inputs = keras.Input(shape=(input_shape[0], 1), name="inputs")
     x = inputs
+    x = layers.LayerNormalization(axis=1)(x)
     for i in range(count - 1):
         x = layers.LSTM(units, return_sequences=True)(x)
     x = layers.LSTM(units, return_sequences=False)(x)
@@ -44,7 +45,7 @@ def lstm_block(input_shape, output_shape, units, count=2):
     # x = layers.Dropout(1 / 16)(x)
 
     # x = layers.Dense(64, activation="relu",)(x)
-    x = layers.Dense(32, activation="softsign",)(x)
+    x = layers.Dense(64, activation="softsign",)(x)
     x = layers.Flatten()(x)
     x = layers.Dense(1)(x)
     outputs = layers.Activation("linear")(x)
@@ -57,7 +58,7 @@ def lstm_block(input_shape, output_shape, units, count=2):
         # loss=keras.losses.MeanSquaredError(),
         # loss=keras.losses.MeanAbsoluteError(),
         # loss=keras.losses.CosineSimilarity(),
-        optimizer=keras.optimizers.Adam(learning_rate=0.01),
+        optimizer=keras.optimizers.Adam(learning_rate=0.001),
         metrics=[MAE],
     )
     print(model.summary())

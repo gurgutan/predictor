@@ -243,7 +243,8 @@ class Predictor(object):
         times = np.array(data["time"])[left_bound:right_bound]
 
         opens = np.array(data["open"])[left_bound:right_bound]
-        opens_diff = np.diff(opens[: -in_shape[0] - shift])
+        # opens_diff = np.diff(opens[: -in_shape[0] - shift])
+        opens_diff = opens
 
         highs = np.array(data["high"])[left_bound:right_bound]
         highs_diff = np.diff(highs[: -in_shape[0] - shift])
@@ -265,20 +266,19 @@ class Predictor(object):
         x_std = x.std()
         y_mean = y.mean()
         y_std = y.std()
+        # x = np.reshape(x, (-1, 1))
+        # y = np.reshape(y, (-1, 1))
+        # self.Scaler.fit(x)
+        # x_scaled = self.Scaler.transform(x)
+        # y_scaled = self.Scaler.transform(y)
+        # joblib.dump(self.Scaler, self.name + ".scaler")
+        # x_scaled = np.reshape(x_scaled, (-1,))
+        # y_scaled = np.reshape(x_scaled, (-1,))
 
-        # x_scaled = (x - x_mean) / x_std
-        # y_scaled = (y - y_mean) / y_std
+        # print(x_mean, x_std)
 
-        x = np.reshape(x, (-1, 1))
-        y = np.reshape(y, (-1, 1))
-        self.Scaler.fit(x)
-        x_scaled = self.Scaler.transform(x)
-        y_scaled = self.Scaler.transform(y)
-        joblib.dump(self.Scaler, self.name + ".scaler")
-        x_scaled = np.reshape(x_scaled, (-1,))
-        y_scaled = np.reshape(x_scaled, (-1,))
-
-        print(x_mean, x_std)
+        x_scaled = x
+        y_scaled = y
 
         train_data = tf.keras.preprocessing.timeseries_dataset_from_array(
             x_scaled[:train_size],
@@ -421,7 +421,7 @@ if __name__ == "__main__":
         output_shape=(16,),
         future=1,
         batch_size=batch_size,
-        epochs=2 ** 12,
+        epochs=2 ** 14,
     )
 # Debug
 # Тест загрузки предиктора
