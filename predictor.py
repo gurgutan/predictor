@@ -166,10 +166,10 @@ class Predictor(object):
         x = np.reshape(prices_diff, (-1, 1))
         x_scaled = self.Scaler.transform(x)
         x_scaled = np.reshape(x_scaled, (-1,))
-        data = tf.keras.preprocessing.timeseries_dataset_from_array(
-            x_scaled, sequence_length=in_shape[0], batch_size=batch_size,
-        )
-        # return roll(x_scaled, in_shape[0], stride)
+        # data = tf.keras.preprocessing.timeseries_dataset_from_array(
+        #     x_scaled, sequence_length=in_shape[0]
+        # )
+        return roll(x_scaled, in_shape[0], stride)
         return data
 
     def load_dataset(
@@ -317,11 +317,12 @@ class Predictor(object):
         if x is None:
             return None
         y = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
+        y = self.Scaler.inverse_transform(y)
         result = []
         for i in range(len(y)):
-            price = float(y[i, 0] * self.datainfo.x_std)
-            high = float(y[i, 0] * self.datainfo.x_std)
-            low = float(y[i, 0] * self.datainfo.x_std)
+            price = float(y[i, 0])
+            high = float(y[i, 0])
+            low = float(y[i, 0])
             result.append((price, low, high, 0))
         return result
 
@@ -393,7 +394,7 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         kernel_size=4,
         dense_size=2 ** 8,
     )
-    keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
+    # keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     dataset, val_datatset = p.load_dataset(
         tsv_file=datafile,
         batch_size=batch_size,
