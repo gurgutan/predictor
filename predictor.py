@@ -164,13 +164,12 @@ class Predictor(object):
         in_shape = self.datainfo.input_shape
         prices_diff = np.diff(np.array(prices))
         x = np.reshape(prices_diff, (-1, 1))
-        x_scaled = self.Scaler.transform(x)
-        x_scaled = np.reshape(x_scaled, (-1,))
+        x_scaled = np.reshape(self.Scaler.transform(x), (-1,))
         # data = tf.keras.preprocessing.timeseries_dataset_from_array(
         #     x_scaled, sequence_length=in_shape[0]
         # )
+        # return data
         return roll(x_scaled, in_shape[0], stride)
-        return data
 
     def load_dataset(
         self, tsv_file, count=0, skip=0, batch_size=256, validation_split=0.25
@@ -243,8 +242,7 @@ class Predictor(object):
         times = np.array(data["time"])[left_bound:right_bound]
 
         opens = np.array(data["open"])[left_bound:right_bound]
-        # opens_diff = np.diff(opens[: -in_shape[0] - shift])
-        opens_diff = opens
+        opens_diff = np.diff(opens[: -in_shape[0] - shift])
 
         highs = np.array(data["high"])[left_bound:right_bound]
         highs_diff = np.diff(highs[: -in_shape[0] - shift])
@@ -266,19 +264,18 @@ class Predictor(object):
         x_std = x.std()
         y_mean = y.mean()
         y_std = y.std()
-        # x = np.reshape(x, (-1, 1))
-        # y = np.reshape(y, (-1, 1))
-        # self.Scaler.fit(x)
-        # x_scaled = self.Scaler.transform(x)
-        # y_scaled = self.Scaler.transform(y)
-        # joblib.dump(self.Scaler, self.name + ".scaler")
-        # x_scaled = np.reshape(x_scaled, (-1,))
-        # y_scaled = np.reshape(x_scaled, (-1,))
-
+        x = np.reshape(x, (-1, 1))
+        y = np.reshape(y, (-1, 1))
+        self.Scaler.fit(x)
+        x_scaled = self.Scaler.transform(x)
+        y_scaled = self.Scaler.transform(y)
+        joblib.dump(self.Scaler, self.name + ".scaler")
+        x_scaled = np.reshape(x_scaled, (-1,))
+        y_scaled = np.reshape(y_scaled, (-1,))
         # print(x_mean, x_std)
 
-        x_scaled = x
-        y_scaled = y
+        # x_scaled = opens[: -in_shape[0] - shift]
+        # y_scaled = opens[in_shape[0] + shift :]
 
         train_data = tf.keras.preprocessing.timeseries_dataset_from_array(
             x_scaled[:train_size],
@@ -392,7 +389,7 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         predict_size=future,
         filters=2 ** 7,
         kernel_size=4,
-        dense_size=2 ** 8,
+        dense_size=2 ** 10,
     )
     # keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     dataset, val_datatset = p.load_dataset(
