@@ -20,9 +20,10 @@ def reduce_mul(t: tuple) -> int:
 def shifted_mse(y_true, y_pred):
     # d = tf.keras.losses.cosine_similarity(y_true, y_pred)
     mse = tf.keras.losses.mean_squared_error
-    y_true_sign = tf.math.softsign(y_true)
-    y_pred_sign = tf.math.softsign(y_pred)
-    d = mse(y_true, y_pred) + mse(y_true_sign, y_pred_sign)
+    mae = keras.losses.mean_absolute_error
+    y_true_sign = tf.math.softsign(4 * y_true)
+    y_pred_sign = tf.math.softsign(4 * y_pred)
+    d = mse(y_true, y_pred) * mae(y_true_sign, y_pred_sign)
     return d  # tf.reduce_mean(d, axis=-1)
 
 
@@ -33,21 +34,30 @@ def wave_len(input_shape, wavelet, mode):
     return pywt.dwt_coeff_len(input_shape[0], filter_len, mode=mode)
 
 
-def lstm_block(input_shape, output_shape, units, count=2):
-    inputs = keras.Input(shape=(input_shape[0], 1), name="inputs")
+def lstm_block(input_shape, output_shape, units=64, count=2):
+    num_tokens = 16
+    inputs = keras.Input(shape=(input_shape[0], num_tokens), name="inputs")
     x = inputs
-    # x = layers.LayerNormalization(axis=1)(x)
+    # x = layers.LayerNormalization(axis=[1, 2])(x)
+    # branch1 = branch2 = x
+    # for i in range(count - 1):
+    #     branch1 = layers.GRU(units, return_sequences=True)(branch1)
+    #     branch2 = layers.Conv1D(units, 4, padding="same", activation="relu")(branch2)
+
+    # x = layers.Multiply()([branch1, branch2])
+
     for i in range(count - 1):
         x = layers.LSTM(units, return_sequences=True)(x)
     x = layers.LSTM(units, return_sequences=False)(x)
+
     # forward_layer = LSTM(units, return_sequences=True)
     # backward_layer = LSTM(units, return_sequences=True, go_backwards=True)
     # x = layers.Bidirectional(forward_layer, backward_layer=backward_layer)(x)
     # x = layers.Dropout(1 / 16)(x)
 
-    # x = layers.Dense(64, activation="relu",)(x)
-    x = layers.Dense(128, activation="softsign",)(x)
-    # x = layers.Flatten()(x)
+    x = layers.Dense(32, activation="softsign")(x)
+    x = layers.Flatten()(x)
+    # x = layers.Dropout(1 / 4)(x)
     x = layers.Dense(1)(x)
     outputs = layers.Activation("linear")(x)
     model = keras.Model(inputs, outputs)
@@ -59,7 +69,7 @@ def lstm_block(input_shape, output_shape, units, count=2):
         # loss=keras.losses.MeanSquaredError(),
         # loss=keras.losses.MeanAbsoluteError(),
         # loss=keras.losses.CosineSimilarity(),
-        optimizer=keras.optimizers.Adam(learning_rate=0.01),
+        optimizer=keras.optimizers.Adam(learning_rate=0.1),
         metrics=[MAE],
     )
     print(model.summary())

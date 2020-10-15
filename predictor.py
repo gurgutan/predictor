@@ -115,7 +115,7 @@ class Predictor(object):
                 predict_size=predict_size,
                 x_std=0.001,
                 y_std=0.001,
-                timeunit=3600,
+                timeunit=300 * 8,
             )
         else:
             self.datainfo = DatasetInfo().load(self.name + ".cfg")
@@ -172,7 +172,7 @@ class Predictor(object):
         return roll(x_scaled, in_shape[0], stride)
 
     def load_dataset(
-        self, tsv_file, count=0, skip=0, batch_size=256, validation_split=0.25
+        self, tsv_file, count=0, skip=0, batch_size=256, validation_split=0.25,
     ):
         """Подготовка обучающей выборки (x,y). Тип x и y - numpy.ndarray.
         Аргументы:
@@ -242,38 +242,48 @@ class Predictor(object):
         times = np.array(data["time"])[left_bound:right_bound]
 
         opens = np.array(data["open"])[left_bound:right_bound]
-        opens_diff = np.diff(opens[: -in_shape[0] - shift])
+        opens_diff = np.diff(opens)
 
         highs = np.array(data["high"])[left_bound:right_bound]
-        highs_diff = np.diff(highs[: -in_shape[0] - shift])
+        highs_diff = np.diff(highs)
 
         lows = np.array(data["low"])[left_bound:right_bound]
-        lows_diff = np.diff(lows[: -in_shape[0] - shift])
+        lows_diff = np.diff(lows)
 
         vols = np.array(data["tickvol"])[left_bound:right_bound]
-        lows_diff = np.diff(vols[: -in_shape[0] - shift])
+        lows_diff = np.diff(vols)
 
-        data_size = len(opens_diff)
-        train_size = int((1 - validation_split) * data_size)
-
+        word_size = 12
         # input_data = np.column_stack((opens_diff, highs_diff, lows_diff))
-        x = opens_diff[: -in_shape[0] - shift]
-        y = opens_diff[in_shape[0] + shift :]
+        x = opens_diff[1 : -(in_shape[0] + shift) * word_size]
+        y = opens_diff[1 + (in_shape[0] + shift) * word_size :]
+
+        data_size = len(x) // word_size
+        train_size = int((1 - validation_split) * data_size)
 
         x_mean = x.mean()
         x_std = x.std()
         y_mean = y.mean()
         y_std = y.std()
-        x = np.reshape(x, (-1, 1))
-        y = np.reshape(y, (-1, 1))
+        x = np.reshape(x[: data_size * word_size], (data_size, word_size))
+        y = np.reshape(y[: data_size * word_size], (data_size, word_size))
         self.Scaler.fit(x)
-        x_scaled = self.Scaler.transform(x)
-        y_scaled = self.Scaler.transform(y)
+        x = self.Scaler.transform(x)
+        y = self.Scaler.transform(y)
         joblib.dump(self.Scaler, self.name + ".scaler")
-        x_scaled = np.reshape(x_scaled, (-1,))
-        y_scaled = np.reshape(y_scaled, (-1,))
-        # print(x_mean, x_std)
 
+        left_bound = -7
+        right_bound = 7
+        discretize = tf.keras.layers.experimental.preprocessing.Discretization(
+            bins=[float(i/2) for i in range(left_bound, right_bound + 1)]
+        )
+        encode = tf.keras.layers.experimental.preprocessing.CategoryEncoding(
+            max_tokens=right_bound - left_bound + 2, output_mode="count"
+        )
+        x_scaled = encode(discretize(x))
+        y_scaled = y.sum(axis=1)
+
+        # print(x_mean, x_std)
         # x_scaled = opens[: -in_shape[0] - shift]
         # y_scaled = opens[in_shape[0] + shift :]
 
@@ -356,7 +366,7 @@ class Predictor(object):
             monitor="loss", patience=2 ** 8, min_delta=1e-4, restore_best_weights=True,
         )
         reduceLR = keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss", factor=0.2, patience=16, min_lr=0.000001
+            monitor="val_loss", factor=0.2, patience=16, min_lr=0.00001
         )
         # backup = tf.keras.callbacks.ex.experimental.BackupAndRestore(backup_dir="backups/")
         backup = keras.callbacks.ModelCheckpoint(
@@ -381,7 +391,9 @@ class Predictor(object):
         return history
 
 
-def train(modelname, datafile, input_shape, output_shape, future, batch_size, epochs):
+def train(
+    modelname, datafile, input_shape, output_shape, future, batch_size, epochs,
+):
     p = Predictor(
         modelname=modelname,
         input_shape=input_shape,
@@ -389,15 +401,15 @@ def train(modelname, datafile, input_shape, output_shape, future, batch_size, ep
         predict_size=future,
         filters=2 ** 7,
         kernel_size=4,
-        dense_size=2 ** 10,
+        dense_size=2 ** 9,
     )
-    # keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
+    keras.utils.plot_model(p.model, show_shapes=True, to_file=modelname + ".png")
     dataset, val_datatset = p.load_dataset(
         tsv_file=datafile,
         batch_size=batch_size,
-        count=8760 * 4,  # таймфреймы за x*N лет
-        skip=1440,  # в часах
-        validation_split=1 / 8,
+        count=12 * 24 * 365 * 4,  # таймфреймы за x*N лет
+        skip=12 * 24 * 90,  # в часах
+        validation_split=1 / 4,
     )
     if not dataset is None:
         history = p.train(dataset, val_datatset, batch_size=batch_size, epochs=epochs)
@@ -411,11 +423,11 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 8
         elif param == "--cpu":
-            batch_size = 2 ** 14
+            batch_size = 2 ** 15
     train(
-        modelname="models/58",
-        datafile="datas/EURUSD_H1.csv",
-        input_shape=(16, 1),
+        modelname="models/59",
+        datafile="datas/EURUSD_M5_20000103_20200710.csv",
+        input_shape=(16,),
         output_shape=(16,),
         future=1,
         batch_size=batch_size,
