@@ -2,7 +2,12 @@
     "dbname": "D:/Dev/Alpari MT5/MQL5/Files/predictions.sqlite",
     "mt5path": "D:/Dev/Alpari MT5/terminal64.exe",
     "initialdate": "2018-01-01T00:00:00",
-    "modelname": "models/58.h5",
+    "modelname": "models/trendencoder.h5",
     "symbol": "EURUSD",
-    "delay": 300
+    "timeunit": 3600,
+    "delay": 300,
+    "input_width": 64,
+    "label_width": 1,
+    "sample_width": 1,
+    "shift": 1
 }

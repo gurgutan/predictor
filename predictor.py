@@ -23,7 +23,7 @@ class Predictor(object):
         model,
         input_width,
         label_width,
-        sample_width,
+        sample_width=1,
         shift=1,
         train_ratio=0.8,
         val_ratio=0.1,
@@ -45,7 +45,14 @@ class Predictor(object):
                 val_ratio=val_ratio,
                 test_ratio=test_ratio,
             )
-        self.model = model
+        if type(model) == str:
+            self.load_model(model)
+        elif type(model) == tf.python.keras.engine.functional.Functional:
+            self.model = model
+        else:
+            print(
+                "Ошибка загрузки модели модели. Параметр model должен быть либо строкой, либо моделью keras"
+            )
 
     def load_model(self, filename):
         # self.model = keras.models.load_model(self.name, custom_objects={"shifted_mse": shifted_mse})
@@ -91,11 +98,10 @@ class Predictor(object):
         )
         end_fit_time = datetime.datetime.now()
         self.print_model()
-
         self.model.save("models/" + self.model.name + ".h5")
         self.model.save("models/" + self.model.name)
         print(
-            f"Начало обучения: {start_fit_time}, окончание: {end_fit_time}, общее время: {end_fit_time-start_fit_time}"
+            f"Начало: {start_fit_time} конец: {end_fit_time} время: {end_fit_time-start_fit_time}"
         )
         return history
 
@@ -134,10 +140,10 @@ if __name__ == "__main__":
     sample_width = 1
     input_width = 32
     sections = int(math.log2(input_width))
-    # model = spectral((64, 1), 256, width=6, depth=4)
-    # model =   multi_dense((64, sample_width), 256, 16)
     model = trend_encoder((input_width, sample_width), units=2 ** 9, sections=sections)
     # model = lstm_block((input_width, sample_width), units=2 ** 9, count=2)
+    # model = spectral((64, 1), 256, width=6, depth=4)
+    # model =   multi_dense((64, sample_width), 256, 16)
     predictor = Predictor(
         datafile="datas/EURUSD_H1 copy.csv",
         model=model,

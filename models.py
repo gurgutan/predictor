@@ -85,17 +85,7 @@ def trend_encoder(input_shape, units, sections, train=True):
         )(x[i])
         for i in range(sections + 1)
     ]
-    # x = [AveragePooling1D(pool_size=2 ** i)(x) for i in range(sections)]
-    # x = [Lambda(lambda z: z * (2 ** i))(x[i]) for i in range(sections)]
     x = [Flatten()(x[i]) for i in range(sections + 1)]
-    # x = [
-    #     Dense(16, "softsign", bias_regularizer=l2, kernel_regularizer=l2)(x[i])
-    #     for i in range(sections)
-    # ]
-    # x = [
-    #     Dense(4, "softsign", bias_regularizer=l2, kernel_regularizer=l2)(x[i])
-    #     for i in range(sections)
-    # ]
     x = Concatenate()(x)
     x = Dense(units, "softsign", bias_regularizer=l2, kernel_regularizer=l2)(x)
     x = Dropout(1 / 4)(x)

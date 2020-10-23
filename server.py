@@ -30,9 +30,13 @@ class Server(object):
             self.initialdate = dt.datetime.fromisoformat(data["initialdate"])
             self.modelname = data["modelname"]  # полное имя модели (с путем)
             self.symbol = data["symbol"]  # символ инструмента
+            self.timeunit = data["timeunit"]
             self.mt5path = data["mt5path"]
-            # self.timeframe = int(data["timeframe"])  # тайм-фрэйм в секундах
             self.delay = data["delay"]  # задержка в секундах цикла сервера
+            self.input_width = data["input_width"]
+            self.label_width = data["label_width"]
+            self.sample_width = data["sample_width"]
+            self.shift = data["shift"]
         if self.__init_db__() and self.__init_mt5__() and self.__init_predictor__():
             self.ready = True
         else:
@@ -65,17 +69,21 @@ class Server(object):
 
     def __init_predictor__(self):
         logger.info("Загрузка и инициализация модели '%s'" % self.modelname)
-        self.p = Predictor(modelname=self.modelname)
-        if not self.p.trained:
-            logger.error("Ошибка инициализации модели '%s'" % self.modelname)
-            return False
+        self.p = Predictor(
+            datafile=None,
+            model=self.modelname,
+            input_width=self.input_width,
+            label_width=self.label_width,
+            sample_width=self.sample_width,
+            shift=self.shift,
+        )
         return True
 
     def __get_rates_from_date__(self, from_date):
         # установим таймзону в UTC
         timezone = pytz.timezone("Etc/UTC")
         rates_count = 0
-        while rates_count < self.p.datainfo._in_size() + 1:
+        while rates_count < self.input_width + 1:
             mt5rates = mt5.copy_rates_range(
                 self.symbol, mt5.TIMEFRAME_H1, from_date, dt.datetime.now(tz=timezone)
             )
@@ -83,7 +91,7 @@ class Server(object):
                 logger.error("Ошибка:" + str(mt5.last_error()))
                 return None
             rates_count = len(mt5rates)
-            if rates_count < self.p.datainfo._in_size() + 1:
+            if rates_count < self.input_width + 1:
                 from_date = from_date - dt.timedelta(days=1)
         rates = pd.DataFrame(mt5rates)
         logger.debug("Получено " + str(len(rates)) + " котировок")
@@ -99,41 +107,28 @@ class Server(object):
         return rates
 
     def compute(self, rates, verbose=0):
-        if len(rates) == 0:
-            logger.error(f"Ошибка: пустой список котировок")
-            return None
-        times, opens, highs, lows = (
-            rates["time"],
-            rates["open"],
-            rates["high"],
-            rates["low"],
-        )
-        input_size = self.p.datainfo.input_shape[0]
-        count = len(opens) - input_size
+        assert len(rates) != 0, f"Ошибка: пустой список котировок"
+        times, opens = rates["time"], rates["open"]
+        count = len(opens) - self.input_width
         results = []
-
         # вычисляем прогноз
-        output_data = self.p.predict(opens, highs, lows, verbose=verbose)
-        if output_data is None:
-            logger.error(f"Ошибка: не удалось получить прогноз для {times[-1]}")
-            return None
+        output_data = self.p.predict(opens, verbose=verbose)
         # сформируем результирующий список кортежей для записи в БД
         for i in range(count):
-            price, low, high, confidence = output_data[i]
-            rdate = int(times[i + input_size])
-            rprice = opens[i + input_size]
-            pdate = int(
-                rdate + self.p.datainfo.timeunit * self.p.datainfo.future
-            )  # секунды*M5*future
+            rdate = int(times[i + self.input_width])
+            rprice = opens[i + self.input_width]
+            pdate = int(rdate + self.timeunit * self.shift)  # секунды*shift
+            price = output_data[i]
+            confidence = 0
             db_row = (
                 rdate,
                 round(rprice, 8),
                 self.symbol,
-                self.p.name,
+                self.modelname,
                 pdate,
                 round(rprice + price, 8),
-                round(rprice + low, 8),
-                round(rprice + high, 8),
+                round(rprice + price, 8),
+                round(rprice + price, 8),
                 round(confidence, 8),
             )
             results.append(db_row)
@@ -143,7 +138,7 @@ class Server(object):
         from_date = self.initialdate
         # определяем "крайнюю" дату для последующих вычислений
         date = dbcommon.db_get_lowdate(self.db)
-        delta = dt.timedelta(days=2)  # за 4 дня до
+        delta = dt.timedelta(days=2)
         # delta = dt.timedelta(minutes=(self.p.datainfo._in_size() + 1) * 5)
         if not date is None:
             from_date = date - delta

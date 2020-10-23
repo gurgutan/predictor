@@ -103,12 +103,14 @@ class Dataloader:
         return inputs, labels
 
     def shift_to_zero(self, data):
-        data = tf.math.subtract(data, data[:, 0:1, :]) # сдвиг начального значения в ноль
-        data = data * 100000    # масштабирование 
+        data = tf.math.subtract(
+            data, data[:, 0:1, :]
+        )  # сдвиг начального значения в ноль
+        data = data * 100000  # масштабирование
         return data
 
-    def make_dataset(self, data, verbose=1):
-        data = self.transform(data, verbose=0)
+    def make_dataset(self, data, verbose=0):
+        data = self.transform(data, verbose=verbose)
         ds = tf.keras.preprocessing.timeseries_dataset_from_array(
             data=data,
             targets=None,
@@ -151,7 +153,7 @@ class Dataloader:
 
     def inverse_transofrm(self, data):
         # output = data * self.data_std + self.data_mean
-        output = data
+        output = data.numpy()
         return output
 
     @property
