@@ -28,12 +28,14 @@ class Predictor(object):
         train_ratio=0.8,
         val_ratio=0.1,
         test_ratio=0.1,
+        batch_size=256,
     ):
         self.dataloader = Dataloader(
             input_width=input_width,
             label_width=label_width,
             sample_width=sample_width,
             shift=shift,
+            batch_size=batch_size,
         )
         if not datafile is None:
             self.dataloader.load(
@@ -55,22 +57,28 @@ class Predictor(object):
         self.model.summary()
 
     def fit(self, batch_size=256, epochs=8):
-
+        start_fit_time = datetime.datetime.now()
         ckpt = "ckpt/" + self.model.name + ".ckpt"
         try:
             self.model.load_weights(ckpt)
             print("Загружены веса последней контрольной точки " + self.model.name)
         except Exception as e:
             pass
-        log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y_%m_%d-%H%M%S")
+        log_dir = "logs/fit/" + start_fit_time.strftime("%Y_%m_%d-%H_%M_%S")
         tensorboard_link = keras.callbacks.TensorBoard(
             log_dir=log_dir, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
-            monitor="loss", patience=64, min_delta=1e-4, restore_best_weights=True,
+            monitor="val_loss",
+            patience=2 ** 10,
+            min_delta=1e-5,
+            restore_best_weights=True,
         )
         backup = keras.callbacks.ModelCheckpoint(
-            filepath=ckpt, monitor="loss", save_weights_only=True, save_best_only=True,
+            filepath=ckpt,
+            monitor="val_loss",
+            save_weights_only=True,
+            save_best_only=True,
         )
         history = self.model.fit(
             self.dataloader.train,
@@ -81,9 +89,14 @@ class Predictor(object):
             use_multiprocessing=True,
             callbacks=[backup, early_stop, tensorboard_link],
         )
+        end_fit_time = datetime.datetime.now()
         self.print_model()
+
         self.model.save("models/" + self.model.name + ".h5")
         self.model.save("models/" + self.model.name)
+        print(
+            f"Начало обучения: {start_fit_time}, окончание: {end_fit_time}, общее время: {end_fit_time-start_fit_time}"
+        )
         return history
 
     def evaluate(self):
@@ -96,6 +109,17 @@ class Predictor(object):
         result = self.dataloader.make_output(y)
         return result
 
+    def iterate(self, data, steps=4):
+        results = []
+        data = data[-self.dataloader.input_width :]
+        inputs = self.dataloader.make_input(data)
+        for i in range(steps):
+            outputs = self.model(inputs)
+            data = np.append(data, float(outputs[0]))[-self.dataloader.input_width :]
+            inputs = self.dataloader.make_input(data)
+            results += [float(outputs[0])]
+        return results
+
 
 if __name__ == "__main__":
     batch_size = 2 ** 10
@@ -103,19 +127,19 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 8
         elif param == "--cpu":
-            batch_size = 2 ** 14
+            batch_size = 2 ** 15
         else:
-            batch_size = 2 ** 10
+            batch_size = 2 ** 12
 
     sample_width = 1
     input_width = 32
     sections = int(math.log2(input_width))
     # model = spectral((64, 1), 256, width=6, depth=4)
     # model =   multi_dense((64, sample_width), 256, 16)
-    model = trend_encoder((input_width, sample_width), units=2 ** 10, sections=sections)
+    model = trend_encoder((input_width, sample_width), units=2 ** 9, sections=sections)
     # model = lstm_block((input_width, sample_width), units=2 ** 9, count=2)
     predictor = Predictor(
-        datafile="datas/EURUSD_H1.csv",
+        datafile="datas/EURUSD_H1 copy.csv",
         model=model,
         input_width=input_width,
         label_width=1,
@@ -124,7 +148,8 @@ if __name__ == "__main__":
         train_ratio=0.8,
         val_ratio=0.1,
         test_ratio=0.1,
+        batch_size=batch_size,
     )
-    history = predictor.fit(batch_size=batch_size, epochs=2 ** 10)
+    history = predictor.fit(batch_size=batch_size, epochs=2 ** 16)
     perfomance = predictor.evaluate()
 

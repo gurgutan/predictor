@@ -71,54 +71,49 @@ def lstm_autoencoder(input_shape, units):
     return model
 
 
-def trend_encoder(input_shape, units, sections):
-    l2_reg = keras.regularizers.l2(l=1e-6)
-    inputs = Input(shape=input_shape)
+def trend_encoder(input_shape, units, sections, train=True):
+    l2 = keras.regularizers.l2(l=1e-6)
+    inputs = Input(shape=input_shape, name="inputs")
+    width = 2 ** sections
     x = inputs
-    x = Lambda(lambda x: x[:, -(2 ** sections) :, :])(x)
-    x = [AveragePooling1D(pool_size=2 ** i)(x) for i in range(sections)]
-    x = [Lambda(lambda z: z * (2 ** i))(x[i]) for i in range(sections)]
-    x = [Flatten()(x[i]) for i in range(sections)]
+    x = Lambda(lambda z: z[:, -width:, :])(x)
+    # x = [x[i] for i in range(sections + 1)]
+    x = [Lambda(lambda z: z[:, -(2 ** i) :, :])(x) for i in range(sections + 1)]
     x = [
-        Dense(
-            units=256,
-            activation="relu",
-            bias_regularizer=l2_reg,
-            kernel_regularizer=l2_reg,
+        LocallyConnected1D(
+            filters=8, kernel_size=2 ** i, strides=2 ** i, activation="relu"
         )(x[i])
-        for i in range(sections)
+        for i in range(sections + 1)
     ]
-    x = [
-        Dense(
-            units=64,
-            activation="relu",
-            bias_regularizer=l2_reg,
-            kernel_regularizer=l2_reg,
-        )(x[i])
-        for i in range(sections)
-    ]
+    # x = [AveragePooling1D(pool_size=2 ** i)(x) for i in range(sections)]
+    # x = [Lambda(lambda z: z * (2 ** i))(x[i]) for i in range(sections)]
+    x = [Flatten()(x[i]) for i in range(sections + 1)]
+    # x = [
+    #     Dense(16, "softsign", bias_regularizer=l2, kernel_regularizer=l2)(x[i])
+    #     for i in range(sections)
+    # ]
+    # x = [
+    #     Dense(4, "softsign", bias_regularizer=l2, kernel_regularizer=l2)(x[i])
+    #     for i in range(sections)
+    # ]
     x = Concatenate()(x)
-    # x = Flatten()(x)
-    x = Dense(
-        units, activation="softmax", bias_regularizer=l2_reg, kernel_regularizer=l2_reg,
-    )(x)
-    x = Dense(
-        256, activation="softsign", bias_regularizer=l2_reg, kernel_regularizer=l2_reg,
-    )(x)
-    x = Dense(
-        64, activation="softsign", bias_regularizer=l2_reg, kernel_regularizer=l2_reg,
-    )(x)
+    x = Dense(units, "softsign", bias_regularizer=l2, kernel_regularizer=l2)(x)
     x = Dropout(1 / 4)(x)
+    x = Dense(256, "softsign", bias_regularizer=l2, kernel_regularizer=l2)(x)
+    x = Dense(64, "softsign", bias_regularizer=l2, kernel_regularizer=l2)(x)
+    x = Dense(8, "softsign", bias_regularizer=l2, kernel_regularizer=l2)(x)
     x = Dense(input_shape[-1])(x)
-    x = Activation(activation="linear")(x)
-    model = keras.Model(inputs, x, name="trendencoder")
+    outputs = Activation(activation="linear", name="outputs")(x)
+    model = keras.Model(inputs, outputs, name="trendencoder")
     MAE = keras.metrics.MeanAbsoluteError()
     RMSE = keras.metrics.RootMeanSquaredError()
     CS = keras.metrics.CosineSimilarity()
     model.compile(
+        # loss=mse_dir,
+        # loss=keras.losses.MeanSquaredError(),
         loss=keras.losses.MeanAbsoluteError(),
-        optimizer=keras.optimizers.Adam(learning_rate=0.0001),
-        metrics=[RMSE],
+        optimizer=keras.optimizers.Adam(learning_rate=0.01),
+        # metrics=[RMSE],
     )
     print(model.summary())
     return model
@@ -140,7 +135,7 @@ def lstm_block(input_shape, units, count=2):
     RMSE = keras.metrics.RootMeanSquaredError()
     model.compile(
         # loss=shifted_mse,
-        loss=keras.losses.MeanAbsoluteError(),
+        loss=keras.losses.MeanSquaredError(),
         optimizer=keras.optimizers.Adam(learning_rate=0.1),
         metrics=[RMSE],
     )

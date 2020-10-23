@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from tensorflow.python.keras.layers.core import Lambda
 
 
 class Dataloader:
@@ -13,6 +14,7 @@ class Dataloader:
         train_ratio=0.6,
         val_ratio=0.2,
         test_ratio=0.2,
+        batch_size=256,
     ):
         self.input_width = input_width
         self.label_width = label_width
@@ -24,6 +26,7 @@ class Dataloader:
         self.label_start = self.total_window_size - self.label_width
         self.labels_slice = slice(self.label_start, None)
         self.label_indices = np.arange(self.total_window_size)[self.labels_slice]
+        self.batch_size = batch_size
 
     def load(
         self,
@@ -99,18 +102,23 @@ class Dataloader:
         labels.set_shape([None, self.label_width, None])
         return inputs, labels
 
-    def make_dataset(self, data, batch_size=256, verbose=1):
-        data = self.transform(data)
+    def shift_to_zero(self, data):
+        data = tf.math.subtract(data, data[:, 0:1, :]) # сдвиг начального значения в ноль
+        data = data * 100000    # масштабирование 
+        return data
+
+    def make_dataset(self, data, verbose=1):
+        data = self.transform(data, verbose=0)
         ds = tf.keras.preprocessing.timeseries_dataset_from_array(
             data=data,
             targets=None,
             sequence_length=self.total_window_size,
             sequence_stride=1,
             shuffle=True,
-            batch_size=batch_size,
+            batch_size=self.batch_size,
         )
+        ds = ds.map(self.shift_to_zero)
         ds = ds.map(self.split_window)
-
         return ds
 
     def make_input(self, data):
@@ -122,24 +130,28 @@ class Dataloader:
             sequence_stride=1,
             shuffle=False,
         )
+        ds = ds.map(self.shift_to_zero)
         return ds
 
     def make_output(self, data):
         return self.inverse_transform(data)
 
-    def transform(self, input_data):
+    def transform(self, input_data, verbose=1):
         data = np.array(input_data, dtype=np.float32)
-        data = np.diff(data)
-        self.data_mean = data.mean()
-        self.data_std = data.std()
-        data = (data - self.data_mean) / self.data_std
+        # data = np.diff(data)
+        # self.data_mean = data.mean()
+        # self.data_std = data.std()
+        # data = (data - self.data_mean) / self.data_std
         data = data[data.shape[0] % self.sample_width :].reshape(
             (-1, self.sample_width)
         )
+        # if verbose == 1:
+        #     print(f"mean={self.data_mean} std={self.data_std}")
         return data
 
     def inverse_transofrm(self, data):
-        output = data * self.data_std + self.data_mean
+        # output = data * self.data_std + self.data_mean
+        output = data
         return output
 
     @property
