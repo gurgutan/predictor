@@ -109,16 +109,16 @@ class Server(object):
     def compute(self, rates, verbose=0):
         assert len(rates) != 0, f"Ошибка: пустой список котировок"
         times, opens = rates["time"], rates["open"]
-        count = len(opens) - self.input_width
+        count = len(opens) - self.input_width + 1
         results = []
         # вычисляем прогноз
         output_data = self.p.predict(opens, verbose=verbose)
         # сформируем результирующий список кортежей для записи в БД
         for i in range(count):
-            rdate = int(times[i + self.input_width])
-            rprice = opens[i + self.input_width]
+            rdate = int(times[i + self.input_width - 1])
+            rprice = opens[i + self.input_width - 1]
             pdate = int(rdate + self.timeunit * self.shift)  # секунды*shift
-            price = output_data[i]
+            price = float(output_data[i])
             confidence = 0
             db_row = (
                 rdate,
@@ -182,31 +182,33 @@ class Server(object):
         while True:
             if self.is_waiting(dtimer):
                 continue
-
             if not self.is_mt5_ready():
                 continue
             sleep(2)  # задержка для получения последнего бара
-            rates = self.__get_last_rates__(
-                self.p.datainfo.input_shape[0] + self.p.datainfo.input_shape[1]
-            )
+            rates = self.__get_last_rates__(self.input_width)
             if rates is None:
                 logger.debug("Отсутствуют новые котировки")
                 continue
-
             results = self.compute(rates, verbose=0)
             if results is None or len(results) == 0:
                 logger.error("Ошибка вычислений")
                 continue
-
             # Запись в БД
             dbcommon.db_replace(self.db, results)
-
             # Вывод на экран
-            rdate, rprice, _, _, future, low, high, conf, center = results[-1]
-            d = round(((low + high) / 2.0 - rprice) / self.p.datainfo.y_std / 4, 5)
-            logger.debug(
-                f"delta={round(d,2)} center={round(center, 2)} confidence={round(conf,2)}"
-            )
+            (
+                rdate,
+                rprice,
+                symbol,
+                modelname,
+                pdate,
+                price,
+                low,
+                high,
+                confidence,
+            ) = results[-1]
+            d = round((price - rprice), 5)
+            logger.debug(f"delta={d}")
 
 
 DEBUG = False

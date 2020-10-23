@@ -56,7 +56,7 @@ class Predictor(object):
 
     def load_model(self, filename):
         # self.model = keras.models.load_model(self.name, custom_objects={"shifted_mse": shifted_mse})
-        self.model = keras.models.load_model("models/" + self.name)
+        self.model = keras.models.load_model(filename)
 
     def print_model(self):
         model_png_name = "models/" + self.model.name + ".png"

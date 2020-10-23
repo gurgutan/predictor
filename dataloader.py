@@ -151,9 +151,9 @@ class Dataloader:
         #     print(f"mean={self.data_mean} std={self.data_std}")
         return data
 
-    def inverse_transofrm(self, data):
+    def inverse_transform(self, data):
         # output = data * self.data_std + self.data_mean
-        output = data.numpy()
+        output = data / 100000
         return output
 
     @property
