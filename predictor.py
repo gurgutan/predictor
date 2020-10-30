@@ -76,10 +76,7 @@ class Predictor(object):
             log_dir=log_dir, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            patience=2 ** 10,
-            min_delta=1e-5,
-            restore_best_weights=True,
+            monitor="loss", patience=2 ** 12, min_delta=1e-5, restore_best_weights=True,
         )
         backup = keras.callbacks.ModelCheckpoint(
             filepath=ckpt,
@@ -94,6 +91,7 @@ class Predictor(object):
             epochs=epochs,
             shuffle=True,
             use_multiprocessing=True,
+            verbose=1,
             callbacks=[backup, early_stop, tensorboard_link],
         )
         end_fit_time = datetime.datetime.now()
@@ -112,8 +110,8 @@ class Predictor(object):
         """Вычисление результата для набора data - массив размерности n"""
         x = self.dataloader.make_input(data)
         y = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
-        result = self.dataloader.make_output(y)
-        return result
+        # result = self.dataloader.make_output(y)
+        return y
 
     def iterate(self, data, steps=4):
         results = []
@@ -133,17 +131,15 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 8
         elif param == "--cpu":
-            batch_size = 2 ** 15
+            batch_size = 2 ** 14
         else:
             batch_size = 2 ** 12
 
     sample_width = 1
-    input_width = 32
+    input_width = 16
     sections = int(math.log2(input_width))
-    model = trend_encoder((input_width, sample_width), units=2 ** 9, sections=sections)
-    # model = lstm_block((input_width, sample_width), units=2 ** 9, count=2)
-    # model = spectral((64, 1), 256, width=6, depth=4)
-    # model =   multi_dense((64, sample_width), 256, 16)
+    model = trend_encoder((input_width, sample_width), units=2 ** 12, sections=sections)
+    # model = dense_model((input_width, sample_width), units=2 ** 12, sections=sections)
     predictor = Predictor(
         datafile="datas/EURUSD_H1 copy.csv",
         model=model,
@@ -156,6 +152,6 @@ if __name__ == "__main__":
         test_ratio=0.1,
         batch_size=batch_size,
     )
-    history = predictor.fit(batch_size=batch_size, epochs=2 ** 16)
+    history = predictor.fit(batch_size=batch_size, epochs=2 ** 12)
     perfomance = predictor.evaluate()
 

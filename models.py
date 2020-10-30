@@ -7,13 +7,123 @@ from tensorflow import keras
 
 
 def mse_dir(y_true, y_pred):
-    penalty = 4.0
-    cs = losses.cosine_similarity
+    sign_penalty = 1.0
     mse = losses.mean_squared_error
     mae = losses.mean_absolute_error
-    y_true_sign = tf.math.softsign(y_true) * penalty
-    y_pred_sign = tf.math.softsign(y_pred) * penalty
-    return mse(y_true, y_pred) + mse(y_true_sign, y_pred_sign)
+    y_true_sign = sign_penalty * tf.math.softsign(y_true * sign_penalty)
+    y_pred_sign = sign_penalty * tf.math.softsign(y_pred * sign_penalty)
+    k = sign_penalty * 2 - y_true_sign * y_pred_sign
+    return mse(y_true, y_pred) * k
+
+
+def esum(y_true, y_pred):
+    y_true_sign = tf.math.softsign(y_true)
+    y_pred_sign = tf.math.softsign(y_pred)
+    s = tf.math.reduce_sum(tf.math.abs(y_true_sign - y_pred_sign), axis=-1)
+    return tf.math.reduce_mean(s, 0)
+
+
+def esum2(y_true, y_pred):
+    mse = losses.mean_squared_error
+    y_true_sign = tf.math.softsign(y_true)
+    y_pred_sign = tf.math.softsign(y_pred)
+    s = tf.math.reduce_sum(tf.math.abs(y_pred), axis=-1)
+    m = tf.math.reduce_mean(s, 0)
+    e = tf.exp(-m * m)
+    return mse(y_true, y_pred) / tf.math.reduce_mean(s, 0)
+
+
+def dense_model(input_shape, units, sections, train=True):
+    l2 = keras.regularizers.l2(l=1e-3)
+    dense_size = 256
+    n = sections + 1
+    inputs = Input(shape=input_shape, name="inputs")
+    x = inputs
+    # x = LayerNormalization()(x)
+    x = Conv1D(units, kernel_size=x.shape[1], activation="relu", kernel_regularizer=l2)(
+        x
+    )
+    # for i in range(4):
+    #     # x = Reshape((-1, 1))(x)
+    #     x = Conv1D(units, kernel_size=4, activation="relu", padding="same")(x)
+
+    x = Flatten()(x)
+    # x = Dense(256, "softmax")(x)
+    x = Dense(256, "sigmoid", kernel_regularizer=l2)(x)
+    x = Dense(64, "tanh")(x)
+    outputs = Dense(input_shape[-1])(x)
+    # outputs = Activation("softsign")(x)
+    model = keras.Model(inputs, outputs, name="trendencoder")
+    MAE = keras.metrics.MeanAbsoluteError()
+    model.compile(
+        # loss=esum2,
+        loss=keras.losses.MeanSquaredError(),
+        # loss=keras.losses.MeanAbsoluteError(),
+        optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+        metrics=[MAE],
+    )
+    print(model.summary())
+    return model
+
+
+def trend_encoder(input_shape, units, sections, train=True):
+    l2 = keras.regularizers.l2(l=1e-5)
+    n = sections + 1
+    inputs = Input(shape=input_shape, name="inputs")
+    x = inputs
+    x = LayerNormalization(axis=[1, 2])(x)
+    x = Lambda(lambda z: z[:, -(2 ** sections) :, :])(x)
+    x = [Lambda(lambda z: z[0][:, -(2 ** z[1]) :, :])((x, i)) for i in range(n)]
+    x = [Conv1D(16, 2 ** i, padding="same", activation="tanh")(x[i]) for i in range(n)]
+    x = [Conv1D(16, 2 ** i, padding="same", activation="tanh")(x[i]) for i in range(n)]
+    x = [Conv1D(16, 2 ** i, padding="same", activation="tanh")(x[i]) for i in range(n)]
+    x = [Conv1D(16, 2 ** i, padding="valid", activation="tanh")(x[i]) for i in range(n)]
+    # x = [Flatten()(x[i]) for i in range(n)]
+    # x = [GlobalAveragePooling1D()(x[i]) for i in range(n)]
+    # x = [Lambda(lambda z: z * 2 ** i)(x[i]) for i in range(n)]
+    x = Concatenate(axis=1)(x)
+    x = Flatten()(x)
+    x = Dense(units, "tanh")(x)
+    x = Dense(64, "tanh")(x)
+    x = Dense(8, "tanh")(x)
+    x = Dense(input_shape[-1])(x)
+    outputs = x
+    model = keras.Model(inputs, outputs, name="trendencoder")
+    MAE = keras.metrics.MeanAbsoluteError()
+    RMSE = keras.metrics.RootMeanSquaredError()
+    model.compile(
+        # loss=esum2,
+        # loss=keras.losses.MeanSquaredError(),
+        loss=keras.losses.MeanAbsoluteError(),
+        optimizer=keras.optimizers.Adam(learning_rate=1e+2),
+        metrics=[MAE],
+    )
+    print(model.summary())
+    return model
+
+
+def lstm_block(input_shape, units, count=2):
+    inputs = keras.Input(shape=input_shape, name="inputs")
+    x = inputs
+    for i in range(count - 1):
+        x = LSTM(units, return_sequences=True)(x)
+    x = LSTM(units, return_sequences=False)(x)
+    x = Dense(64, activation="softsign",)(x)
+    x = Flatten()(x)
+    x = Dense(1)(x)
+    outputs = Activation("linear")(x)
+    model = keras.Model(inputs, outputs)
+    MAE = keras.metrics.MeanAbsoluteError()
+    MSE = keras.metrics.MeanSquaredError()
+    RMSE = keras.metrics.RootMeanSquaredError()
+    model.compile(
+        # loss=shifted_mse,
+        loss=keras.losses.MeanSquaredError(),
+        optimizer=keras.optimizers.Adam(learning_rate=0.1),
+        metrics=[RMSE],
+    )
+    print(model.summary())
+    return model
 
 
 def spectral(input_shape, units, width, depth):
@@ -68,66 +178,4 @@ def lstm_autoencoder(input_shape, units):
         ]
     )
     model.compile(loss="mae", optimizer="Adam")
-    return model
-
-
-def trend_encoder(input_shape, units, sections, train=True):
-    l2 = keras.regularizers.l2(l=1e-6)
-    inputs = Input(shape=input_shape, name="inputs")
-    width = 2 ** sections
-    x = inputs
-    x = Lambda(lambda z: z[:, -width:, :])(x)
-    # x = [x[i] for i in range(sections + 1)]
-    x = [Lambda(lambda z: z[:, -(2 ** i) :, :])(x) for i in range(sections + 1)]
-    x = [
-        LocallyConnected1D(
-            filters=8, kernel_size=2 ** i, strides=2 ** i, activation="relu"
-        )(x[i])
-        for i in range(sections + 1)
-    ]
-    x = [Flatten()(x[i]) for i in range(sections + 1)]
-    x = Concatenate()(x)
-    x = Dense(units, "softsign", bias_regularizer=l2, kernel_regularizer=l2)(x)
-    x = Dropout(1 / 4)(x)
-    x = Dense(256, "softsign", bias_regularizer=l2, kernel_regularizer=l2)(x)
-    x = Dense(64, "softsign", bias_regularizer=l2, kernel_regularizer=l2)(x)
-    x = Dense(8, "softsign", bias_regularizer=l2, kernel_regularizer=l2)(x)
-    x = Dense(input_shape[-1])(x)
-    outputs = Activation(activation="linear", name="outputs")(x)
-    model = keras.Model(inputs, outputs, name="trendencoder")
-    MAE = keras.metrics.MeanAbsoluteError()
-    RMSE = keras.metrics.RootMeanSquaredError()
-    CS = keras.metrics.CosineSimilarity()
-    model.compile(
-        # loss=mse_dir,
-        # loss=keras.losses.MeanSquaredError(),
-        loss=keras.losses.MeanAbsoluteError(),
-        optimizer=keras.optimizers.Adam(learning_rate=0.01),
-        # metrics=[RMSE],
-    )
-    print(model.summary())
-    return model
-
-
-def lstm_block(input_shape, units, count=2):
-    inputs = keras.Input(shape=input_shape, name="inputs")
-    x = inputs
-    for i in range(count - 1):
-        x = LSTM(units, return_sequences=True)(x)
-    x = LSTM(units, return_sequences=False)(x)
-    x = Dense(64, activation="softsign",)(x)
-    x = Flatten()(x)
-    x = Dense(1)(x)
-    outputs = Activation("linear")(x)
-    model = keras.Model(inputs, outputs)
-    MAE = keras.metrics.MeanAbsoluteError()
-    MSE = keras.metrics.MeanSquaredError()
-    RMSE = keras.metrics.RootMeanSquaredError()
-    model.compile(
-        # loss=shifted_mse,
-        loss=keras.losses.MeanSquaredError(),
-        optimizer=keras.optimizers.Adam(learning_rate=0.1),
-        metrics=[RMSE],
-    )
-    print(model.summary())
     return model

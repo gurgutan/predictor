@@ -27,6 +27,7 @@ class Dataloader:
         self.labels_slice = slice(self.label_start, None)
         self.label_indices = np.arange(self.total_window_size)[self.labels_slice]
         self.batch_size = batch_size
+        self.scale = 1000.0
 
     def load(
         self,
@@ -41,12 +42,7 @@ class Dataloader:
             tsv_filename,
             sep="\t",
             header=0,
-            dtype={
-                "open": np.float32,
-                "close": np.float32,
-                "tickvol": np.float32,
-                "vol": np.float32,
-            },
+            dtype={"open": float, "close": float, "tickvol": float, "vol": float,},
             names=[
                 "date",
                 "time",
@@ -69,7 +65,7 @@ class Dataloader:
         self.train_df = df[input_column][train_slice]
         self.val_df = df[input_column][val_slice]
         self.test_df = df[input_column][test_slice]
-        if verbose == 1:
+        if verbose == 10:
             print(self.__sizes__())
             print(self.__repr__())
         return True
@@ -97,29 +93,32 @@ class Dataloader:
 
     def split_window(self, databatch):
         inputs = databatch[:, self.input_slice, :]
-        labels = databatch[:, self.labels_slice, :]
+        labels = (
+            databatch[:, self.labels_slice, :]
+            - databatch[:, self.input_width - 1 : self.input_width, :]
+        )
         inputs.set_shape([None, self.input_width, None])
         labels.set_shape([None, self.label_width, None])
         return inputs, labels
 
     def shift_to_zero(self, data):
         data = tf.math.subtract(
-            data, data[:, 0:1, :]
+            data, data[:, 0:1, 0:1]
         )  # сдвиг начального значения в ноль
-        data = data * 100000  # масштабирование
+        # data, data[:, self.input_width - 1 : self.input_width, :]
         return data
 
     def make_dataset(self, data, verbose=0):
-        data = self.transform(data, verbose=verbose)
+        ds = self.transform(data, verbose=verbose)
         ds = tf.keras.preprocessing.timeseries_dataset_from_array(
-            data=data,
+            data=ds,
             targets=None,
             sequence_length=self.total_window_size,
             sequence_stride=1,
             shuffle=True,
             batch_size=self.batch_size,
         )
-        ds = ds.map(self.shift_to_zero)
+        # ds = ds.map(self.shift_to_zero)
         ds = ds.map(self.split_window)
         return ds
 
@@ -132,14 +131,15 @@ class Dataloader:
             sequence_stride=1,
             shuffle=False,
         )
-        ds = ds.map(self.shift_to_zero)
+        # ds = ds.map(self.shift_to_zero)
+        # ds = ds.map(self.scale)
         return ds
-
-    def make_output(self, data):
-        return self.inverse_transform(data)
+    
+    
 
     def transform(self, input_data, verbose=1):
         data = np.array(input_data, dtype=np.float32)
+        data = self.moving_average(data)
         # data = np.diff(data)
         # self.data_mean = data.mean()
         # self.data_std = data.std()
@@ -151,10 +151,10 @@ class Dataloader:
         #     print(f"mean={self.data_mean} std={self.data_std}")
         return data
 
-    def inverse_transform(self, data):
-        # output = data * self.data_std + self.data_mean
-        output = data / 100000
-        return output
+    def moving_average(self, a, n=5):
+        ret = np.cumsum(a, dtype=float)
+        ret[n:] = ret[n:] - ret[:-n]
+        return ret[n - 1 :] / n
 
     @property
     def train(self):
