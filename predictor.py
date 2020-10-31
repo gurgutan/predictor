@@ -54,6 +54,10 @@ class Predictor(object):
                 "Ошибка загрузки модели модели. Параметр model должен быть либо строкой, либо моделью keras"
             )
 
+    def __call__(self, x):
+        x = self.dataloader.make_input(data)
+        return self.model(x)
+
     def load_model(self, filename):
         # self.model = keras.models.load_model(self.name, custom_objects={"shifted_mse": shifted_mse})
         self.model = keras.models.load_model(filename)

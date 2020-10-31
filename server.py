@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class Server(object):
     def __init__(self):
         configname = "config.json"
-        self.version = 1.02
+        self.version = 1.1
         self.p = None
         self.ready = False
         logger.info(f"Робот Аля v{self.version}, автор: Слеповичев Иван Иванович")
@@ -109,10 +109,11 @@ class Server(object):
     def compute(self, rates, verbose=0):
         assert len(rates) != 0, f"Ошибка: пустой список котировок"
         times, opens = rates["time"], rates["open"]
-        count = len(opens) - self.input_width + 1
+        # count = len(opens) - self.input_width
         results = []
         # вычисляем прогноз
         output_data = self.p.predict(opens, verbose=verbose)
+        count = output_data.shape[0]
         # сформируем результирующий список кортежей для записи в БД
         for i in range(count):
             rdate = int(times[i + self.input_width - 1])
@@ -185,7 +186,7 @@ class Server(object):
             if not self.is_mt5_ready():
                 continue
             sleep(2)  # задержка для получения последнего бара
-            rates = self.__get_last_rates__(self.input_width)
+            rates = self.__get_last_rates__(self.input_width + 5)
             if rates is None:
                 logger.debug("Отсутствуют новые котировки")
                 continue

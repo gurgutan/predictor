@@ -134,12 +134,11 @@ class Dataloader:
         # ds = ds.map(self.shift_to_zero)
         # ds = ds.map(self.scale)
         return ds
-    
-    
 
-    def transform(self, input_data, verbose=1):
+    def transform(self, input_data, ma=0, verbose=1):
         data = np.array(input_data, dtype=np.float32)
-        data = self.moving_average(data)
+        if ma > 0:
+            data = self.moving_average(data, n=ma)
         # data = np.diff(data)
         # self.data_mean = data.mean()
         # self.data_std = data.std()
@@ -152,7 +151,7 @@ class Dataloader:
         return data
 
     def moving_average(self, a, n=5):
-        ret = np.cumsum(a, dtype=float)
+        ret = np.cumsum(a, dtype="float32")
         ret[n:] = ret[n:] - ret[:-n]
         return ret[n - 1 :] / n
 
