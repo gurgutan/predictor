@@ -135,7 +135,7 @@ class Dataloader:
         # ds = ds.map(self.scale)
         return ds
 
-    def transform(self, input_data, ma=0, verbose=1):
+    def transform(self, input_data, ma=5, verbose=1):
         data = np.array(input_data, dtype=np.float32)
         if ma > 0:
             data = self.moving_average(data, n=ma)
