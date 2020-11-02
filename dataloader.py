@@ -11,11 +11,13 @@ class Dataloader:
         label_width,
         sample_width,
         shift=1,
+        ma=3,
         train_ratio=0.6,
         val_ratio=0.2,
         test_ratio=0.2,
         batch_size=256,
     ):
+        self.ma = ma
         self.input_width = input_width
         self.label_width = label_width
         self.sample_width = sample_width
@@ -135,10 +137,10 @@ class Dataloader:
         # ds = ds.map(self.scale)
         return ds
 
-    def transform(self, input_data, ma=5, verbose=1):
+    def transform(self, input_data, verbose=1):
         data = np.array(input_data, dtype=np.float32)
-        if ma > 0:
-            data = self.moving_average(data, n=ma)
+        if self.ma > 0:
+            data = self.moving_average(data, n=self.ma)
         # data = np.diff(data)
         # self.data_mean = data.mean()
         # self.data_std = data.std()

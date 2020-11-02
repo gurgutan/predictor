@@ -116,8 +116,8 @@ class Server(object):
         count = output_data.shape[0]
         # сформируем результирующий список кортежей для записи в БД
         for i in range(count):
-            rdate = int(times[i + self.input_width - 1])
-            rprice = opens[i + self.input_width - 1]
+            rdate = int(times[i + self.input_width - 1 + self.p.dataloader.ma - 1])
+            rprice = opens[i + self.input_width - 1 + self.p.dataloader.ma - 1]
             pdate = int(rdate + self.timeunit * self.shift)  # секунды*shift
             price = float(output_data[i])
             confidence = 0
