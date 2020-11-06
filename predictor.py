@@ -23,7 +23,6 @@ class Predictor(object):
         model,
         input_width,
         label_width,
-        sample_width=1,
         shift=1,
         train_ratio=0.8,
         val_ratio=0.1,
@@ -33,7 +32,6 @@ class Predictor(object):
         self.dataloader = Dataloader(
             input_width=input_width,
             label_width=label_width,
-            sample_width=sample_width,
             shift=shift,
             batch_size=batch_size,
         )
@@ -54,9 +52,9 @@ class Predictor(object):
                 "Ошибка загрузки модели модели. Параметр model должен быть либо строкой, либо моделью keras"
             )
 
-    def __call__(self, x):
-        x = self.dataloader.make_input(data)
-        return self.model(x)
+    def __call__(self, data):
+        # x = self.dataloader.make_input(data)
+        return self.model(data[-self.dataloader.input_width - 1 :])
 
     def load_model(self, filename):
         # self.model = keras.models.load_model(self.name, custom_objects={"shifted_mse": shifted_mse})
@@ -80,7 +78,7 @@ class Predictor(object):
             log_dir=log_dir, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
-            monitor="loss", patience=2 ** 12, min_delta=1e-5, restore_best_weights=True,
+            monitor="loss", patience=2 ** 10, min_delta=1e-6, restore_best_weights=True,
         )
         backup = keras.callbacks.ModelCheckpoint(
             filepath=ckpt,
@@ -117,15 +115,15 @@ class Predictor(object):
         # result = self.dataloader.make_output(y)
         return y
 
-    def iterate(self, data, steps=4):
+    def iterate(self, data, steps=2):
         results = []
-        data = data[-self.dataloader.input_width :]
-        inputs = self.dataloader.make_input(data)
-        for i in range(steps):
-            outputs = self.model(inputs)
-            data = np.append(data, float(outputs[0]))[-self.dataloader.input_width :]
-            inputs = self.dataloader.make_input(data)
-            results += [float(outputs[0])]
+        inputs = data[-self.dataloader.input_width - 1 :]
+        for i in range(0, steps):
+            outputs = float(self.predict(inputs, verbose=0)[-1]) * 10
+            inputs = np.append(inputs, inputs[-1] + outputs)[
+                -self.dataloader.input_width - 1 :
+            ]
+            results.append(outputs)
         return results
 
 
@@ -139,23 +137,25 @@ if __name__ == "__main__":
         else:
             batch_size = 2 ** 12
 
-    sample_width = 1
     input_width = 16
+    label_width = 1
+    shift = 1
     sections = int(math.log2(input_width))
-    model = trend_encoder((input_width, sample_width), units=2 ** 12, sections=sections)
+    model = trend_encoder(
+        (input_width,), (label_width,), units=2 ** 10, sections=sections
+    )
     # model = dense_model((input_width, sample_width), units=2 ** 12, sections=sections)
     predictor = Predictor(
         datafile="datas/EURUSD_H1 copy.csv",
         model=model,
         input_width=input_width,
-        label_width=1,
-        sample_width=sample_width,
-        shift=1,
+        label_width=label_width,
+        shift=shift,
         train_ratio=0.8,
         val_ratio=0.1,
         test_ratio=0.1,
         batch_size=batch_size,
     )
-    history = predictor.fit(batch_size=batch_size, epochs=2 ** 12)
+    history = predictor.fit(batch_size=batch_size, epochs=2 ** 16)
     perfomance = predictor.evaluate()
 
