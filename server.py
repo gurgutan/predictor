@@ -74,7 +74,6 @@ class Server(object):
             model=self.modelname,
             input_width=self.input_width,
             label_width=self.label_width,
-            sample_width=self.sample_width,
             shift=self.shift,
         )
         return True
@@ -108,18 +107,18 @@ class Server(object):
 
     def compute(self, rates, verbose=0):
         assert len(rates) != 0, f"Ошибка: пустой список котировок"
-        times, opens = rates["time"], rates["open"]
+        times, prices = rates["time"], rates["open"]
         # count = len(opens) - self.input_width
         results = []
         # вычисляем прогноз
-        output_data = self.p.predict(opens, verbose=verbose)
+        output_data = self.p.predict(prices, verbose=verbose)
         count = output_data.shape[0]
         # сформируем результирующий список кортежей для записи в БД
         for i in range(count):
-            rdate = int(times[i + self.input_width - 1 + self.p.dataloader.ma - 1])
-            rprice = opens[i + self.input_width - 1 + self.p.dataloader.ma - 1]
+            rdate = int(times[i + self.input_width - 1])
+            rprice = prices[i + self.input_width - 1]
             pdate = int(rdate + self.timeunit * self.shift)  # секунды*shift
-            price = float(output_data[i])
+            price = float(output_data[i])*10
             confidence = 0
             db_row = (
                 rdate,
