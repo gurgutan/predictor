@@ -171,7 +171,7 @@ class Server(object):
 
     def is_mt5_ready(self):
         if not self.__is_mt5_connected__():
-            logger.error("Ошибка подклбчения к МТ5:" + str(mt5.last_error()))
+            logger.error("Ошибка подключения к МТ5:" + str(mt5.last_error()))
             if not self.__init_mt5__():
                 return False
         return True

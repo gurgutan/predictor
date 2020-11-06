@@ -66,36 +66,37 @@ def dense_model(input_shape, units, sections, train=True):
     return model
 
 
-def trend_encoder(input_shape, units, sections, train=True):
+def trend_encoder(input_shape, output_shape, units, sections, train=True):
     l2 = keras.regularizers.l2(l=1e-5)
     n = sections + 1
     inputs = Input(shape=input_shape, name="inputs")
     x = inputs
+    x = Reshape(input_shape + (1,))(x)
+    # std = Lambda(lambda z: tf.nn.moments(z, axes=[1, 2], keepdims=True)[1])(x)
     x = LayerNormalization(axis=[1, 2])(x)
     x = Lambda(lambda z: z[:, -(2 ** sections) :, :])(x)
     x = [Lambda(lambda z: z[0][:, -(2 ** z[1]) :, :])((x, i)) for i in range(n)]
-    x = [Conv1D(16, 2 ** i, padding="same", activation="tanh")(x[i]) for i in range(n)]
-    x = [Conv1D(16, 2 ** i, padding="same", activation="tanh")(x[i]) for i in range(n)]
-    x = [Conv1D(16, 2 ** i, padding="same", activation="tanh")(x[i]) for i in range(n)]
+    # std = [
+    #     Lambda(lambda z: tf.nn.moments(z, axes=[1, 2], keepdims=True)[1])(x[i])
+    #     for i in range(n)
+    # ]
+    x = [Conv1D(8, 2 ** i, padding="same", activation="tanh")(x[i]) for i in range(n)]
     x = [Conv1D(16, 2 ** i, padding="valid", activation="tanh")(x[i]) for i in range(n)]
-    # x = [Flatten()(x[i]) for i in range(n)]
-    # x = [GlobalAveragePooling1D()(x[i]) for i in range(n)]
-    # x = [Lambda(lambda z: z * 2 ** i)(x[i]) for i in range(n)]
+    # y = [tf.math.divide(x[i], std[i]) for i in range(n)]
     x = Concatenate(axis=1)(x)
     x = Flatten()(x)
     x = Dense(units, "tanh")(x)
+    x = Dense(256, "tanh")(x)
     x = Dense(64, "tanh")(x)
-    x = Dense(8, "tanh")(x)
-    x = Dense(input_shape[-1])(x)
+    x = Dense(output_shape[-1])(x)
     outputs = x
-    model = keras.Model(inputs, outputs, name="trendencoder")
+    model = keras.Model(inputs, outputs, name="trendencoder2")
     MAE = keras.metrics.MeanAbsoluteError()
-    RMSE = keras.metrics.RootMeanSquaredError()
     model.compile(
         # loss=esum2,
-        # loss=keras.losses.MeanSquaredError(),
-        loss=keras.losses.MeanAbsoluteError(),
-        optimizer=keras.optimizers.Adam(learning_rate=1e+2),
+        loss=keras.losses.MeanSquaredError(),
+        # loss=keras.losses.MeanAbsoluteError(),
+        optimizer=keras.optimizers.Adam(learning_rate=1e-8),
         metrics=[MAE],
     )
     print(model.summary())

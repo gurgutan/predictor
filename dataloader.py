@@ -9,7 +9,6 @@ class Dataloader:
         self,
         input_width,
         label_width,
-        sample_width,
         shift=1,
         ma=3,
         train_ratio=0.6,
@@ -20,7 +19,6 @@ class Dataloader:
         self.ma = ma
         self.input_width = input_width
         self.label_width = label_width
-        self.sample_width = sample_width
         self.shift = shift
         self.total_window_size = self.input_width + self.shift
         self.input_slice = slice(0, self.input_width)
@@ -29,7 +27,7 @@ class Dataloader:
         self.labels_slice = slice(self.label_start, None)
         self.label_indices = np.arange(self.total_window_size)[self.labels_slice]
         self.batch_size = batch_size
-        self.scale = 1000.0
+        self.scale_coef = 1000.0
 
     def load(
         self,
@@ -44,19 +42,15 @@ class Dataloader:
             tsv_filename,
             sep="\t",
             header=0,
-            dtype={"open": float, "close": float, "tickvol": float, "vol": float,},
-            names=[
-                "date",
-                "time",
-                "open",
-                "high",
-                "low",
-                "close",
-                "tickvol",
-                "vol",
-                "spread",
-            ],
+            dtype={
+                "open": np.float32,
+                "close": np.float32,
+                "tickvol": np.float32,
+                "vol": np.float32,
+            },
+            names=["date", "time", "open", "high", "low", "close", "tickvol", "vol"],
         )
+
         df_size = df[input_column].size
         train_len = int(df_size * train_ratio)
         val_len = int(df_size * val_ratio)
@@ -67,7 +61,7 @@ class Dataloader:
         self.train_df = df[input_column][train_slice]
         self.val_df = df[input_column][val_slice]
         self.test_df = df[input_column][test_slice]
-        if verbose == 10:
+        if verbose == 1:
             print(self.__sizes__())
             print(self.__repr__())
         return True
@@ -87,31 +81,14 @@ class Dataloader:
                 f"Размер окна: {self.total_window_size}",
                 f"Размер входа: {self.input_width}",
                 f"Размер выхода: {self.label_width}",
-                f"Размер экземпляра: {self.sample_width}",
                 f"Индексы входа: {self.input_indices}",
                 f"Индексы выхода: {self.label_indices}",
             ]
         )
 
-    def split_window(self, databatch):
-        inputs = databatch[:, self.input_slice, :]
-        labels = (
-            databatch[:, self.labels_slice, :]
-            - databatch[:, self.input_width - 1 : self.input_width, :]
-        )
-        inputs.set_shape([None, self.input_width, None])
-        labels.set_shape([None, self.label_width, None])
-        return inputs, labels
-
-    def shift_to_zero(self, data):
-        data = tf.math.subtract(
-            data, data[:, 0:1, 0:1]
-        )  # сдвиг начального значения в ноль
-        # data, data[:, self.input_width - 1 : self.input_width, :]
-        return data
-
-    def make_dataset(self, data, verbose=0):
-        ds = self.transform(data, verbose=verbose)
+    def make_dataset(self, data):
+        ds = np.array(data, dtype="float32")
+        ds = np.diff(ds)
         ds = tf.keras.preprocessing.timeseries_dataset_from_array(
             data=ds,
             targets=None,
@@ -120,42 +97,59 @@ class Dataloader:
             shuffle=True,
             batch_size=self.batch_size,
         )
-        # ds = ds.map(self.shift_to_zero)
+        # ds = ds.map(self.transform)
         ds = ds.map(self.split_window)
         return ds
 
+    # def transform(self, data):
+    #     # data = tf.reshape(databatch, (-1, self.total_window_size))
+    #     mean, std = tf.nn.moments(data, axes=[1], keepdims=True)
+    #     unbiased = tf.math.subtract(data, mean)
+    #     normalized = tf.math.divide(unbiased, std)
+    #     return normalized
+
+    # def inverse_transform(self, data, output_data):
+    #     mean, std = tf.nn.moments(data, axes=[1], keepdims=True)
+    #     denormalized = tf.math.multiply(output_data, std)
+    #     biased = tf.math.add(denormalized, mean)
+    #     return biased
+
     def make_input(self, data):
-        data = self.transform(data)
+        np_data = np.diff(data)
         ds = tf.keras.preprocessing.timeseries_dataset_from_array(
-            data=data,
+            data=np_data,
             targets=None,
             sequence_length=self.input_width,
             sequence_stride=1,
             shuffle=False,
         )
-        # ds = ds.map(self.shift_to_zero)
-        # ds = ds.map(self.scale)
+        # ds = ds.map(self.transform)
         return ds
 
-    def transform(self, input_data, verbose=1):
-        data = np.array(input_data, dtype=np.float32)
-        if self.ma > 0:
-            data = self.moving_average(data, n=self.ma)
-        # data = np.diff(data)
-        # self.data_mean = data.mean()
-        # self.data_std = data.std()
-        # data = (data - self.data_mean) / self.data_std
-        data = data[data.shape[0] % self.sample_width :].reshape(
-            (-1, self.sample_width)
-        )
-        # if verbose == 1:
-        #     print(f"mean={self.data_mean} std={self.data_std}")
-        return data
+    def make_output(self, input_data, output_data):
+        # cumsum = np.cumsum(output_data)
+        # return self.inverse_transform(input_data, output_data)
+        return output_data
 
-    def moving_average(self, a, n=5):
-        ret = np.cumsum(a, dtype="float32")
-        ret[n:] = ret[n:] - ret[:-n]
-        return ret[n - 1 :] / n
+    def split_window(self, databatch):
+        inputs = databatch[:, self.input_slice]
+        labels = databatch[:, self.labels_slice]
+        inputs.set_shape([None, self.input_width])
+        labels.set_shape([None, self.label_width])
+        return inputs, labels
+
+    def moving_average(self, a, n=1):
+        if n == 0:
+            return a
+        result = np.convolve(a, np.ones((n,)) / float(n), mode="valid")
+        return result
+
+    def shift_to_zero(self, data):
+        data = tf.math.subtract(
+            data, data[:, 0:1, 0:1]
+        )  # сдвиг начального значения в ноль
+        # data, data[:, self.input_width - 1 : self.input_width, :]
+        return data
 
     @property
     def train(self):
