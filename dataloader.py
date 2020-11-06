@@ -48,6 +48,7 @@ class Dataloader:
             },
             names=["date", "time", "open", "high", "low", "close", "tickvol", "vol"],
         )
+        
         df_size = df[input_column].size
         train_len = int(df_size * train_ratio)
         val_len = int(df_size * val_ratio)
