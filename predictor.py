@@ -115,15 +115,15 @@ class Predictor(object):
         # result = self.dataloader.make_output(y)
         return y
 
-    def iterate(self, data, steps=2):
+    def iterate(self, inputs, steps=1):
         results = []
-        inputs = data[-self.dataloader.input_width - 1 :]
+        # input_width + 1 нужно для вычисления np.diff
+        size = self.dataloader.input_width + 1
         for i in range(0, steps):
-            outputs = float(self.predict(inputs, verbose=0)[-1]) * 10
-            inputs = np.append(inputs, inputs[-1] + outputs)[
-                -self.dataloader.input_width - 1 :
-            ]
-            results.append(outputs)
+            inputs = inputs[-size:]
+            output = float(self.predict(inputs, verbose=0)[-1]) * 10  # *10 ???
+            inputs = np.append(inputs, inputs[-1] + output)
+            results.append(output)
         return results
 
 
@@ -138,8 +138,8 @@ if __name__ == "__main__":
             batch_size = 2 ** 12
 
     input_width = 16
-    label_width = 1
-    shift = 1
+    label_width = 4
+    shift = 4
     sections = int(math.log2(input_width))
     model = trend_encoder(
         (input_width,), (label_width,), units=2 ** 10, sections=sections

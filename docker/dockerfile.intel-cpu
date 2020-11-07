@@ -4,6 +4,7 @@
 
 FROM docker.io/intel/intel-optimized-tensorflow:latest
 
+
 ENV http_proxy ""
 ENV https_proxy ""
 
@@ -79,7 +80,7 @@ ENV OMP_STACKSIZE  "8M"
 ENV OMP_TARGET_OFFLOAD  "DEFAULT"
 ENV OMP_THREAD_LIMIT  2147483647
 ENV OMP_TOOL  "enabled"
-ENV KMP_AFFINITY  "verbose,warnings,respect,granularityfine,compact,1,0"
+ENV KMP_AFFINITY "verbose,warnings,respect,granularity=core,compact,1,0"
 
 
 EXPOSE 1979/tcp

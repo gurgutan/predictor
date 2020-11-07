@@ -19,7 +19,7 @@ def mse_dir(y_true, y_pred):
 def esum(y_true, y_pred):
     y_true_sign = tf.math.softsign(y_true)
     y_pred_sign = tf.math.softsign(y_pred)
-    s = tf.math.reduce_sum(tf.math.abs(y_true_sign - y_pred_sign), axis=-1)
+    s = tf.math.reduce_sum(tf.math.square(y_true - y_pred), axis=-1)
     return tf.math.reduce_mean(s, 0)
 
 
@@ -86,17 +86,17 @@ def trend_encoder(input_shape, output_shape, units, sections, train=True):
     x = Concatenate(axis=1)(x)
     x = Flatten()(x)
     x = Dense(units, "tanh")(x)
-    x = Dense(256, "tanh")(x)
-    x = Dense(64, "tanh")(x)
+    x = Dense(256, "elu")(x)
+    x = Dense(64, "elu")(x)
     x = Dense(output_shape[-1])(x)
     outputs = x
-    model = keras.Model(inputs, outputs, name="trendencoder2")
+    model = keras.Model(inputs, outputs, name="trendencoder3")
     MAE = keras.metrics.MeanAbsoluteError()
     model.compile(
-        # loss=esum2,
-        loss=keras.losses.MeanSquaredError(),
+        loss=esum,
+        # loss=keras.losses.MeanSquaredError(),
         # loss=keras.losses.MeanAbsoluteError(),
-        optimizer=keras.optimizers.Adam(learning_rate=1e-8),
+        optimizer=keras.optimizers.Adam(learning_rate=1e+6),
         metrics=[MAE],
     )
     print(model.summary())
