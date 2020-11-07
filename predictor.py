@@ -33,6 +33,7 @@ class Predictor(object):
             input_width=input_width,
             label_width=label_width,
             shift=shift,
+            ma=3,
             batch_size=batch_size,
         )
         if not datafile is None:
