@@ -4,6 +4,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras import losses
 from tensorflow.keras import metrics
 from tensorflow import keras
+from tensorflow.python.keras.layers import LSTMV2
 
 
 def mse_dir(y_true, y_pred):
@@ -33,33 +34,35 @@ def esum2(y_true, y_pred):
     return mse(y_true, y_pred) / tf.math.reduce_mean(s, 0)
 
 
-def dense_model(input_shape, units, sections, train=True):
+def dense_model(input_shape, output_shape, units, sections, train=True):
     l2 = keras.regularizers.l2(l=1e-3)
-    dense_size = 256
+    dense_size = 128
     n = sections + 1
     inputs = Input(shape=input_shape, name="inputs")
     x = inputs
-    # x = LayerNormalization()(x)
-    x = Conv1D(units, kernel_size=x.shape[1], activation="relu", kernel_regularizer=l2)(
-        x
-    )
+    # x = LayerNormalization(axis=[1, 2])(x)
+    x = Conv1D(units, kernel_size=4, activation="relu")(x)
+    x = Conv1D(256, kernel_size=4, activation="relu")(x)
+    x = Conv1D(64, kernel_size=4, activation="relu")(x)
+    x = Conv1D(64, kernel_size=4, activation="relu")(x)
+    x = Conv1D(64, kernel_size=4, activation="relu")(x)
     # for i in range(4):
     #     # x = Reshape((-1, 1))(x)
     #     x = Conv1D(units, kernel_size=4, activation="relu", padding="same")(x)
 
     x = Flatten()(x)
     # x = Dense(256, "softmax")(x)
-    x = Dense(256, "sigmoid", kernel_regularizer=l2)(x)
+    x = Dense(dense_size, "tanh")(x)
     x = Dense(64, "tanh")(x)
-    outputs = Dense(input_shape[-1])(x)
+    outputs = Dense(output_shape[-1])(x)
     # outputs = Activation("softsign")(x)
-    model = keras.Model(inputs, outputs, name="trendencoder")
+    model = keras.Model(inputs, outputs, name="dense2")
     MAE = keras.metrics.MeanAbsoluteError()
     model.compile(
         # loss=esum2,
         loss=keras.losses.MeanSquaredError(),
         # loss=keras.losses.MeanAbsoluteError(),
-        optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+        optimizer=keras.optimizers.SGD(learning_rate=1e-1),
         metrics=[MAE],
     )
     print(model.summary())
@@ -73,30 +76,37 @@ def trend_encoder(input_shape, output_shape, units, sections, train=True):
     x = inputs
     x = Reshape(input_shape + (1,))(x)
     # std = Lambda(lambda z: tf.nn.moments(z, axes=[1, 2], keepdims=True)[1])(x)
-    x = LayerNormalization(axis=[1, 2])(x)
+    # x = LayerNormalization(axis=[1, 2])(x)
     x = Lambda(lambda z: z[:, -(2 ** sections) :, :])(x)
     x = [Lambda(lambda z: z[0][:, -(2 ** z[1]) :, :])((x, i)) for i in range(n)]
+    # std = [
     # std = [
     #     Lambda(lambda z: tf.nn.moments(z, axes=[1, 2], keepdims=True)[1])(x[i])
     #     for i in range(n)
     # ]
-    x = [Conv1D(8, 2 ** i, padding="same", activation="tanh")(x[i]) for i in range(n)]
-    x = [Conv1D(16, 2 ** i, padding="valid", activation="tanh")(x[i]) for i in range(n)]
+    # x = [LSTM(16, return_sequences=True)(x[i]) for i in range(n)]
+    # x = [Conv1D(8, 2 ** i, padding="same", activation="tanh")(x[i]) for i in range(n)]
+    x = [
+        Conv1D(2048, 2 ** i, padding="valid", activation="relu")(x[i]) for i in range(n)
+    ]
     # y = [tf.math.divide(x[i], std[i]) for i in range(n)]
     x = Concatenate(axis=1)(x)
     x = Flatten()(x)
     x = Dense(units, "tanh")(x)
-    x = Dense(256, "elu")(x)
-    x = Dense(64, "elu")(x)
+    x = Dense(256, "tanh")(x)
+    # x = Dense(128, "tanh")(x)
+    x = Dense(64, "tanh")(x)
     x = Dense(output_shape[-1])(x)
     outputs = x
     model = keras.Model(inputs, outputs, name="trendencoder3")
     MAE = keras.metrics.MeanAbsoluteError()
     model.compile(
-        loss=esum,
-        # loss=keras.losses.MeanSquaredError(),
+        # loss=esum,
+        loss=keras.losses.MeanSquaredError(),
+        # loss=keras.losses.LogCosh(),
+        # loss=keras.losses.KLDivergence(),
         # loss=keras.losses.MeanAbsoluteError(),
-        optimizer=keras.optimizers.Adam(learning_rate=1e+6),
+        optimizer=keras.optimizers.Nadam(learning_rate=1e-12),
         metrics=[MAE],
     )
     print(model.summary())

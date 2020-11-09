@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from tensorflow.python.keras.backend import dtype
 from tensorflow.python.keras.layers.core import Lambda
 
 
@@ -88,7 +89,7 @@ class Dataloader:
 
     def make_dataset(self, data):
         ds = np.array(data, dtype="float32")
-        ds = np.diff(ds)
+        ds = np.diff(ds) * self.scale_coef
         ds = tf.keras.preprocessing.timeseries_dataset_from_array(
             data=ds,
             targets=None,
@@ -115,9 +116,11 @@ class Dataloader:
     #     return biased
 
     def make_input(self, data):
-        np_data = np.diff(data)
+        ds = np.array(data, dtype="float32")
+        ds = np.diff(ds) * self.scale_coef
+        # np_data = np.array(data, dtype="float32")
         ds = tf.keras.preprocessing.timeseries_dataset_from_array(
-            data=np_data,
+            data=ds,
             targets=None,
             sequence_length=self.input_width,
             sequence_stride=1,
