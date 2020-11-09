@@ -36,14 +36,16 @@ def esum2(y_true, y_pred):
 
 def dense_model(input_shape, output_shape, units, sections, train=True):
     l2 = keras.regularizers.l2(l=1e-3)
-    dense_size = 128
+    dense_size = 256
     n = sections + 1
     inputs = Input(shape=input_shape, name="inputs")
     x = inputs
     # x = LayerNormalization(axis=[1, 2])(x)
     x = Conv1D(units, kernel_size=4, activation="relu")(x)
     x = Conv1D(256, kernel_size=4, activation="relu")(x)
-    x = Conv1D(64, kernel_size=4, activation="relu")(x)
+    x = Conv1D(256, kernel_size=4, activation="relu")(x)
+    x = Conv1D(128, kernel_size=4, activation="relu")(x)
+    x = Conv1D(128, kernel_size=4, activation="relu")(x)
     x = Conv1D(64, kernel_size=4, activation="relu")(x)
     x = Conv1D(64, kernel_size=4, activation="relu")(x)
     # for i in range(4):
@@ -53,6 +55,7 @@ def dense_model(input_shape, output_shape, units, sections, train=True):
     x = Flatten()(x)
     # x = Dense(256, "softmax")(x)
     x = Dense(dense_size, "tanh")(x)
+    x = Dense(128, "tanh")(x)
     x = Dense(64, "tanh")(x)
     outputs = Dense(output_shape[-1])(x)
     # outputs = Activation("softsign")(x)

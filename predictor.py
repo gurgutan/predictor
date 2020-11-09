@@ -122,7 +122,10 @@ class Predictor(object):
         size = self.dataloader.input_width + 1
         for i in range(0, steps):
             inputs = inputs[-size:]
-            output = float(self.predict(inputs, verbose=0)[-1][0]) * 10  # *10 ???
+            output = (
+                float(self.predict(inputs, verbose=0)[-1][0])
+                / self.dataloader.scale_coef
+            )  # *10 ???
             inputs = np.append(inputs, inputs[-1] + output)
             results.append(output)
         return results
@@ -146,7 +149,7 @@ if __name__ == "__main__":
     #     (input_width,), (label_width,), units=2 ** 10, sections=sections
     # )
     model = dense_model(
-        (input_width, 1), (label_width,), units=2 ** 10, sections=sections
+        (input_width, 1), (label_width,), units=2 ** 11, sections=sections
     )
     predictor = Predictor(
         datafile="datas/EURUSD_H1 copy.csv",
