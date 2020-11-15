@@ -1,3 +1,4 @@
+import math
 import tensorflow as tf
 from tensorflow.keras.layers import *
 from tensorflow.keras.models import Sequential
@@ -5,6 +6,7 @@ from tensorflow.keras import losses
 from tensorflow.keras import metrics
 from tensorflow import keras
 from tensorflow.python.keras.layers import LSTMV2
+from rbflayer import RBFLayer, RBFLayerExp
 
 
 def mse_dir(y_true, y_pred):
@@ -34,38 +36,101 @@ def esum2(y_true, y_pred):
     return mse(y_true, y_pred) / tf.math.reduce_mean(s, 0)
 
 
-def dense_model(input_shape, output_shape, units, sections, train=True):
-    l2 = keras.regularizers.l2(l=1e-3)
-    dense_size = 256
-    n = sections + 1
+def rbf_dense(input_shape, output_shape, units, train=True):
+    l2 = keras.regularizers.l2(l=1e-10)
+    kernel_size = 4
     inputs = Input(shape=input_shape, name="inputs")
     x = inputs
     # x = LayerNormalization(axis=[1, 2])(x)
-    x = Conv1D(units, kernel_size=4, activation="relu")(x)
-    x = Conv1D(256, kernel_size=4, activation="relu")(x)
-    x = Conv1D(256, kernel_size=4, activation="relu")(x)
-    x = Conv1D(128, kernel_size=4, activation="relu")(x)
-    x = Conv1D(128, kernel_size=4, activation="relu")(x)
-    x = Conv1D(64, kernel_size=4, activation="relu")(x)
-    x = Conv1D(64, kernel_size=4, activation="relu")(x)
-    # for i in range(4):
-    #     # x = Reshape((-1, 1))(x)
-    #     x = Conv1D(units, kernel_size=4, activation="relu", padding="same")(x)
-
     x = Flatten()(x)
-    # x = Dense(256, "softmax")(x)
-    x = Dense(dense_size, "tanh")(x)
-    x = Dense(128, "tanh")(x)
-    x = Dense(64, "tanh")(x)
+    x = RBFLayerExp(units)(x)
+    # x = Dense(units, "sigmoid")(x)
+    # x = RBFLayerExp(256)(x)
+    # x = RBFLayerExp(1024)(x)
+    # x = Reshape((-1, 1))(x)
+    # for i in range(6):
+    #     x = Conv1D(
+    #         min(2 ** (i + 3), 512),
+    #         strides=2,
+    #         kernel_size=kernel_size,
+    #         activation="relu",
+    #     )(x)
+    # x = Conv1D(16, kernel_size=kernel_size, activation="relu")(x)
+    # x = Conv1D(32, kernel_size=kernel_size, activation="relu")(x)
+    # x = Conv1D(64, kernel_size=kernel_size, activation="relu")(x)
+    # x = Conv1D(128, kernel_size=kernel_size, activation="relu")(x)
+    # x = BatchNormalization(axis=[1, 2])(x)
+    # x = Conv1D(256, kernel_size=kernel_size, activation="softsign",)(x)
+    # x = BatchNormalization(axis=[1, 2])(x)
+    # x = Flatten()(x)
+    # x = Dropout(rate=1 / 4)(x)
+    x = Dense(256, "tanh")(x)
+    # x = Dense(64, "tanh")(x)
     outputs = Dense(output_shape[-1])(x)
-    # outputs = Activation("softsign")(x)
-    model = keras.Model(inputs, outputs, name="dense2")
+    model = keras.Model(inputs, outputs, name="rbf")
     MAE = keras.metrics.MeanAbsoluteError()
     model.compile(
         # loss=esum2,
         loss=keras.losses.MeanSquaredError(),
         # loss=keras.losses.MeanAbsoluteError(),
-        optimizer=keras.optimizers.SGD(learning_rate=1e-1),
+        optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+        metrics=[MAE],
+    )
+    print(model.summary())
+    return model
+
+
+def conv_model(input_shape, output_shape, units, train=True):
+    l2 = keras.regularizers.l2(l=1e-14)
+    kernel_size = 4
+    inputs = Input(shape=input_shape, name="inputs")
+    x = inputs
+    x = BatchNormalization(axis=[1, 2])(x)
+    x = SeparableConv1D(2 ** 10, kernel_size=kernel_size, activation="relu")(x)
+    x = SeparableConv1D(2 ** 8, kernel_size=kernel_size, activation="relu")(x)
+    x = SeparableConv1D(2 ** 8, kernel_size=kernel_size, activation="relu")(x)
+    x = SeparableConv1D(2 ** 8, kernel_size=kernel_size, activation="tanh")(x)
+    x = SeparableConv1D(2 ** 8, kernel_size=kernel_size, activation="tanh")(x)
+    x = Flatten()(x)
+    x = Dense(256, "softsign")(x)
+    x = Dense(64, "softsign")(x)
+    x = Dropout(rate=1 / 4)(x)
+    outputs = Dense(output_shape[-1])(x)
+    model = keras.Model(inputs, outputs, name="conv1")
+    MAE = keras.metrics.MeanAbsoluteError()
+    model.compile(
+        # loss=esum2,
+        loss=keras.losses.MeanSquaredError(),
+        # loss=keras.losses.MeanAbsoluteError(),
+        optimizer=keras.optimizers.Adam(learning_rate=1e-8),
+        metrics=[MAE],
+    )
+    print(model.summary())
+    return model
+
+
+def dense_model(input_shape, output_shape, units, train=True):
+    l2 = keras.regularizers.l2(l=1e-10)
+    kernel_size = 4
+    inputs = Input(shape=input_shape, name="inputs")
+    x = inputs
+    # x = LayerNormalization(axis=[1, 2])(x)
+    # x = BatchNormalization(axis=[1, 2])(x)
+    x = Conv1D(512, kernel_size=kernel_size, activation="relu",)(x)
+    x = BatchNormalization(axis=[1, 2])(x)
+    x = Conv1D(256, kernel_size=kernel_size, activation="relu",)(x)
+    x = Flatten()(x)
+    x = Dropout(rate=1 / 4)(x)
+    x = Dense(256, "softsign")(x)
+    x = Dense(64, "softsign")(x)
+    outputs = Dense(output_shape[-1])(x)
+    model = keras.Model(inputs, outputs, name="dense3")
+    MAE = keras.metrics.MeanAbsoluteError()
+    model.compile(
+        # loss=esum2,
+        loss=keras.losses.MeanSquaredError(),
+        # loss=keras.losses.MeanAbsoluteError(),
+        optimizer=keras.optimizers.Adam(learning_rate=1e-2),
         metrics=[MAE],
     )
     print(model.summary())
@@ -82,7 +147,6 @@ def trend_encoder(input_shape, output_shape, units, sections, train=True):
     # x = LayerNormalization(axis=[1, 2])(x)
     x = Lambda(lambda z: z[:, -(2 ** sections) :, :])(x)
     x = [Lambda(lambda z: z[0][:, -(2 ** z[1]) :, :])((x, i)) for i in range(n)]
-    # std = [
     # std = [
     #     Lambda(lambda z: tf.nn.moments(z, axes=[1, 2], keepdims=True)[1])(x[i])
     #     for i in range(n)
@@ -140,23 +204,57 @@ def lstm_block(input_shape, units, count=2):
     return model
 
 
-def spectral(input_shape, units, width, depth):
-    inputs = Input(shape=input_shape)
-    z = [Conv1D(units, 2 ** i, strides=2 ** i) for i in range(width)]
-    for j in range(depth):
-        z = [Dense(units, activation=tf.nn.softsign)(z[i]) for i in range(width)]
-    z = [Conv1D(units, kernel_size=z[i].shape[1])(z[i]) for i in range(width)]
-    x = Concatenate(axis=1)(z)
-    x = Flatten()(x)
+def spectral(input_width):
+    filters = 2 ** 6
+    kernel_size = 4
+    depth = 8
+    dense_units = 2 ** 8
+    n = int(math.log2(input_width)) + 1
+    inputs = Input(shape=(input_width,))
+    x = inputs
+    x = [
+        Lambda(lambda z: z[0][:, -(2 ** z[1]) :], name=f"slice{i}")((x, i))
+        for i in range(n)
+    ]
+    m = Concatenate(1, name=f"means")(
+        [
+            Lambda(lambda z: tf.math.reduce_mean(z, 1, keepdims=True, name=f"mean{i}"))(
+                x[i]
+            )
+            for i in range(n)
+        ]
+    )
+    s = Concatenate(1, name=f"stds")(
+        [
+            Lambda(lambda z: tf.math.reduce_std(z, 1, keepdims=True, name=f"std{i}"))(
+                x[i]
+            )
+            for i in range(n)
+        ]
+    )
+    m = Reshape((-1, 1))(m)
+    s = Reshape((-1, 1))(s)
+    for i in range(depth):
+        m = Conv1D(filters, kernel_size, activation="relu", padding="same")(m)
+        s = Conv1D(filters, kernel_size, activation="relu", padding="same")(s)
+    m = Flatten()(m)
+    s = Flatten()(s)
+    m = Dense(dense_units, activation="tanh", name="mean_dense1")(m)
+    m = Dense(64, activation="tanh", name="mean_dense2")(m)
+    m = Dense(1)(m)
+    s = Dense(dense_units, activation="softplus", name="std_dense1")(s)
+    s = Dense(64, activation="softplus", name="std_dense2")(s)
+    s = Dense(1)(s)
+    x = Multiply()([m, s])
     x = Dense(1)(x)
-    x = Activation("linear")(x)
-    outputs = Reshape([1, -1])(x)
+    outputs = x
     model = keras.Model(inputs, outputs, name="spectral")
-    AUC = keras.metrics.AUC()
     MAE = keras.metrics.MeanAbsoluteError()
     BC = keras.metrics.BinaryCrossentropy()
     model.compile(
-        loss=mse_dir, optimizer=keras.optimizers.Adam(0.1), metrics=[MAE],
+        loss=keras.losses.MeanSquaredError(),
+        optimizer=keras.optimizers.Adam(1e-3),
+        metrics=[MAE],
     )
     return model
 
