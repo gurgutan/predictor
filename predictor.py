@@ -76,11 +76,11 @@ class Predictor(object):
             pass
         log_dir = "logs/fit/" + start_fit_time.strftime("%Y_%m_%d-%H_%M_%S")
         tensorboard_link = keras.callbacks.TensorBoard(
-            log_dir=log_dir, write_graph=True
+            log_dir=log_dir, write_graph=True, histogram_freq=1
         )
         early_stop = keras.callbacks.EarlyStopping(
             monitor="val_loss",
-            patience=2 ** 7,
+            patience=2 ** 6,
             min_delta=1e-5,
             restore_best_weights=True,
         )
@@ -89,6 +89,9 @@ class Predictor(object):
             monitor="val_loss",
             save_weights_only=True,
             save_best_only=True,
+        )
+        reduce_lr = keras.callbacks.ReduceLROnPlateau(
+            monitor="val_loss", factor=0.5, patience=10, min_lr=1e-10
         )
 
         history = self.model.fit(
@@ -99,7 +102,7 @@ class Predictor(object):
             shuffle=True,
             use_multiprocessing=True,
             verbose=1,
-            callbacks=[backup, early_stop, tensorboard_link],
+            callbacks=[backup, early_stop, tensorboard_link, reduce_lr],
         )
         end_fit_time = datetime.datetime.now()
         self.model.save("models/" + self.model.name + ".h5")
@@ -131,7 +134,7 @@ class Predictor(object):
             output = (
                 float(self.predict(inputs, verbose=0)[-1][0])
                 / self.dataloader.scale_coef
-            )  # *10 ???
+            )
             inputs = np.append(inputs, inputs[-1] + output)
             results.append(output)
         return results
@@ -147,15 +150,15 @@ if __name__ == "__main__":
         else:
             batch_size = 2 ** 12
 
-    input_width = 2 ** 10
-    label_width = 1
-    shift = 1
-    sections = int(math.log2(input_width))
+    input_width = 2 ** 12
+    label_width = 4
+    shift = 4
+    # sections = int(math.log2(input_width))
     # model = trend_encoder(
     #     (input_width,), (label_width,), units=2 ** 10, sections=sections
     # )
     # model = conv_model((input_width, 1), (label_width,), units=2 ** 10)
-    model = spectral(input_width)
+    model = spectral(input_width, label_width)
     predictor = Predictor(
         datafile="datas/EURUSD_H1 copy.csv",
         model=model,
@@ -172,5 +175,5 @@ if __name__ == "__main__":
     for i in range(restarts_count):
         print(f"\n Проход №{i+1}/{restarts_count}\n")
         history = predictor.fit(batch_size=batch_size, epochs=2 ** 14)
-    perfomance = predictor.evaluate()
+        perfomance = predictor.evaluate()
 

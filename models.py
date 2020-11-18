@@ -204,11 +204,13 @@ def lstm_block(input_shape, units, count=2):
     return model
 
 
-def spectral(input_width):
-    filters = 2 ** 6
+def spectral(input_width, output_width):
+    std = tf.math.reduce_std
+    mean = tf.math.reduce_mean
+    filters = 2 ** 8
     kernel_size = 4
-    depth = 8
-    dense_units = 2 ** 8
+    depth = 4
+    units = 2 ** 8
     n = int(math.log2(input_width)) + 1
     inputs = Input(shape=(input_width,))
     x = inputs
@@ -218,42 +220,54 @@ def spectral(input_width):
     ]
     m = Concatenate(1, name=f"means")(
         [
-            Lambda(lambda z: tf.math.reduce_mean(z, 1, keepdims=True, name=f"mean{i}"))(
-                x[i]
-            )
+            Lambda(lambda z: mean(z, 1, keepdims=True, name=f"mean{i}"))(x[i])
             for i in range(n)
         ]
     )
     s = Concatenate(1, name=f"stds")(
         [
-            Lambda(lambda z: tf.math.reduce_std(z, 1, keepdims=True, name=f"std{i}"))(
-                x[i]
-            )
+            Lambda(lambda z: std(z, 1, keepdims=True, name=f"std{i}"))(x[i])
             for i in range(n)
         ]
     )
     m = Reshape((-1, 1))(m)
     s = Reshape((-1, 1))(s)
     for i in range(depth):
-        m = Conv1D(filters, kernel_size, activation="relu", padding="same")(m)
-        s = Conv1D(filters, kernel_size, activation="relu", padding="same")(s)
-    m = Flatten()(m)
-    s = Flatten()(s)
-    m = Dense(dense_units, activation="tanh", name="mean_dense1")(m)
-    m = Dense(64, activation="tanh", name="mean_dense2")(m)
-    m = Dense(1)(m)
-    s = Dense(dense_units, activation="softplus", name="std_dense1")(s)
-    s = Dense(64, activation="softplus", name="std_dense2")(s)
-    s = Dense(1)(s)
-    x = Multiply()([m, s])
-    x = Dense(1)(x)
-    outputs = x
-    model = keras.Model(inputs, outputs, name="spectral")
+        m = Conv1D(
+            filters,
+            kernel_size,
+            activation="relu",
+            padding="same",
+            name=f"m_conv{i+1}",
+        )(m)
+        s = Conv1D(
+            filters,
+            kernel_size,
+            activation="relu",
+            padding="same",
+            name=f"s_conv{i+1}",
+        )(s)
+    m = Conv1D(filters, kernel_size, activation="relu")(m)
+    m = Conv1D(filters, kernel_size, activation="relu")(m)
+    s = Conv1D(filters, kernel_size, activation="relu")(s)
+    s = Conv1D(filters, kernel_size, activation="relu")(s)
+    m, s = Flatten()(m), Flatten()(s)
+    m = Dense(256, activation="softsign", name="m_dense1")(m)
+    m = Dense(64, activation="softsign", name="m_dense2")(m)
+    s = Dense(256, activation="softsign", name="s_dense1")(s)
+    s = Dense(64, activation="softsign", name="s_dense2")(s)
+    x = Concatenate()([m, s])
+    x = Dropout(1 / 8)(x)
+    x = Dense(256, activation="tanh")(x)
+    x = Dense(256, activation="tanh")(x)
+    x = Dense(64, activation="tanh")(x)
+
+    outputs = Dense(output_width, name="output")(x)
+    model = keras.Model(inputs, outputs, name="spectral1")
     MAE = keras.metrics.MeanAbsoluteError()
-    BC = keras.metrics.BinaryCrossentropy()
     model.compile(
         loss=keras.losses.MeanSquaredError(),
-        optimizer=keras.optimizers.Adam(1e-3),
+        optimizer=keras.optimizers.Adam(1e-5),
         metrics=[MAE],
     )
     return model

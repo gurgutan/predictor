@@ -118,7 +118,7 @@ class Server(object):
             rdate = int(times[i + self.input_width - 1])
             rprice = prices[i + self.input_width - 1]
             pdate = int(rdate + self.timeunit * self.shift)  # секунды*shift
-            price = float(output_data[i])*10
+            price = float(output_data[i].sum())
             confidence = 0
             db_row = (
                 rdate,
