@@ -115,8 +115,8 @@ class Server(object):
         count = output_data.shape[0]
         # сформируем результирующий список кортежей для записи в БД
         for i in range(count):
-            rdate = int(times[i + self.input_width - 1])
-            rprice = prices[i + self.input_width - 1]
+            rdate = int(times[i + self.input_width])
+            rprice = prices[i + self.input_width]
             pdate = int(rdate + self.timeunit * self.shift)  # секунды*shift
             price = float(output_data[i].sum())
             confidence = 0
@@ -185,7 +185,7 @@ class Server(object):
             if not self.is_mt5_ready():
                 continue
             sleep(2)  # задержка для получения последнего бара
-            rates = self.__get_last_rates__(self.input_width + 5)
+            rates = self.__get_last_rates__(self.input_width + 2)
             if rates is None:
                 logger.debug("Отсутствуют новые котировки")
                 continue
