@@ -205,8 +205,6 @@ def lstm_block(input_shape, units, count=2):
 
 
 def spectral(input_width, output_width):
-    std = tf.math.reduce_std
-    mean = tf.math.reduce_mean
     filters = 2 ** 8
     kernel_size = 4
     depth = 4
@@ -214,39 +212,22 @@ def spectral(input_width, output_width):
     n = int(math.log2(input_width)) + 1
     inputs = Input(shape=(input_width,))
     x = inputs
-    x = [
-        Lambda(lambda z: z[0][:, -(2 ** z[1]) :], name=f"slice{i}")((x, i))
+    x = [Lambda(lambda z: z[0][:, -(2 ** z[1]) :])((x, i)) for i in range(n)]
+    means = [
+        Lambda(lambda z: tf.math.reduce_mean(z, 1, keepdims=True))(x[i])
         for i in range(n)
     ]
-    m = Concatenate(1, name=f"means")(
-        [
-            Lambda(lambda z: mean(z, 1, keepdims=True, name=f"mean{i}"))(x[i])
-            for i in range(n)
-        ]
-    )
-    s = Concatenate(1, name=f"stds")(
-        [
-            Lambda(lambda z: std(z, 1, keepdims=True, name=f"std{i}"))(x[i])
-            for i in range(n)
-        ]
-    )
+    m = Concatenate(1, name=f"means")(means)
+    stds = [
+        Lambda(lambda z: tf.math.reduce_std(z, 1, keepdims=True))(x[i])
+        for i in range(n)
+    ]
+    s = Concatenate(1, name=f"stds")(stds)
     m = Reshape((-1, 1))(m)
     s = Reshape((-1, 1))(s)
     for i in range(depth):
-        m = Conv1D(
-            filters,
-            kernel_size,
-            activation="relu",
-            padding="same",
-            name=f"m_conv{i+1}",
-        )(m)
-        s = Conv1D(
-            filters,
-            kernel_size,
-            activation="relu",
-            padding="same",
-            name=f"s_conv{i+1}",
-        )(s)
+        m = Conv1D(filters, kernel_size, activation="relu", padding="same",)(m)
+        s = Conv1D(filters, kernel_size, activation="relu", padding="same")(s)
     m = Conv1D(filters, kernel_size, activation="relu")(m)
     m = Conv1D(filters, kernel_size, activation="relu")(m)
     s = Conv1D(filters, kernel_size, activation="relu")(s)
@@ -267,7 +248,7 @@ def spectral(input_width, output_width):
     MAE = keras.metrics.MeanAbsoluteError()
     model.compile(
         loss=keras.losses.MeanSquaredError(),
-        optimizer=keras.optimizers.Adam(1e-5),
+        optimizer=keras.optimizers.Adam(1e-3),
         metrics=[MAE],
     )
     return model

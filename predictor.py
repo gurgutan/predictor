@@ -59,7 +59,7 @@ class Predictor(object):
 
     def load_model(self, filename):
         # self.model = keras.models.load_model(self.name, custom_objects={"shifted_mse": shifted_mse})
-        self.model = keras.models.load_model(filename, custom_objects={"esum": esum})
+        self.model = keras.models.load_model(filename)
 
     def print_model(self):
         model_png_name = "models/" + self.model.name + ".png"
@@ -91,7 +91,7 @@ class Predictor(object):
             save_best_only=True,
         )
         reduce_lr = keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss", factor=0.5, patience=10, min_lr=1e-10
+            monitor="loss", factor=0.1, patience=10, min_lr=1e-8
         )
 
         history = self.model.fit(
@@ -165,9 +165,9 @@ if __name__ == "__main__":
         input_width=input_width,
         label_width=label_width,
         shift=shift,
-        train_ratio=1 - 2 / 8,
-        val_ratio=1 / 8,
-        test_ratio=1 / 8,
+        train_ratio=1.0 - 2.0 / 10.0,
+        val_ratio=1.0 / 10,
+        test_ratio=1.0 / 10,
         batch_size=batch_size,
     )
     restarts_count = 2 ** 16
