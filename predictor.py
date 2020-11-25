@@ -23,12 +23,14 @@ class Predictor(object):
         model,
         input_width,
         label_width,
-        shift=1,
+        shift=None,
         train_ratio=0.8,
         val_ratio=0.1,
         test_ratio=0.1,
         batch_size=256,
     ):
+        if shift == None:
+            shift = label_width
         self.dataloader = Dataloader(
             input_width=input_width,
             label_width=label_width,
@@ -76,7 +78,7 @@ class Predictor(object):
             pass
         log_dir = "logs/fit/" + start_fit_time.strftime("%Y_%m_%d-%H_%M_%S")
         tensorboard_link = keras.callbacks.TensorBoard(
-            log_dir=log_dir, write_graph=True, histogram_freq=1
+            log_dir=log_dir, write_graph=True
         )
         early_stop = keras.callbacks.EarlyStopping(
             monitor="val_loss",
@@ -118,10 +120,8 @@ class Predictor(object):
     def predict(self, data, verbose=0):
         """Вычисление результата для набора data - массив размерности n"""
         x = self.dataloader.make_input(data)
-        y = (
-            self.model.predict(x, use_multiprocessing=True, verbose=verbose)
-            / self.dataloader.scale_coef
-        )
+        f = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
+        y = self.dataloader.make_output(f)
         # result = self.dataloader.make_output(y)
         return y
 
@@ -131,10 +131,7 @@ class Predictor(object):
         size = self.dataloader.input_width + 1
         for i in range(0, steps):
             inputs = inputs[-size:]
-            output = (
-                float(self.predict(inputs, verbose=0)[-1][0])
-                / self.dataloader.scale_coef
-            )
+            output = float(self.predict(inputs, verbose=0)[-1][0])
             inputs = np.append(inputs, inputs[-1] + output)
             results.append(output)
         return results
@@ -150,24 +147,24 @@ if __name__ == "__main__":
         else:
             batch_size = 2 ** 12
 
-    input_width = 2 ** 12
+    input_width = 2 ** 10
     label_width = 4
-    shift = 4
+    # shift = 1
     # sections = int(math.log2(input_width))
     # model = trend_encoder(
     #     (input_width,), (label_width,), units=2 ** 10, sections=sections
     # )
     # model = conv_model((input_width, 1), (label_width,), units=2 ** 10)
     model = spectral(input_width, label_width)
+    # model = rbf_dense(input_width, label_width)
     predictor = Predictor(
-        datafile="datas/EURUSD_H1 copy.csv",
+        datafile="datas/EURUSD_H1 copy 2.csv",
         model=model,
         input_width=input_width,
         label_width=label_width,
-        shift=shift,
-        train_ratio=1.0 - 2.0 / 10.0,
-        val_ratio=1.0 / 10,
-        test_ratio=1.0 / 10,
+        train_ratio=1.0 - 2.0 / 16.0,
+        val_ratio=1.0 / 16,
+        test_ratio=1.0 / 16,
         batch_size=batch_size,
     )
     restarts_count = 2 ** 16

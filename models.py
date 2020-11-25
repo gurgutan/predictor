@@ -6,7 +6,7 @@ from tensorflow.keras import losses
 from tensorflow.keras import metrics
 from tensorflow import keras
 from tensorflow.python.keras.layers import LSTMV2
-from rbflayer import RBFLayer, RBFLayerExp
+from rbflayer import RBFLayer
 
 
 def mse_dir(y_true, y_pred):
@@ -36,14 +36,18 @@ def esum2(y_true, y_pred):
     return mse(y_true, y_pred) / tf.math.reduce_mean(s, 0)
 
 
-def rbf_dense(input_shape, output_shape, units, train=True):
+def rbf_dense(input_width, output_width, train=True):
     l2 = keras.regularizers.l2(l=1e-10)
     kernel_size = 4
-    inputs = Input(shape=input_shape, name="inputs")
+    units = 256
+    inputs = Input(shape=(input_width,), name="inputs")
     x = inputs
     # x = LayerNormalization(axis=[1, 2])(x)
     x = Flatten()(x)
-    x = RBFLayerExp(units)(x)
+    x = Dense(units)(x)
+    x = RBFLayer(units)(x)
+    x = Dense(units)(x)
+    x = RBFLayer(units)(x)
     # x = Dense(units, "sigmoid")(x)
     # x = RBFLayerExp(256)(x)
     # x = RBFLayerExp(1024)(x)
@@ -64,16 +68,16 @@ def rbf_dense(input_shape, output_shape, units, train=True):
     # x = BatchNormalization(axis=[1, 2])(x)
     # x = Flatten()(x)
     # x = Dropout(rate=1 / 4)(x)
-    x = Dense(256, "tanh")(x)
-    # x = Dense(64, "tanh")(x)
-    outputs = Dense(output_shape[-1])(x)
+    x = Dense(64, "tanh")(x)
+    x = Dense(64, "tanh")(x)
+    outputs = Dense(output_width)(x)
     model = keras.Model(inputs, outputs, name="rbf")
     MAE = keras.metrics.MeanAbsoluteError()
     model.compile(
         # loss=esum2,
         loss=keras.losses.MeanSquaredError(),
         # loss=keras.losses.MeanAbsoluteError(),
-        optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+        optimizer=keras.optimizers.Adam(learning_rate=1e-7),
         metrics=[MAE],
     )
     print(model.summary())
@@ -205,50 +209,53 @@ def lstm_block(input_shape, units, count=2):
 
 
 def spectral(input_width, output_width):
-    filters = 2 ** 8
-    kernel_size = 4
-    depth = 4
+    depth = 8
     units = 2 ** 8
     n = int(math.log2(input_width)) + 1
     inputs = Input(shape=(input_width,))
     x = inputs
+    # x = Lambda(lambda z: tf.math.log(z))(x)
     x = [Lambda(lambda z: z[0][:, -(2 ** z[1]) :])((x, i)) for i in range(n)]
     means = [
         Lambda(lambda z: tf.math.reduce_mean(z, 1, keepdims=True))(x[i])
         for i in range(n)
     ]
     m = Concatenate(1, name=f"means")(means)
+    # m = Reshape((-1, 1))(m)
     stds = [
         Lambda(lambda z: tf.math.reduce_std(z, 1, keepdims=True))(x[i])
         for i in range(n)
     ]
     s = Concatenate(1, name=f"stds")(stds)
-    m = Reshape((-1, 1))(m)
-    s = Reshape((-1, 1))(s)
-    for i in range(depth):
-        m = Conv1D(filters, kernel_size, activation="relu", padding="same",)(m)
-        s = Conv1D(filters, kernel_size, activation="relu", padding="same")(s)
-    m = Conv1D(filters, kernel_size, activation="relu")(m)
-    m = Conv1D(filters, kernel_size, activation="relu")(m)
-    s = Conv1D(filters, kernel_size, activation="relu")(s)
-    s = Conv1D(filters, kernel_size, activation="relu")(s)
-    m, s = Flatten()(m), Flatten()(s)
-    m = Dense(256, activation="softsign", name="m_dense1")(m)
-    m = Dense(64, activation="softsign", name="m_dense2")(m)
-    s = Dense(256, activation="softsign", name="s_dense1")(s)
-    s = Dense(64, activation="softsign", name="s_dense2")(s)
-    x = Concatenate()([m, s])
-    x = Dropout(1 / 8)(x)
-    x = Dense(256, activation="tanh")(x)
-    x = Dense(256, activation="tanh")(x)
-    x = Dense(64, activation="tanh")(x)
-
+    # s = Reshape((-1, 1))(s)
+    r = [
+        Lambda(
+            lambda z: tf.math.reduce_max(z, 1, keepdims=True)
+            - tf.math.reduce_min(z, 1, keepdims=True)
+        )(x[i])
+        for i in range(n)
+    ]
+    r = Concatenate(1, name=f"r")(r)
+    # r = Reshape((-1, 1))(r)
+    # for i in range(depth):
+    #     m = Dense(units, "tanh")(m)
+    #     s = Dense(units, "tanh")(s)
+    #     r = Dense(units, "tanh")(r)
+    # m, s, r = Flatten()(m), Flatten()(s), Flatten()(r)
+    x = Concatenate()([m, s, r])
+    x = Reshape((-1, 1))(x)
+    x = GRU(64)(x)
+    x = Flatten()(x)
+    x = Dense(1024, "tanh")(x)
+    x = Dense(64, "tanh")(x)
+    x = Dense(64, "tanh")(x)
+    # x = Dropout(1 / 8)(x)
     outputs = Dense(output_width, name="output")(x)
-    model = keras.Model(inputs, outputs, name="spectral1")
+    model = keras.Model(inputs, outputs, name="spectral2-4")
     MAE = keras.metrics.MeanAbsoluteError()
     model.compile(
         loss=keras.losses.MeanSquaredError(),
-        optimizer=keras.optimizers.Adam(1e-3),
+        optimizer=keras.optimizers.Adam(1e-4),
         metrics=[MAE],
     )
     return model

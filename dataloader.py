@@ -29,6 +29,7 @@ class Dataloader:
         self.label_indices = np.arange(self.total_window_size)[self.labels_slice]
         self.batch_size = batch_size
         self.scale_coef = 1000.0
+        self.bias = 0.0
 
     def load(
         self,
@@ -88,37 +89,20 @@ class Dataloader:
         )
 
     def make_dataset(self, data):
-        ds = np.array(data, dtype="float32")
-        ds = np.diff(ds) * self.scale_coef
+        ds = self.transform(data)
         ds = tf.keras.preprocessing.timeseries_dataset_from_array(
             data=ds,
             targets=None,
             sequence_length=self.total_window_size,
             sequence_stride=1,
-            shuffle=False,
+            shuffle=True,
             batch_size=self.batch_size,
         )
-        # ds = ds.map(self.transform)
         ds = ds.map(self.split_window)
         return ds
 
-    # def transform(self, data):
-    #     # data = tf.reshape(databatch, (-1, self.total_window_size))
-    #     mean, std = tf.nn.moments(data, axes=[1], keepdims=True)
-    #     unbiased = tf.math.subtract(data, mean)
-    #     normalized = tf.math.divide(unbiased, std)
-    #     return normalized
-
-    # def inverse_transform(self, data, output_data):
-    #     mean, std = tf.nn.moments(data, axes=[1], keepdims=True)
-    #     denormalized = tf.math.multiply(output_data, std)
-    #     biased = tf.math.add(denormalized, mean)
-    #     return biased
-
     def make_input(self, data):
-        ds = np.array(data, dtype="float32")
-        ds = np.diff(ds) * self.scale_coef
-        # np_data = np.array(data, dtype="float32")
+        ds = self.transform(data)
         ds = tf.keras.preprocessing.timeseries_dataset_from_array(
             data=ds,
             targets=None,
@@ -126,13 +110,11 @@ class Dataloader:
             sequence_stride=1,
             shuffle=False,
         )
-        # ds = ds.map(self.transform)
         return ds
 
-    def make_output(self, input_data, output_data):
-        # cumsum = np.cumsum(output_data)
-        # return self.inverse_transform(input_data, output_data)
-        return output_data
+    def make_output(self, output_data):
+        d = self.inverse_transform(output_data)
+        return d
 
     def split_window(self, databatch):
         inputs = databatch[:, self.input_slice]
@@ -141,6 +123,20 @@ class Dataloader:
         labels.set_shape([None, self.label_width])
         return inputs, labels
 
+    def transform(self, data):
+        # ds = tf.math.subtract(data, data[:, 0:1])
+        self.first_value = data[0:1]
+        ds = np.diff(data) * self.scale_coef + self.bias
+        # ds = np.concatenate((ds[0:1], ds))
+        # ds = np.diff(ds) * self.scale_coef + self.bias
+        # ds = np.log(ds)
+        return ds
+
+    def inverse_transform(self, output_data):
+        d = (output_data - self.bias) / self.scale_coef
+
+        return d
+
     def moving_average(self, a, n=1):
         if n == 0:
             return a
@@ -148,9 +144,7 @@ class Dataloader:
         return result
 
     def shift_to_zero(self, data):
-        data = tf.math.subtract(
-            data, data[:, 0:1, 0:1]
-        )  # сдвиг начального значения в ноль
+        data = tf.math.subtract(data, data[:, 0:1])  # сдвиг начального значения в ноль
         # data, data[:, self.input_width - 1 : self.input_width, :]
         return data
 

@@ -4,12 +4,13 @@ from tensorflow.keras.layers import Layer
 from tensorflow.keras import backend as K
 from tensorflow.python.keras.initializers import constant
 import tensorflow as tf
+from tensorflow.python.keras.layers.merge import subtract
 
 
-class RBFLayer(Layer):
+class RBFLayerTrap(Layer):
     def __init__(self, units, **kwargs):
         self.output_dim = units
-        super(RBFLayer, self).__init__(**kwargs)
+        super(RBFLayerTrap, self).__init__(**kwargs)
 
     def build(self, input_shape):
         self.w = self.add_weight(
@@ -39,7 +40,7 @@ class RBFLayer(Layer):
             initializer=constant(1.0),
             trainable=True,
         )
-        super(RBFLayer, self).build(input_shape)
+        super(RBFLayerTrap, self).build(input_shape)
 
     def call(self, x):
         # z = K.pow((K.dot(x, self.w)-self.c), 2)
@@ -112,6 +113,55 @@ class RBFLayerExp(Layer):
             "w": self.w.numpy(),
             "c": self.c.numpy(),
             # "k": self.k.numpy(),
+            "sigma": self.sigma.numpy(),
+        }
+
+    def from_config(cls, config):
+        return cls(**config)
+
+
+class RBFLayer(Layer):
+    def __init__(self, units, center_regulizer=None, sigma_regulizer=None, **kwargs):
+        self.output_dim = units
+        self.center_regulizer = center_regulizer
+        self.sigma_regulizer = sigma_regulizer
+        super(RBFLayer, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        self.c = self.add_weight(
+            name="c",
+            shape=(self.output_dim, input_shape[1]),
+            initializer=constant(0),
+            regularizer=self.center_regulizer,
+            trainable=True,
+        )
+        self.sigma = self.add_weight(
+            name="sigma",
+            shape=(self.output_dim,),
+            initializer=constant(1.0),
+            regularizer=self.sigma_regulizer,
+            trainable=True,
+        )
+        super(RBFLayer, self).build(input_shape)
+
+    def call(self, x):
+        z = [tf.subtract(x, self.c[:, i, :]) for i in range(self.output_dim)]
+        z = [tf.multiply(z[i], z[i]) for i in range(self.output_dim)]
+        z = [-tf.reduce_sum(z[i], 1) for i in range(self.output_dim)]
+        z = tf.concat(z, 1)
+        # z = tf.reshape(x, (-1, 1, x.shape[1]))
+        # z = tf.tile(z, [1, self.output_dim, 1])
+        # z = tf.subtract(z, self.c)
+        # z = tf.multiply(z, z)
+        # z = -tf.reduce_sum(z, 2)
+        return tf.exp(z * (1e-4 + tf.multiply(self.sigma, self.sigma)))  # * self.k
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], self.output_dim)
+
+    def get_config(self):
+        return {
+            "c": self.c.numpy(),
             "sigma": self.sigma.numpy(),
         }
 
