@@ -115,23 +115,25 @@ class Server(object):
         count = output_data.shape[0]
         # сформируем результирующий список кортежей для записи в БД
         for i in range(count):
-            rdate = int(times[i + self.input_width])
-            rprice = prices[i + self.input_width]
-            pdate = int(rdate + self.timeunit * self.shift)  # секунды*shift
-            price = float(output_data[i].sum())
-            confidence = 0
-            db_row = (
-                rdate,
-                round(rprice, 8),
-                self.symbol,
-                self.modelname,
-                pdate,
-                round(rprice + price, 8),
-                round(rprice + price, 8),
-                round(rprice + price, 8),
-                round(confidence, 8),
-            )
-            results.append(db_row)
+            forecast = output_data[i].flatten()
+            for j in range(forecast.shape[0]):
+                rdate = int(times[i + self.input_width])
+                rprice = prices[i + self.input_width]
+                pdate = int(rdate + self.timeunit * (j + 1))  # секунды*shift
+                price = float(forecast[j])
+                confidence = 0
+                db_row = (
+                    rdate,
+                    round(rprice, 8),
+                    self.symbol,
+                    self.modelname,
+                    pdate,
+                    round(rprice + price, 8),
+                    round(rprice + price, 8),
+                    round(rprice + price, 8),
+                    round(confidence, 8),
+                )
+                results.append(db_row)
         return results
 
     def __compute_old__(self):
@@ -185,7 +187,7 @@ class Server(object):
             if not self.is_mt5_ready():
                 continue
             sleep(2)  # задержка для получения последнего бара
-            rates = self.__get_last_rates__(self.input_width + 2)
+            rates = self.__get_last_rates__(self.input_width + 1)
             if rates is None:
                 logger.debug("Отсутствуют новые котировки")
                 continue

@@ -13,7 +13,7 @@ def db_open(dbname):
     )
     pdata_ddl = (
         "CREATE TABLE IF NOT EXISTS pdata("
-        + "rdate INTEGER PRIMARY KEY,"
+        + "rdate INTEGER,"
         + "rprice REAL NOT NULL,"
         + "symbol TEXT,"
         + "model TEXT NOT NULL,"
@@ -21,7 +21,8 @@ def db_open(dbname):
         + "price REAL NOT NULL,"
         + "low REAL NOT NULL,"
         + "high REAL NOT NULL,"
-        + "confidence REAL NOT NULL)"
+        + "confidence REAL NOT NULL,"
+        + "PRIMARY KEY (rdate, pdate));"
     )
     symbol_info_ddl = (
         "CREATE TABLE IF NOT EXISTS symbol_info("

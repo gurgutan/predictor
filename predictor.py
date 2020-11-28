@@ -121,7 +121,7 @@ class Predictor(object):
         """Вычисление результата для набора data - массив размерности n"""
         x = self.dataloader.make_input(data)
         f = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
-        y = self.dataloader.make_output(f)
+        y = self.dataloader.make_output(f) * 100
         # result = self.dataloader.make_output(y)
         return y
 
