@@ -209,8 +209,9 @@ def lstm_block(input_shape, units, count=2):
 
 
 def spectral(input_width, output_width):
-    depth = 8
-    units = 2 ** 8
+    l2 = keras.regularizers.l2(1e-10)
+    depth = 4
+    units = 2 ** 7
     n = int(math.log2(input_width)) + 1
     inputs = Input(shape=(input_width,))
     x = inputs
@@ -237,25 +238,29 @@ def spectral(input_width, output_width):
     ]
     r = Concatenate(1, name=f"r")(r)
     # r = Reshape((-1, 1))(r)
-    # for i in range(depth):
-    #     m = Dense(units, "tanh")(m)
-    #     s = Dense(units, "tanh")(s)
-    #     r = Dense(units, "tanh")(r)
+    for i in range(4):
+        m = Dense(256, "relu", kernel_regularizer=l2, bias_regularizer=l2)(m)
+        s = Dense(256, "relu", kernel_regularizer=l2, bias_regularizer=l2)(s)
+        r = Dense(256, "relu", kernel_regularizer=l2, bias_regularizer=l2)(r)
     # m, s, r = Flatten()(m), Flatten()(s), Flatten()(r)
     x = Concatenate()([m, s, r])
-    x = Reshape((-1, 1))(x)
-    x = GRU(64)(x)
-    x = Flatten()(x)
-    x = Dense(1024, "tanh")(x)
-    x = Dense(64, "tanh")(x)
-    x = Dense(64, "tanh")(x)
+    # x = Reshape((-1, 1))(x)
+    # x = GRU(32, return_sequences=True)(x)
+    # x = Flatten()(x)
+    x = [Dense(256, "relu")(x) for i in range(output_width)]
+    x = [BatchNormalization()(x[i]) for i in range(output_width)]
+    for i in range(depth):
+        x = [Dense(units, "elu")(x[i]) for i in range(output_width)]
+    x = [Dense(1)(x[i]) for i in range(output_width)]
+    x = Concatenate()(x)
     # x = Dropout(1 / 8)(x)
-    outputs = Dense(output_width, name="output")(x)
-    model = keras.Model(inputs, outputs, name="spectral2-4")
+    # outputs = Dense(output_width, name="output")(x)
+    outputs = x
+    model = keras.Model(inputs, outputs, name="spectral2-2")
     MAE = keras.metrics.MeanAbsoluteError()
     model.compile(
         loss=keras.losses.MeanSquaredError(),
-        optimizer=keras.optimizers.Adam(1e-4),
+        optimizer=keras.optimizers.Adam(1e-2),
         metrics=[MAE],
     )
     return model

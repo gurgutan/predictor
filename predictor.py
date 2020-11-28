@@ -82,7 +82,7 @@ class Predictor(object):
         )
         early_stop = keras.callbacks.EarlyStopping(
             monitor="val_loss",
-            patience=2 ** 6,
+            patience=2 ** 4,
             min_delta=1e-5,
             restore_best_weights=True,
         )
@@ -141,14 +141,14 @@ if __name__ == "__main__":
     batch_size = 2 ** 10
     for param in sys.argv:
         if param == "--gpu":
-            batch_size = 2 ** 10
+            batch_size = 2 ** 12
         elif param == "--cpu":
             batch_size = 2 ** 15
         else:
             batch_size = 2 ** 12
 
     input_width = 2 ** 10
-    label_width = 4
+    label_width = 2
     # shift = 1
     # sections = int(math.log2(input_width))
     # model = trend_encoder(
