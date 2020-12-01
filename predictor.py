@@ -63,6 +63,10 @@ class Predictor(object):
         # self.model = keras.models.load_model(self.name, custom_objects={"shifted_mse": shifted_mse})
         self.model = keras.models.load_model(filename)
 
+    def save_model(self):
+        self.model.save("models/" + self.model.name + ".h5")
+        self.model.save("models/" + self.model.name)
+
     def print_model(self):
         model_png_name = "models/" + self.model.name + ".png"
         keras.utils.plot_model(self.model, show_shapes=True, to_file=model_png_name)
@@ -82,7 +86,7 @@ class Predictor(object):
         )
         early_stop = keras.callbacks.EarlyStopping(
             monitor="val_loss",
-            patience=2 ** 4,
+            patience=2 ** 5,
             min_delta=1e-5,
             restore_best_weights=True,
         )
@@ -93,7 +97,7 @@ class Predictor(object):
             save_best_only=True,
         )
         reduce_lr = keras.callbacks.ReduceLROnPlateau(
-            monitor="loss", factor=0.1, patience=10, min_lr=1e-8
+            monitor="loss", factor=0.1, patience=16, min_lr=1e-10
         )
 
         history = self.model.fit(
@@ -103,15 +107,12 @@ class Predictor(object):
             epochs=epochs,
             shuffle=True,
             use_multiprocessing=True,
-            verbose=1,
+            verbose=2,
             callbacks=[backup, early_stop, tensorboard_link, reduce_lr],
         )
         end_fit_time = datetime.datetime.now()
-        self.model.save("models/" + self.model.name + ".h5")
-        self.model.save("models/" + self.model.name)
-        print(
-            f"Начало: {start_fit_time} конец: {end_fit_time} время: {end_fit_time-start_fit_time}"
-        )
+        delta_time = end_fit_time - start_fit_time
+        print(f"\nНачало: {start_fit_time} конец: {end_fit_time} время: {delta_time}")
         return history
 
     def evaluate(self):
@@ -121,7 +122,7 @@ class Predictor(object):
         """Вычисление результата для набора data - массив размерности n"""
         x = self.dataloader.make_input(data)
         f = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
-        y = self.dataloader.make_output(f) * 100
+        y = self.dataloader.make_output(f)
         # result = self.dataloader.make_output(y)
         return y
 
@@ -158,7 +159,7 @@ if __name__ == "__main__":
     model = spectral(input_width, label_width)
     # model = rbf_dense(input_width, label_width)
     predictor = Predictor(
-        datafile="datas/EURUSD_H1 copy 2.csv",
+        datafile="datas/EURUSD_H1 copy.csv",
         model=model,
         input_width=input_width,
         label_width=label_width,
@@ -173,4 +174,5 @@ if __name__ == "__main__":
         print(f"\n Проход №{i+1}/{restarts_count}\n")
         history = predictor.fit(batch_size=batch_size, epochs=2 ** 14)
         perfomance = predictor.evaluate()
+        predictor.save_model()
 

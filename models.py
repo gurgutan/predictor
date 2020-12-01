@@ -36,6 +36,74 @@ def esum2(y_true, y_pred):
     return mse(y_true, y_pred) / tf.math.reduce_mean(s, 0)
 
 
+def spectral_rbf(input_width, output_width):
+    l2 = keras.regularizers.l2(1e-8)
+    depth = 4
+    units = 2 ** 8
+    n = int(math.log2(input_width)) + 1
+    k_size = 4
+    sample_width = min(output_width, input_width)
+    inputs = Input(shape=(input_width,))
+    x = inputs
+    u = Lambda(lambda z: z[:, -sample_width:])(x)
+    u = Dense(n)(u)
+    u = Reshape((-1, 1))(u)
+    x = [Lambda(lambda z: 2 ** i * z[0][:, -(2 ** z[1]) :])((x, i)) for i in range(n)]
+    means = [
+        Lambda(lambda z: tf.math.reduce_mean(z, 1, keepdims=True))(x[i])
+        for i in range(n)
+    ]
+    m = Concatenate(1, name=f"means")(means)
+    m = Reshape((-1, 1))(m)
+    stds = [
+        Lambda(lambda z: tf.math.reduce_std(z, 1, keepdims=True))(x[i])
+        for i in range(n)
+    ]
+    s = Concatenate(1, name=f"stds")(stds)
+    s = Reshape((-1, 1))(s)
+    r = [
+        Lambda(
+            lambda z: tf.math.reduce_max(z, 1, keepdims=True)
+            - tf.math.reduce_min(z, 1, keepdims=True)
+        )(x[i])
+        for i in range(n)
+    ]
+    r = Concatenate(1, name=f"r")(r)
+    r = Reshape((-1, 1))(r)
+
+    x = Concatenate(axis=2)([m, s, r, u])
+    for i in range(2):
+        x = Conv1D(64, kernel_size=k_size, activation="relu", padding="same")(x)
+    x = BatchNormalization()(x)
+    # x = Dropout(1 / 8)(x)
+    # x = Reshape((1, -1))(x)
+    # x = LSTM(128, return_sequences=True)(x)
+    # x = LSTM(64, return_sequences=True)(x)
+    # x = Flatten()(x)
+    # x = [BatchNormalization()(x[i]) for i in range(output_width)]
+    x = Flatten()(x)
+    x = [Dense(units)(x) for i in range(output_width)]
+    # x = [BatchNormalization()(x[i]) for i in range(output_width)]
+    for i in range(depth):
+        x = [Dense(units)(x[i]) for i in range(output_width)]
+        x = [LeakyReLU(alpha=1 / 16)(x[i]) for i in range(output_width)]
+    # x = [Dense(1024, "softmax")(x[i]) for i in range(output_width)]
+    x = [Dense(1)(x[i]) for i in range(output_width)]
+    x = Concatenate()(x)
+    # x = kDropout(1 / 8)(x)
+    # outputs = Dense(output_width, name="output")(x)
+    outputs = x
+    model = keras.Model(inputs, outputs, name="spectral2-2")
+    MAE = keras.metrics.MeanAbsoluteError()
+    model.compile(
+        loss=keras.losses.MeanSquaredError(),
+        # loss=keras.losses.MeanAbsoluteError(),
+        optimizer=keras.optimizers.Adam(1e-5),
+        metrics=[MAE],
+    )
+    return model
+
+
 def rbf_dense(input_width, output_width, train=True):
     l2 = keras.regularizers.l2(l=1e-10)
     kernel_size = 4
@@ -210,25 +278,30 @@ def lstm_block(input_shape, units, count=2):
 
 def spectral(input_width, output_width):
     l2 = keras.regularizers.l2(1e-10)
-    depth = 4
-    units = 2 ** 7
     n = int(math.log2(input_width)) + 1
+    slope = 1.0 / (2 ** 8)
+    depth = 16
+    units = 2 ** 6
+    k_size = 4
+    sample_width = min(output_width, input_width)
     inputs = Input(shape=(input_width,))
     x = inputs
-    # x = Lambda(lambda z: tf.math.log(z))(x)
-    x = [Lambda(lambda z: z[0][:, -(2 ** z[1]) :])((x, i)) for i in range(n)]
+    u = Lambda(lambda z: z[:, -sample_width:])(x)
+    u = Dense(n)(u)
+    u = Reshape((-1, 1))(u)
+    x = [Lambda(lambda z: 2 ** i * z[0][:, -(2 ** z[1]) :])((x, i)) for i in range(n)]
     means = [
         Lambda(lambda z: tf.math.reduce_mean(z, 1, keepdims=True))(x[i])
         for i in range(n)
     ]
     m = Concatenate(1, name=f"means")(means)
-    # m = Reshape((-1, 1))(m)
+    m = Reshape((-1, 1))(m)
     stds = [
         Lambda(lambda z: tf.math.reduce_std(z, 1, keepdims=True))(x[i])
         for i in range(n)
     ]
     s = Concatenate(1, name=f"stds")(stds)
-    # s = Reshape((-1, 1))(s)
+    s = Reshape((-1, 1))(s)
     r = [
         Lambda(
             lambda z: tf.math.reduce_max(z, 1, keepdims=True)
@@ -237,20 +310,34 @@ def spectral(input_width, output_width):
         for i in range(n)
     ]
     r = Concatenate(1, name=f"r")(r)
-    # r = Reshape((-1, 1))(r)
-    for i in range(4):
-        m = Dense(256, "relu", kernel_regularizer=l2, bias_regularizer=l2)(m)
-        s = Dense(256, "relu", kernel_regularizer=l2, bias_regularizer=l2)(s)
-        r = Dense(256, "relu", kernel_regularizer=l2, bias_regularizer=l2)(r)
+    r = Reshape((-1, 1))(r)
+
+    for i in range(3):
+        m = Conv1D(64, kernel_size=k_size, padding="valid")(m)
+        m = ReLU(negative_slope=slope)(m)
+        s = Conv1D(64, kernel_size=k_size, padding="valid")(s)
+        s = ReLU(negative_slope=slope)(s)
+        r = Conv1D(64, kernel_size=k_size, padding="valid")(r)
+        r = ReLU(negative_slope=slope)(r)
+        u = Conv1D(64, kernel_size=k_size, padding="valid")(u)
+        u = ReLU(negative_slope=slope)(u)
     # m, s, r = Flatten()(m), Flatten()(s), Flatten()(r)
-    x = Concatenate()([m, s, r])
-    # x = Reshape((-1, 1))(x)
-    # x = GRU(32, return_sequences=True)(x)
+    x = Concatenate(axis=2)([m, s, r, u])
+
+    x = BatchNormalization()(x)
+    # x = Dropout(1 / 8)(x)
+    # x = Reshape((1, -1))(x)
+    # x = LSTM(128, return_sequences=True)(x)
+    # x = LSTM(64, return_sequences=True)(x)
     # x = Flatten()(x)
-    x = [Dense(256, "relu")(x) for i in range(output_width)]
-    x = [BatchNormalization()(x[i]) for i in range(output_width)]
+    # x = [BatchNormalization()(x[i]) for i in range(output_width)]
+    x = Flatten()(x)
+    x = [Dense(units)(x) for i in range(output_width)]
+    # x = [BatchNormalization()(x[i]) for i in range(output_width)]
     for i in range(depth):
-        x = [Dense(units, "elu")(x[i]) for i in range(output_width)]
+        x = [Dense(units)(x[i]) for i in range(output_width)]
+        x = [ReLU(negative_slope=slope)(x[i]) for i in range(output_width)]
+    # x = [Dense(1024, "softmax")(x[i]) for i in range(output_width)]
     x = [Dense(1)(x[i]) for i in range(output_width)]
     x = Concatenate()(x)
     # x = Dropout(1 / 8)(x)
@@ -260,7 +347,8 @@ def spectral(input_width, output_width):
     MAE = keras.metrics.MeanAbsoluteError()
     model.compile(
         loss=keras.losses.MeanSquaredError(),
-        optimizer=keras.optimizers.Adam(1e-2),
+        # loss=keras.losses.MeanAbsoluteError(),
+        optimizer=keras.optimizers.Adam(1e-5),
         metrics=[MAE],
     )
     return model
