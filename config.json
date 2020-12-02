@@ -1,13 +1,13 @@
 {
     "dbname": "D:/Dev/Alpari MT5/MQL5/Files/predictions.sqlite",
     "mt5path": "D:/Dev/Alpari MT5/terminal64.exe",
-    "initialdate": "2004-01-01T00:00:00",
-    "modelname": "models/spectral2-4",
+    "initialdate": "2010-01-01T00:00:00",
+    "modelname": "models/spectral2-2",
     "symbol": "EURUSD",
     "timeunit": 3600,
     "delay": 300,
     "input_width": 1024,
-    "label_width": 4,
+    "label_width": 2,
     "sample_width": 1,
-    "shift": 4
+    "shift": 2
 }
