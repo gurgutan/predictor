@@ -28,8 +28,9 @@ class Dataloader:
         self.labels_slice = slice(self.label_start, None)
         self.label_indices = np.arange(self.total_window_size)[self.labels_slice]
         self.batch_size = batch_size
-        self.scale_coef = 1000.0
+        self.scale_coef = 100.0
         self.bias = 0.0
+        self.clip_value = 2.0
 
     def load(
         self,
@@ -127,6 +128,8 @@ class Dataloader:
         # ds = tf.math.subtract(data, data[:, 0:1])
         self.first_value = data[0:1]
         ds = np.diff(data) * self.scale_coef + self.bias
+        std = np.std(ds)
+        ds = np.clip(ds, -std * self.clip_value, std * self.clip_value)
         # ds = np.concatenate((ds[0:1], ds))
         # ds = np.diff(ds) * self.scale_coef + self.bias
         # ds = np.log(ds)
