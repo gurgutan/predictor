@@ -283,7 +283,7 @@ def spectral(input_width, output_width):
     depth = 16
     units = 2 ** 6
     k_size = 4
-    sample_width = min(output_width, input_width)
+    sample_width = min(4, input_width)
     inputs = Input(shape=(input_width,))
     x = inputs
     u = Lambda(lambda z: z[:, -sample_width:])(x)
@@ -321,34 +321,26 @@ def spectral(input_width, output_width):
         r = ReLU(negative_slope=slope)(r)
         u = Conv1D(64, kernel_size=k_size, padding="valid")(u)
         u = ReLU(negative_slope=slope)(u)
-    # m, s, r = Flatten()(m), Flatten()(s), Flatten()(r)
     x = Concatenate(axis=2)([m, s, r, u])
-
-    x = BatchNormalization()(x)
-    # x = Dropout(1 / 8)(x)
+    # x = BatchNormalization()(x)
     # x = Reshape((1, -1))(x)
     # x = LSTM(128, return_sequences=True)(x)
     # x = LSTM(64, return_sequences=True)(x)
-    # x = Flatten()(x)
-    # x = [BatchNormalization()(x[i]) for i in range(output_width)]
     x = Flatten()(x)
+    # x = Dropout(1 / 16)(x)
     x = [Dense(units)(x) for i in range(output_width)]
-    # x = [BatchNormalization()(x[i]) for i in range(output_width)]
     for i in range(depth):
         x = [Dense(units)(x[i]) for i in range(output_width)]
         x = [ReLU(negative_slope=slope)(x[i]) for i in range(output_width)]
-    # x = [Dense(1024, "softmax")(x[i]) for i in range(output_width)]
     x = [Dense(1)(x[i]) for i in range(output_width)]
     x = Concatenate()(x)
-    # x = Dropout(1 / 8)(x)
-    # outputs = Dense(output_width, name="output")(x)
     outputs = x
-    model = keras.Model(inputs, outputs, name="spectral2-2")
+    model = keras.Model(inputs, outputs, name="spectral3-2")
     MAE = keras.metrics.MeanAbsoluteError()
     model.compile(
         loss=keras.losses.MeanSquaredError(),
         # loss=keras.losses.MeanAbsoluteError(),
-        optimizer=keras.optimizers.Adam(1e-5),
+        optimizer=keras.optimizers.SGD(1e-2),
         metrics=[MAE],
     )
     return model
