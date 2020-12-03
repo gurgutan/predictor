@@ -281,9 +281,9 @@ def spectral(input_width, output_width):
     n = int(math.log2(input_width)) + 1
     slope = 1.0 / (2 ** 8)
     depth = 16
-    units = 2 ** 7
+    units = 2 ** 6
     k_size = 3
-    sample_width = min(4, input_width)
+    sample_width = min(8, input_width)
     inputs = Input(shape=(input_width,))
     x = inputs
     u = Lambda(lambda z: z[:, -sample_width:])(x)
@@ -331,17 +331,15 @@ def spectral(input_width, output_width):
     for i in range(depth):
         x = [Dense(units)(x[i]) for i in range(output_width)]
         x = [ReLU(negative_slope=slope)(x[i]) for i in range(output_width)]
-        # if i % 7 == 0:
-        #     x = [BatchNormalization()(x[i]) for i in range(output_width)]
     x = [Dense(1)(x[i]) for i in range(output_width)]
     x = Concatenate()(x)
     outputs = x
-    model = keras.Model(inputs, outputs, name="spectral3-2")
+    model = keras.Model(inputs, outputs, name="spectral4-2")
     MAE = keras.metrics.MeanAbsoluteError()
     model.compile(
         loss=keras.losses.MeanSquaredError(),
         # loss=keras.losses.MeanAbsoluteError(),
-        optimizer=keras.optimizers.Adam(1e-5),
+        optimizer=keras.optimizers.Adam(1e-7),
         metrics=[MAE],
     )
     return model

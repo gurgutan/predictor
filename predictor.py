@@ -97,7 +97,7 @@ class Predictor(object):
             save_best_only=True,
         )
         reduce_lr = keras.callbacks.ReduceLROnPlateau(
-            monitor="loss", factor=0.1, min_delta=0.0001, patience=16, min_lr=1e-10
+            monitor="loss", factor=0.1, min_delta=0.0001, patience=16, min_lr=1e-14
         )
 
         history = self.model.fit(
@@ -144,12 +144,12 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 12
         elif param == "--cpu":
-            batch_size = 2 ** 15
+            batch_size = 2 ** 16
         else:
             batch_size = 2 ** 12
 
     dataset_segment = 1.0 / 32
-    input_width = 2 ** 10
+    input_width = 2 ** 8
     label_width = 2
     # shift = 1
     # sections = int(math.log2(input_width))
