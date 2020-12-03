@@ -137,7 +137,6 @@ class Dataloader:
 
     def inverse_transform(self, output_data):
         d = (output_data - self.bias) / self.scale_coef
-
         return d
 
     def moving_average(self, a, n=1):
