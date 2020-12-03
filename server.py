@@ -209,7 +209,7 @@ class Server(object):
                 high,
                 confidence,
             ) = results[-1]
-            d = round((price - rprice), 5)
+            d = round((price - rprice), 6)
             logger.debug(f"delta={d}")
 
 
