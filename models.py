@@ -281,8 +281,8 @@ def spectral(input_width, output_width):
     n = int(math.log2(input_width)) + 1
     slope = 1.0 / (2 ** 8)
     depth = 16
-    units = 2 ** 6
-    k_size = 4
+    units = 2 ** 7
+    k_size = 3
     sample_width = min(4, input_width)
     inputs = Input(shape=(input_width,))
     x = inputs
@@ -311,8 +311,7 @@ def spectral(input_width, output_width):
     ]
     r = Concatenate(1, name=f"r")(r)
     r = Reshape((-1, 1))(r)
-
-    for i in range(3):
+    for i in range(4):
         m = Conv1D(64, kernel_size=k_size, padding="valid")(m)
         m = ReLU(negative_slope=slope)(m)
         s = Conv1D(64, kernel_size=k_size, padding="valid")(s)
@@ -322,7 +321,7 @@ def spectral(input_width, output_width):
         u = Conv1D(64, kernel_size=k_size, padding="valid")(u)
         u = ReLU(negative_slope=slope)(u)
     x = Concatenate(axis=2)([m, s, r, u])
-    # x = BatchNormalization()(x)
+    x = BatchNormalization()(x)
     # x = Reshape((1, -1))(x)
     # x = LSTM(128, return_sequences=True)(x)
     # x = LSTM(64, return_sequences=True)(x)
@@ -332,6 +331,8 @@ def spectral(input_width, output_width):
     for i in range(depth):
         x = [Dense(units)(x[i]) for i in range(output_width)]
         x = [ReLU(negative_slope=slope)(x[i]) for i in range(output_width)]
+        # if i % 7 == 0:
+        #     x = [BatchNormalization()(x[i]) for i in range(output_width)]
     x = [Dense(1)(x[i]) for i in range(output_width)]
     x = Concatenate()(x)
     outputs = x
@@ -340,7 +341,7 @@ def spectral(input_width, output_width):
     model.compile(
         loss=keras.losses.MeanSquaredError(),
         # loss=keras.losses.MeanAbsoluteError(),
-        optimizer=keras.optimizers.SGD(1e-2),
+        optimizer=keras.optimizers.Adam(1e-5),
         metrics=[MAE],
     )
     return model
