@@ -276,7 +276,7 @@ def lstm_block(input_shape, units, count=2):
     return model
 
 
-def spectral(input_width, output_width):
+def spectral(input_width, output_width, lr=1e-3):
     l2 = keras.regularizers.l2(1e-10)
     n = int(math.log2(input_width)) + 1
     slope = 1.0 / (2 ** 8)
@@ -320,11 +320,11 @@ def spectral(input_width, output_width):
         r = ReLU(negative_slope=slope)(r)
         u = Conv1D(64, kernel_size=k_size, padding="valid")(u)
         u = ReLU(negative_slope=slope)(u)
-    x = Concatenate(axis=2)([m, s, r, u])
+
+    x = Concatenate()([m, s, r, u])
     x = BatchNormalization()(x)
-    # x = Reshape((1, -1))(x)
-    # x = LSTM(128, return_sequences=True)(x)
-    # x = LSTM(64, return_sequences=True)(x)
+    x = Reshape((1, -1))(x)
+    x = LSTM(256, return_sequences=True)(x)
     x = Flatten()(x)
     # x = Dropout(1 / 16)(x)
     x = [Dense(units)(x) for i in range(output_width)]
@@ -339,7 +339,7 @@ def spectral(input_width, output_width):
     model.compile(
         loss=keras.losses.MeanSquaredError(),
         # loss=keras.losses.MeanAbsoluteError(),
-        optimizer=keras.optimizers.Adam(1e-7),
+        optimizer=keras.optimizers.Adam(learning_rate=lr),
         metrics=[MAE],
     )
     return model

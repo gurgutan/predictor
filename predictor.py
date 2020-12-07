@@ -107,7 +107,7 @@ class Predictor(object):
             epochs=epochs,
             shuffle=True,
             use_multiprocessing=True,
-            verbose=2,
+            verbose=1,
             callbacks=[backup, early_stop, tensorboard_link, reduce_lr],
         )
         end_fit_time = datetime.datetime.now()
@@ -150,7 +150,7 @@ if __name__ == "__main__":
 
     dataset_segment = 1.0 / 32
     input_width = 2 ** 8
-    label_width = 2
+    label_width = 4
     # shift = 1
     # sections = int(math.log2(input_width))
     # model = trend_encoder(
@@ -160,13 +160,13 @@ if __name__ == "__main__":
     model = spectral(input_width, label_width)
     # model = rbf_dense(input_width, label_width)
     predictor = Predictor(
-        datafile="datas/EURUSD_H1 copy 3.csv",
+        datafile="datas/EURUSD_H1.csv",
         model=model,
         input_width=input_width,
         label_width=label_width,
-        train_ratio=1.0 - 2.0 * dataset_segment,
+        train_ratio=1.0 - 1.0 * dataset_segment,
         val_ratio=dataset_segment,
-        test_ratio=dataset_segment,
+        test_ratio=0,
         batch_size=batch_size,
     )
     restarts_count = 2 ** 16
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     for i in range(restarts_count):
         print(f"\n Проход №{i+1}/{restarts_count}\n")
         history = predictor.fit(batch_size=batch_size, epochs=2 ** 14)
-        perfomance = predictor.evaluate()
+        # perfomance = predictor.evaluate()
         predictor.save_model()
         print("Модель обновлена")
 
