@@ -10,7 +10,15 @@ from tensorflow import keras
 from tensorflow.keras.utils import plot_model
 
 from dataloader import Dataloader
-from models import rbf_dense, spectral, trend_encoder, esum, dense_model, conv_model
+from models import (
+    rbf_dense,
+    spectral,
+    spectral_ensemble,
+    trend_encoder,
+    esum,
+    dense_model,
+    conv_model,
+)
 import sys
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -148,19 +156,25 @@ if __name__ == "__main__":
         else:
             batch_size = 2 ** 12
 
+    restarts_count = 2 ** 16
     dataset_segment = 1.0 / 32
     input_width = 2 ** 8
-    label_width = 4
+    label_width = 1
+    ensemble_size = 2 ** 4
+    name = f"ens{ensemble_size}-{input_width}-{label_width}"
     # shift = 1
     # sections = int(math.log2(input_width))
     # model = trend_encoder(
     #     (input_width,), (label_width,), units=2 ** 10, sections=sections
     # )
     # model = conv_model((input_width, 1), (label_width,), units=2 ** 10)
-    model = spectral(input_width, label_width)
-    # model = rbf_dense(input_width, label_width)
+    last_perfomance = 1e16
+
+    model = spectral_ensemble(
+        input_width, label_width, ensemble_size, lr=1e-5, name=name
+    )
     predictor = Predictor(
-        datafile="datas/EURUSD_H1.csv",
+        datafile="datas/EURUSD_H1 copy 3.csv",
         model=model,
         input_width=input_width,
         label_width=label_width,
@@ -169,10 +183,8 @@ if __name__ == "__main__":
         test_ratio=0,
         batch_size=batch_size,
     )
-    restarts_count = 2 ** 16
-    predictor.print_model()
-    last_perfomance = 1e16
     for i in range(restarts_count):
+        predictor.print_model()
         print(f"\n Проход №{i+1}/{restarts_count}\n")
         history = predictor.fit(batch_size=batch_size, epochs=2 ** 14)
         # perfomance = predictor.evaluate()

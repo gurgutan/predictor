@@ -276,7 +276,7 @@ def lstm_block(input_shape, units, count=2):
     return model
 
 
-def spectral(input_width, output_width, lr=1e-3):
+def spectral(input_width, out_width, lr=1e-3):
     l2 = keras.regularizers.l2(1e-10)
     n = int(math.log2(input_width)) + 1
     slope = 1.0 / (2 ** 8)
@@ -327,14 +327,102 @@ def spectral(input_width, output_width, lr=1e-3):
     x = LSTM(256, return_sequences=True)(x)
     x = Flatten()(x)
     # x = Dropout(1 / 16)(x)
-    x = [Dense(units)(x) for i in range(output_width)]
-    for i in range(depth):
-        x = [Dense(units)(x[i]) for i in range(output_width)]
-        x = [ReLU(negative_slope=slope)(x[i]) for i in range(output_width)]
-    x = [Dense(1)(x[i]) for i in range(output_width)]
+    x = [Dense(units)(x) for i in range(out_width)]
+    for j in range(depth):
+        x = [Dense(units, name=f"dense{j}-{i}")(x[i]) for i in range(out_width)]
+        x = [
+            ReLU(negative_slope=slope, name=f"relu{j}-{i}")(x[i])
+            for i in range(out_width)
+        ]
+    x = [Dense(1, name=f"dense-out{i}")(x[i]) for i in range(out_width)]
     x = Concatenate()(x)
     outputs = x
     model = keras.Model(inputs, outputs, name="spectral4-2")
+    MAE = keras.metrics.MeanAbsoluteError()
+    model.compile(
+        loss=keras.losses.MeanSquaredError(),
+        # loss=keras.losses.MeanAbsoluteError(),
+        optimizer=keras.optimizers.Adam(learning_rate=lr),
+        metrics=[MAE],
+    )
+    return model
+
+
+def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="specemble"):
+    l2 = keras.regularizers.l2(1e-10)
+    n = int(math.log2(input_width)) + 1
+    slope = 1.0 / (2 ** 8)
+    depth = 16
+    units = 2 ** 6
+    k_size = 3
+    sample_width = min(8, input_width)
+    inputs = Input(shape=(input_width,))
+    x = inputs
+    u = Lambda(lambda z: z[:, -sample_width:])(x)
+    u = Dense(n)(u)
+    u = Reshape((-1, 1))(u)
+    x = [Lambda(lambda z: 2 ** i * z[0][:, -(2 ** z[1]) :])((x, i)) for i in range(n)]
+    means = [
+        Lambda(lambda z: tf.math.reduce_mean(z, 1, keepdims=True))(x[i])
+        for i in range(n)
+    ]
+    m = Concatenate(1, name=f"means")(means)
+    m = Reshape((-1, 1))(m)
+    stds = [
+        Lambda(lambda z: tf.math.reduce_std(z, 1, keepdims=True))(x[i])
+        for i in range(n)
+    ]
+    s = Concatenate(1, name=f"stds")(stds)
+    s = Reshape((-1, 1))(s)
+    r = [
+        Lambda(
+            lambda z: tf.math.reduce_max(z, 1, keepdims=True)
+            - tf.math.reduce_min(z, 1, keepdims=True)
+        )(x[i])
+        for i in range(n)
+    ]
+    r = Concatenate(1, name=f"r")(r)
+    r = Reshape((-1, 1))(r)
+    for i in range(4):
+        m = Conv1D(64, kernel_size=k_size, padding="valid")(m)
+        m = ReLU(negative_slope=slope)(m)
+        s = Conv1D(64, kernel_size=k_size, padding="valid")(s)
+        s = ReLU(negative_slope=slope)(s)
+        r = Conv1D(64, kernel_size=k_size, padding="valid")(r)
+        r = ReLU(negative_slope=slope)(r)
+        u = Conv1D(64, kernel_size=k_size, padding="valid")(u)
+        u = ReLU(negative_slope=slope)(u)
+    x = Concatenate()([m, s, r, u])
+    x = Reshape((1, -1))(x)
+    x = LSTM(256, return_sequences=True)(x)
+    x = Flatten()(x)
+    x = BatchNormalization()(x)
+    z = [x for k in range(size)]
+    for k in range(size):
+        z[k] = [Dense(units)(z[k]) for i in range(out_width)]
+        for j in range(depth):
+            z[k] = [
+                Dense(units, name=f"dense{k}-{j}-{i}")(z[k][i])
+                for i in range(out_width)
+            ]
+            z[k] = [
+                ReLU(negative_slope=slope, name=f"lu{k}-{j}-{i}")(z[k][i])
+                for i in range(out_width)
+            ]
+        z[k] = [Dense(1, name=f"dense-out{k}-{i}")(z[k][i]) for i in range(out_width)]
+    for k in range(size):
+        if len(z[k]) == 1:
+            z[k] = z[k][0]
+        else:
+            z[k] = Concatenate()(z[k])
+    if len(z) == 1:
+        x = z[0]
+    else:
+        x = Concatenate()(z)
+    # x = Dropout(1 / 2)(x)
+    x = Dense(out_width)(x)
+    outputs = x
+    model = keras.Model(inputs, outputs, name=name)
     MAE = keras.metrics.MeanAbsoluteError()
     model.compile(
         loss=keras.losses.MeanSquaredError(),
