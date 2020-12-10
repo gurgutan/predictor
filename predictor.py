@@ -75,10 +75,10 @@ class Predictor(object):
         self.model.save("models/" + self.model.name + ".h5")
         self.model.save("models/" + self.model.name)
 
-    def print_model(self):
+    def plot_model(self):
         model_png_name = "models/" + self.model.name + ".png"
         keras.utils.plot_model(self.model, show_shapes=True, to_file=model_png_name)
-        self.model.summary()
+        # self.model.summary()
 
     def fit(self, batch_size=256, epochs=8):
         start_fit_time = datetime.datetime.now()
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     dataset_segment = 1.0 / 32
     input_width = 2 ** 8
     label_width = 1
-    ensemble_size = 2 ** 4
+    ensemble_size = 2 ** 6
     name = f"ens{ensemble_size}-{input_width}-{label_width}"
     # shift = 1
     # sections = int(math.log2(input_width))
@@ -171,7 +171,7 @@ if __name__ == "__main__":
     last_perfomance = 1e16
 
     model = spectral_ensemble(
-        input_width, label_width, ensemble_size, lr=1e-5, name=name
+        input_width, label_width, ensemble_size, lr=1e-3, name=name
     )
     predictor = Predictor(
         datafile="datas/EURUSD_H1 copy 3.csv",
@@ -184,7 +184,7 @@ if __name__ == "__main__":
         batch_size=batch_size,
     )
     for i in range(restarts_count):
-        predictor.print_model()
+        predictor.plot_model()
         print(f"\n Проход №{i+1}/{restarts_count}\n")
         history = predictor.fit(batch_size=batch_size, epochs=2 ** 14)
         # perfomance = predictor.evaluate()

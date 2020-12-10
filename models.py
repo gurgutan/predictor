@@ -350,10 +350,11 @@ def spectral(input_width, out_width, lr=1e-3):
 
 def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="specemble"):
     l2 = keras.regularizers.l2(1e-10)
+    rsig = lambda x: x / (1.0 + 2 * tf.sqrt(tf.abs(x)))
     n = int(math.log2(input_width)) + 1
     slope = 1.0 / (2 ** 8)
-    depth = 16
-    units = 2 ** 6
+    depth = 8
+    units = 2 ** 5
     k_size = 3
     sample_width = min(8, input_width)
     inputs = Input(shape=(input_width,))
@@ -409,6 +410,7 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="specemble")
                 ReLU(negative_slope=slope, name=f"lu{k}-{j}-{i}")(z[k][i])
                 for i in range(out_width)
             ]
+            z[k] = [Lambda(rsig)(z[k][i]) for i in range(out_width)]
         z[k] = [Dense(1, name=f"dense-out{k}-{i}")(z[k][i]) for i in range(out_width)]
     for k in range(size):
         if len(z[k]) == 1:
@@ -419,7 +421,7 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="specemble")
         x = z[0]
     else:
         x = Concatenate()(z)
-    # x = Dropout(1 / 2)(x)
+    x = Dropout(1 / 8)(x)
     x = Dense(out_width)(x)
     outputs = x
     model = keras.Model(inputs, outputs, name=name)
