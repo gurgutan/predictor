@@ -60,7 +60,7 @@ class Dataloader:
         test_len = int(df_size * test_ratio)
         train_slice = slice(0, train_len)
         val_slice = slice(train_len, train_len + val_len)
-        test_slice = slice(train_len + val_len, None)
+        test_slice = slice(train_len + val_len, train_len + val_len + test_len)
         self.train_df = df[input_column][train_slice]
         self.val_df = df[input_column][val_slice]
         self.test_df = df[input_column][test_slice]
