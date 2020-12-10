@@ -105,9 +105,9 @@ class Server(object):
         # logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
-    def compute(self, rates, verbose=0):
-        assert len(rates) != 0, f"Ошибка: пустой список котировок"
-        times, prices = rates["time"], rates["open"]
+    def compute(self, times, prices, verbose=0):
+        assert len(times) != 0, f"Ошибка: пустой список котировок"
+
         # count = len(opens) - self.input_width
         results = []
         # вычисляем прогноз
@@ -149,7 +149,8 @@ class Server(object):
         if rates is None:
             logger.error("Отсутствуют новые котировки")
             return
-        results = self.compute(rates, verbose=1)
+        times, prices = rates["time"], rates["open"]
+        results = self.compute(times, prices, verbose=1)
         if results is None:
             return
         # logging.info("Вычислено %d " % len(results))
@@ -191,7 +192,8 @@ class Server(object):
             if rates is None:
                 logger.debug("Отсутствуют новые котировки")
                 continue
-            results = self.compute(rates, verbose=0)
+            times, prices = rates["time"], rates["close"]
+            results = self.compute(times, prices, verbose=0)
             if results is None or len(results) == 0:
                 logger.error("Ошибка вычислений")
                 continue
@@ -209,7 +211,7 @@ class Server(object):
                 high,
                 confidence,
             ) = results[-1]
-            d = round((price - rprice), 6)
+            d = round((price - rprice), 5)
             logger.debug(f"delta={d}")
 
 
