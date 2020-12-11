@@ -1,3 +1,6 @@
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -32,7 +35,7 @@ class Dataloader:
         self.bias = 0.0
         self.clip_value = 2.0
 
-    def load(
+    def load_tsv(
         self,
         tsv_filename,
         input_column="open",
@@ -53,7 +56,6 @@ class Dataloader:
             },
             names=["date", "time", "open", "high", "low", "close", "tickvol", "vol"],
         )
-
         df_size = df[input_column].size
         train_len = int(df_size * train_ratio)
         val_len = int(df_size * val_ratio)
@@ -67,6 +69,37 @@ class Dataloader:
         if verbose == 1:
             print(self.__sizes__())
             print(self.__repr__())
+        return True
+
+    def load_df(
+        self,
+        dataframe: pd.core.frame.DataFrame,
+        input_column="open",
+        train_ratio=0.6,
+        val_ratio=0.2,
+        test_ratio=0.2,
+        verbose=1,
+    ):
+        """
+        Преобразует dataframe в обучающую выборку
+        dataframe - Pandas Dataframe с колонками ["date", "time", "open", "high", "low", "close", "tickvol", "vol"]
+        input_column - колонка с основными данными
+        """
+        df = dataframe.dropna()
+        df_size = df[input_column].size
+        train_len = int(df_size * train_ratio)
+        val_len = int(df_size * val_ratio)
+        test_len = int(df_size * test_ratio)
+        train_slice = slice(0, train_len)
+        val_slice = slice(train_len, train_len + val_len)
+        test_slice = slice(train_len + val_len, train_len + val_len + test_len)
+        self.train_df = df[input_column][train_slice]
+        self.val_df = df[input_column][val_slice]
+        self.test_df = df[input_column][test_slice]
+        if verbose == 1:
+            print(self.__sizes__())
+            print(self.__repr__())
+        return True
         return True
 
     def __sizes__(self):
