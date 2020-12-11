@@ -171,7 +171,7 @@ if __name__ == "__main__":
     last_perfomance = 1e16
 
     model = spectral_ensemble(
-        input_width, label_width, ensemble_size, lr=1e-3, name=name
+        input_width, label_width, ensemble_size, lr=1e-5, name=name
     )
     predictor = Predictor(
         datafile="datas/EURUSD_H1 copy 3.csv",
@@ -184,10 +184,10 @@ if __name__ == "__main__":
         batch_size=batch_size,
     )
     for i in range(restarts_count):
-        predictor.plot_model()
         print(f"\n Проход №{i+1}/{restarts_count}\n")
         history = predictor.fit(batch_size=batch_size, epochs=2 ** 14)
         # perfomance = predictor.evaluate()
         predictor.save_model()
+        predictor.plot_model()
         print("Модель обновлена")
 
