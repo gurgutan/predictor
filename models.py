@@ -421,7 +421,7 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="specemble")
         x = z[0]
     else:
         x = Concatenate()(z)
-    x = Dropout(1 / 8)(x)
+    # x = Dropout(1 / 8)(x)
     x = Dense(out_width)(x)
     outputs = x
     model = keras.Model(inputs, outputs, name=name)

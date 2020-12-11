@@ -117,8 +117,6 @@ class Dataloader:
                 f"Размер окна: {self.total_window_size}",
                 f"Размер входа: {self.input_width}",
                 f"Размер выхода: {self.label_width}",
-                f"Индексы входа: {self.input_indices}",
-                f"Индексы выхода: {self.label_indices}",
             ]
         )
 
