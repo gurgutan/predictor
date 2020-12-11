@@ -1,6 +1,9 @@
 """
 Сервер для обновления БД прогнозов
 """
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import dbcommon
 from predictor import Predictor
 import json
@@ -13,6 +16,9 @@ import logging
 import MetaTrader5 as mt5
 import os
 import pytz
+import tensorflow as tf
+
+tf.get_logger().setLevel("INFO")
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +38,9 @@ class Server(object):
             self.symbol = data["symbol"]  # символ инструмента
             self.timeunit = data["timeunit"]
             self.mt5path = data["mt5path"]
-            self.delay = data["delay"]  # задержка в секундах цикла сервера
+            self.compute_delay = data["compute_delay"]
+            self.train_delay = data["train_delay"]  # задержка в секундах цикла сервера
+            self.train_rates_count = data["train_rates_count"]
             self.input_width = data["input_width"]
             self.label_width = data["label_width"]
             self.sample_width = data["sample_width"]
@@ -107,7 +115,6 @@ class Server(object):
 
     def compute(self, times, prices, verbose=0):
         assert len(times) != 0, f"Ошибка: пустой список котировок"
-
         # count = len(opens) - self.input_width
         results = []
         # вычисляем прогноз
@@ -162,14 +169,35 @@ class Server(object):
             return False
         return True
 
-    def is_waiting(self, dtimer):
+    def is_waiting_compute(self, dtimer):
         if not dtimer.elapsed():
-            remained = dtimer.remained()
-            if remained > 1:
+            if dtimer.remained() > 1:
                 sleep(1)
             return True
         else:
             return False
+
+    def is_waiting_train(self, dtimer):
+        return not dtimer.elapsed()
+
+    def train(self) -> bool:
+        df = self.__get_last_rates__(self.train_rates_count)
+        if df is None:
+            return False
+        logger.info(f"Получено {len(df.index)} котировок")
+        self.p.dataloader.load_df(
+            df,
+            input_column="open",
+            train_ratio=1 - 1 / 32,
+            val_ratio=1 / 32,
+            test_ratio=0,
+            verbose=0,
+        )
+        self.p.fit(batch_size=2 ** 10, epochs=4, use_tensorboard=False, verbose=0)
+        logger.info(f"Модель дообучена")
+        self.p.save_model()
+        logger.info("Модель сохранена")
+        return True
 
     def is_mt5_ready(self):
         if not self.__is_mt5_connected__():
@@ -179,14 +207,16 @@ class Server(object):
         return True
 
     def start(self):
-        dtimer = DelayTimer(self.delay)
+        compute_timer = DelayTimer(self.compute_delay)
+        train_timer = DelayTimer(self.train_delay)
         self.__compute_old__()  # обновление данных начиная с даты
-        logger.info(f"Запуск таймера с периодом {self.delay}")
+        logger.info(f"Запуск таймера с периодом {self.compute_delay}")
         while True:
-            if self.is_waiting(dtimer):
+            if self.is_waiting_compute(compute_timer):
                 continue
             if not self.is_mt5_ready():
                 continue
+
             sleep(2)  # задержка для получения последнего бара
             rates = self.__get_last_rates__(self.input_width + 1)
             if rates is None:
@@ -213,6 +243,10 @@ class Server(object):
             ) = results[-1]
             d = round((price - rprice), 5)
             logger.debug(f"delta={d}")
+
+            if train_timer.elapsed():
+                logger.debug(f"Дообучение...")
+                self.train()
 
 
 DEBUG = False

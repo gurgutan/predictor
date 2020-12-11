@@ -2,12 +2,14 @@ import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import numpy as np
+import pandas as pd
 import math
 import tensorflow as tf
 import datetime
 from os import path
 from tensorflow import keras
 from tensorflow.keras.utils import plot_model
+
 
 from dataloader import Dataloader
 from models import (
@@ -46,8 +48,16 @@ class Predictor(object):
             ma=3,
             batch_size=batch_size,
         )
-        if not datafile is None:
-            self.dataloader.load(
+        if type(datafile) == str:
+            self.dataloader.load_tsv(
+                datafile,
+                input_column="open",
+                train_ratio=train_ratio,
+                val_ratio=val_ratio,
+                test_ratio=test_ratio,
+            )
+        elif type(datafile) == pd.core.frame.DataFrame:
+            self.dataloader.load_df(
                 datafile,
                 input_column="open",
                 train_ratio=train_ratio,
@@ -80,18 +90,17 @@ class Predictor(object):
         keras.utils.plot_model(self.model, show_shapes=True, to_file=model_png_name)
         # self.model.summary()
 
-    def fit(self, batch_size=256, epochs=8):
+    def fit(self, batch_size=256, epochs=8, use_tensorboard=True, verbose=1):
         start_fit_time = datetime.datetime.now()
         ckpt = "ckpt/" + self.model.name + ".ckpt"
         try:
             self.model.load_weights(ckpt)
-            print("Загружены веса последней контрольной точки " + self.model.name)
+            if verbose > 0:
+                print("Загружены веса последней контрольной точки " + self.model.name)
         except Exception as e:
             pass
         log_dir = "logs/fit/" + start_fit_time.strftime("%Y_%m_%d-%H_%M_%S")
-        tensorboard_link = keras.callbacks.TensorBoard(
-            log_dir=log_dir, write_graph=True
-        )
+
         early_stop = keras.callbacks.EarlyStopping(
             monitor="val_loss",
             patience=2 ** 5,
@@ -108,6 +117,11 @@ class Predictor(object):
             monitor="loss", factor=0.1, min_delta=0.0001, patience=16, min_lr=1e-14
         )
 
+        callbacks = [backup, early_stop, reduce_lr]
+        if use_tensorboard:
+            tensorboard = keras.callbacks.TensorBoard(log_dir=log_dir, write_graph=True)
+            callbacks.append(tensorboard)
+
         history = self.model.fit(
             self.dataloader.train,
             validation_data=self.dataloader.val,
@@ -116,11 +130,12 @@ class Predictor(object):
             shuffle=True,
             use_multiprocessing=True,
             verbose=1,
-            callbacks=[backup, early_stop, tensorboard_link, reduce_lr],
+            callbacks=callbacks,
         )
         end_fit_time = datetime.datetime.now()
         delta_time = end_fit_time - start_fit_time
-        print(f"\nНачало: {start_fit_time} конец: {end_fit_time} время: {delta_time}")
+        if verbose > 0:
+            print(f"\Время {start_fit_time}->{end_fit_time} : {delta_time}")
         return history
 
     def evaluate(self):

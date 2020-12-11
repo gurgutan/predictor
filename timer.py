@@ -8,6 +8,9 @@ class DelayTimer:
         self.last = datetime(2000, 1, 1)
 
     def elapsed(self):
+        """
+        Возвращает True, если заданный интервал времени уже прошел и False - в противном случае
+        """
         delta = (datetime.now() - self.last).total_seconds()
         if delta > self.seconds:
             self.last = datetime.now() - timedelta(seconds=delta % self.seconds)
