@@ -90,7 +90,14 @@ class Predictor(object):
         keras.utils.plot_model(self.model, show_shapes=True, to_file=model_png_name)
         # self.model.summary()
 
-    def fit(self, batch_size=256, epochs=8, use_tensorboard=True, verbose=1):
+    def fit(
+        self,
+        batch_size=256,
+        epochs=8,
+        use_tensorboard=True,
+        use_early_stop=True,
+        verbose=1,
+    ):
         start_fit_time = datetime.datetime.now()
         ckpt = "ckpt/" + self.model.name + ".ckpt"
         try:
@@ -101,12 +108,6 @@ class Predictor(object):
             pass
         log_dir = "logs/fit/" + start_fit_time.strftime("%Y_%m_%d-%H_%M_%S")
 
-        early_stop = keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            patience=2 ** 5,
-            min_delta=1e-5,
-            restore_best_weights=True,
-        )
         backup = keras.callbacks.ModelCheckpoint(
             filepath=ckpt,
             monitor="val_loss",
@@ -117,10 +118,18 @@ class Predictor(object):
             monitor="loss", factor=0.1, min_delta=0.0001, patience=16, min_lr=1e-14
         )
 
-        callbacks = [backup, early_stop, reduce_lr]
+        callbacks = [backup, reduce_lr]
         if use_tensorboard:
-            tensorboard = keras.callbacks.TensorBoard(log_dir=log_dir, write_graph=True)
-            callbacks.append(tensorboard)
+            tb = keras.callbacks.TensorBoard(log_dir=log_dir, write_graph=True)
+            callbacks.append(tb)
+        if use_early_stop:
+            es = keras.callbacks.EarlyStopping(
+                monitor="val_loss",
+                patience=2 ** 5,
+                min_delta=1e-5,
+                restore_best_weights=True,
+            )
+            callbacks.append(es)
 
         history = self.model.fit(
             self.dataloader.train,

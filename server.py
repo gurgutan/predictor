@@ -188,12 +188,18 @@ class Server(object):
         self.p.dataloader.load_df(
             df,
             input_column="open",
-            train_ratio=1 - 1 / 32,
-            val_ratio=1 / 32,
+            train_ratio=1 - 1.0 / 16,
+            val_ratio=1.0 / 16,
             test_ratio=0,
+            verbose=1,
+        )
+        self.p.fit(
+            batch_size=2 ** 14,
+            epochs=8,
+            use_tensorboard=False,
+            use_early_stop=False,
             verbose=0,
         )
-        self.p.fit(batch_size=2 ** 10, epochs=4, use_tensorboard=False, verbose=0)
         logger.info(f"Модель дообучена")
         self.p.save_model()
         logger.info("Модель сохранена")
@@ -222,7 +228,7 @@ class Server(object):
             if rates is None:
                 logger.debug("Отсутствуют новые котировки")
                 continue
-            times, prices = rates["time"], rates["close"]
+            times, prices = rates["time"], rates["open"]
             results = self.compute(times, prices, verbose=0)
             if results is None or len(results) == 0:
                 logger.error("Ошибка вычислений")
