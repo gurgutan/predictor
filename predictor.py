@@ -23,8 +23,6 @@ from models import (
 )
 import sys
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 
 class Predictor(object):
     def __init__(
@@ -93,7 +91,9 @@ class Predictor(object):
 
     def plot_model(self):
         model_png_name = "models/" + self.model.name + ".png"
-        keras.utils.plot_model(self.model, show_shapes=True, to_file=model_png_name)
+        keras.utils.plot_model(
+            self.model, show_layer_names=False, to_file=model_png_name,
+        )
         # self.model.summary()
 
     def fit(
@@ -131,7 +131,7 @@ class Predictor(object):
         if use_early_stop:
             es = keras.callbacks.EarlyStopping(
                 monitor="val_loss",
-                patience=2 ** 5,
+                patience=2 ** 4,
                 min_delta=1e-5,
                 restore_best_weights=True,
             )
@@ -150,7 +150,7 @@ class Predictor(object):
         end_fit_time = datetime.datetime.now()
         delta_time = end_fit_time - start_fit_time
         if verbose > 0:
-            print(f"\Время {start_fit_time}->{end_fit_time} : {delta_time}")
+            print(f"\nВремя {start_fit_time}->{end_fit_time} : {delta_time}")
         return history
 
     def evaluate(self):
@@ -186,38 +186,31 @@ if __name__ == "__main__":
         else:
             batch_size = 2 ** 12
 
-    restarts_count = 2 ** 16
-    dataset_segment = 1.0 / 32
+    restarts_count = 2 ** 10
+    dataset_segment = 1.0 / 16
     input_width = 2 ** 8
-    label_width = 1
-    ensemble_size = 2 ** 6
-    name = f"ens{ensemble_size}-{input_width}-{label_width}"
-    # shift = 1
-    # sections = int(math.log2(input_width))
-    # model = trend_encoder(
-    #     (input_width,), (label_width,), units=2 ** 10, sections=sections
-    # )
-    # model = conv_model((input_width, 1), (label_width,), units=2 ** 10)
-    last_perfomance = 1e16
+    label_width = 2
+    ensemble_size = 2 ** 4
+    name = f"boost{ensemble_size}-{input_width}-{label_width}"
 
     model = spectral_ensemble(
-        input_width, label_width, ensemble_size, lr=1e-5, name=name
+        input_width, label_width, ensemble_size, lr=1e-6, name=name
     )
     predictor = Predictor(
         datafile="datas/EURUSD_H1 copy 3.csv",
         model=model,
         input_width=input_width,
         label_width=label_width,
-        train_ratio=1.0 - 1.0 * dataset_segment,
+        train_ratio=1 - 1 * dataset_segment,
         val_ratio=dataset_segment,
         test_ratio=0,
         batch_size=batch_size,
     )
     for i in range(restarts_count):
-        print(f"\n Проход №{i+1}/{restarts_count}\n")
-        history = predictor.fit(batch_size=batch_size, epochs=2 ** 14)
+        print(f"\nПроход №{i+1}/{restarts_count}\n")
+        predictor.plot_model()
+        history = predictor.fit(batch_size=batch_size, epochs=2 ** 10)
         # perfomance = predictor.evaluate()
         predictor.save_model()
-        predictor.plot_model()
         print("Модель обновлена")
 

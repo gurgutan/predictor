@@ -99,9 +99,8 @@ class Dataloader:
         if verbose == 1:
             print(self.__sizes__())
             print(self.__repr__())
-        return True
-        return True
-
+        return True 
+  
     def __sizes__(self):
         return "\n".join(
             [
