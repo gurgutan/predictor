@@ -188,8 +188,8 @@ class Server(object):
         self.p.dataloader.load_df(
             df,
             input_column="open",
-            train_ratio=1 - 1.0 / 16,
-            val_ratio=1.0 / 16,
+            train_ratio=1 - 1.0 / 32,
+            val_ratio=1.0 / 32,
             test_ratio=0,
             verbose=1,
         )
