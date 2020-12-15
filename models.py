@@ -348,13 +348,13 @@ def spectral(input_width, out_width, lr=1e-3):
     return model
 
 
-def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="specemble"):
-    l2 = keras.regularizers.l2(1e-10)
-    rsig = lambda x: x / (1.0 + 2 * tf.sqrt(tf.abs(x)))
+def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
+    # l2 = keras.regularizers.l2(1e-10)
+    # rsig = lambda x: x / (1.0 + 2 * tf.sqrt(tf.abs(x)))
     n = int(math.log2(input_width)) + 1
     slope = 1.0 / (2 ** 10)
-    depth = 8
-    units = 2 ** 6
+    depth = 6
+    units = 2 ** 5
     k_size = 3
     sample_width = min(4, input_width)
     inputs = Input(shape=(input_width,))
@@ -389,17 +389,17 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="specemble")
     r = Concatenate(1, name=f"concat_r")(r)
     r = Reshape((-1, 1))(r)
     for i in range(4):
-        m = Conv1D(64, kernel_size=k_size, padding="valid")(m)
+        m = Conv1D(32, kernel_size=k_size, padding="valid")(m)
         m = ReLU(negative_slope=slope)(m)
-        s = Conv1D(64, kernel_size=k_size, padding="valid")(s)
+        s = Conv1D(32, kernel_size=k_size, padding="valid")(s)
         s = ReLU(negative_slope=slope)(s)
-        r = Conv1D(64, kernel_size=k_size, padding="valid")(r)
+        r = Conv1D(32, kernel_size=k_size, padding="valid")(r)
         r = ReLU(negative_slope=slope)(r)
-        u = Conv1D(64, kernel_size=k_size, padding="valid")(u)
+        u = Conv1D(32, kernel_size=k_size, padding="valid")(u)
         u = ReLU(negative_slope=slope)(u)
     x = Concatenate()([m, s, r, u])
     x = Reshape((1, -1))(x)
-    x = LSTM(256, return_sequences=True)(x)
+    x = GRU(128, return_sequences=True)(x)
     x = Flatten()(x)
     x = BatchNormalization()(x)
     z = [x for k in range(size)]
