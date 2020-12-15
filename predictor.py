@@ -75,9 +75,15 @@ class Predictor(object):
         # x = self.dataloader.make_input(data)
         return self.model(data[-self.dataloader.input_width - 1 :])
 
-    def load_model(self, filename):
+    def load_model(self, filename, lr=1e-5):
         # self.model = keras.models.load_model(self.name, custom_objects={"shifted_mse": shifted_mse})
-        self.model = keras.models.load_model(filename)
+        self.model = keras.models.load_model(filename, compile=False)
+        self.model.compile(
+            loss="mse",
+            optimizer=keras.optimizers.Adam(learning_rate=lr),
+            metrics=[keras.metrics.MeanAbsoluteError()],
+        )
+        return self.model
 
     def save_model(self):
         self.model.save("models/" + self.model.name + ".h5")
