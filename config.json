@@ -2,7 +2,7 @@
     "dbname": "D:/Dev/Alpari MT5/MQL5/Files/predictions.sqlite",
     "mt5path": "D:/Dev/Alpari MT5/terminal64.exe",
     "initialdate": "2015-01-01T00:00:00",
-    "modelname": "models/ens64-256-2.h5",
+    "modelname": "models/boost16-256-2",
     "symbol": "EURUSD",
     "timeunit": 3600,
     "compute_delay": 300,

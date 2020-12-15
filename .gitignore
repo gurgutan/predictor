@@ -33,3 +33,4 @@ variables.*
 trash
 # логи
 *.log
+config.json
