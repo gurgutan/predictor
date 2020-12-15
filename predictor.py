@@ -92,7 +92,10 @@ class Predictor(object):
     def plot_model(self):
         model_png_name = "models/" + self.model.name + ".png"
         keras.utils.plot_model(
-            self.model, show_layer_names=False, to_file=model_png_name,
+            self.model,
+            show_shapes=True,
+            show_layer_names=False,
+            to_file=model_png_name,
         )
         # self.model.summary()
 
@@ -187,14 +190,14 @@ if __name__ == "__main__":
             batch_size = 2 ** 12
 
     restarts_count = 2 ** 10
-    dataset_segment = 1.0 / 16
+    dataset_segment = 1.0 / 2
     input_width = 2 ** 8
-    label_width = 2
+    label_width = 1
     ensemble_size = 2 ** 4
     name = f"boost{ensemble_size}-{input_width}-{label_width}"
 
     model = spectral_ensemble(
-        input_width, label_width, ensemble_size, lr=1e-6, name=name
+        input_width, label_width, ensemble_size, lr=1e-3, name=name
     )
     predictor = Predictor(
         datafile="datas/EURUSD_H1 copy 3.csv",
@@ -206,6 +209,7 @@ if __name__ == "__main__":
         test_ratio=0,
         batch_size=batch_size,
     )
+    predictor.model.summary()
     for i in range(restarts_count):
         print(f"\nПроход №{i+1}/{restarts_count}\n")
         predictor.plot_model()
