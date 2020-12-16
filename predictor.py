@@ -193,25 +193,25 @@ if __name__ == "__main__":
     dataset_segment = 1.0 / 2
     input_width = 2 ** 8
     label_width = 1
-    ensemble_size = 2 ** 4
+    ensemble_size = 2 ** 5
     name = f"boost{ensemble_size}-{input_width}-{label_width}"
 
     model = spectral_ensemble(
-        input_width, label_width, ensemble_size, lr=1e-3, name=name
+        input_width, label_width, ensemble_size, lr=1e-5, name=name
     )
     predictor = Predictor(
         datafile="datas/EURUSD_H1 copy 3.csv",
         model=model,
         input_width=input_width,
         label_width=label_width,
-        train_ratio=1 - 1 * dataset_segment,
+        train_ratio=1.0 - 1.0 * dataset_segment,
         val_ratio=dataset_segment,
         test_ratio=0,
         batch_size=batch_size,
     )
     predictor.model.summary()
     for i in range(restarts_count):
-        print(f"\nПроход №{i+1}/{restarts_count}\n")
+        print(f"\nМодель {name}  проход №{i+1}/{restarts_count}\n")
         predictor.plot_model()
         history = predictor.fit(batch_size=batch_size, epochs=2 ** 10)
         # perfomance = predictor.evaluate()
