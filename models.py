@@ -9,21 +9,6 @@ from tensorflow.python.keras.layers import LSTMV2
 from rbflayer import RBFLayer
 
 
-def get_n(v, min_v, max_v, count):
-    step_size = count / (max_v - min_v)
-    v = max(min_v, min(max_v - 1e-10, v))
-    n = (v - min_v) * step_size
-    return n
-
-
-def scce(y_true, y_pred):
-    value_min, value_max, output_size = -4.0, 3.0, 16
-    clipped_y_true = tf.clip_by_value(y_true, value_min, value_max)
-    n = (clipped_y_true - value_min) / (value_max - value_min) * output_size
-    scce_error = losses.sparse_categorical_crossentropy(y_true, n)
-    return tf.reduce_mean(scce_error, axis=-1)
-
-
 def mse_dir(y_true, y_pred):
     sign_penalty = 1.0
     mse = losses.mean_squared_error
@@ -468,6 +453,15 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
     return model
 
 
+def scce(y_true, y_pred):
+    value_min, value_max, output_size = -4.0, 3.999999, 16
+    clipped_y_true = tf.clip_by_value(y_true, value_min, value_max)
+    step_size = output_size / (value_max - value_min)
+    n = (clipped_y_true - value_min) * step_size
+    scce_error = losses.sparse_categorical_crossentropy(n, y_pred)
+    return scce_error
+
+
 def scored_boost(input_width, out_width, size=4, lr=1e-3, name="scored-boost"):
     logtanh = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
     # rsig = x / (1.0 + 4 * tf.sqrt(tf.abs(x)))
@@ -528,12 +522,12 @@ def scored_boost(input_width, out_width, size=4, lr=1e-3, name="scored-boost"):
     x = BatchNormalization()(x)
 
     # Распределение вероятностей
-    з_output_size = 16
+    p_out_width = 16
     p = x
     for i in range(8):
-        p = Dense(64, name=f"p-dense{i}")(p)
-        p = Lambda(logtanh)(p)
-    p = Dense(16)(p)
+        p = Dense(64, activation="softsign", name=f"p-dense{i}")(p)
+        # p = Lambda(logtanh)(p)
+    p = Dense(p_out_width, activation="softmax", name=f"p")(p)
 
     # dense chains array
     z = [x for k in range(size)]
@@ -556,16 +550,21 @@ def scored_boost(input_width, out_width, size=4, lr=1e-3, name="scored-boost"):
     else:
         x = Concatenate()(z)
     # x = Dropout(1 / 16)(x)
-    x = Dense(out_width)(x)
+    x = Dense(out_width, name=f"v")(x)
 
-    outputs = [x, p]
-    model = keras.Model(inputs, outputs, name=name)
-    MAE = keras.metrics.MeanAbsoluteError()
+    # x = Concatenate()([x, p])
+
+    # value_output = Dense(out_width)(x)
+    # score_output = Dense(p_out_width)(x)
+    outputs = x
+    model = keras.Model(inputs, outputs=[outputs, p], name=name)
+    MAE = keras.metrics.MeanAbsoluteError(name="mae")
     model.compile(
-        # loss=keras.losses.Huber(),
-        loss=[keras.losses.MeanSquaredError(), scce],
         optimizer=keras.optimizers.Adam(learning_rate=lr),
-        metrics=[MAE],
+        # loss=keras.losses.Huber(),
+        loss={"v": keras.losses.MeanSquaredError(name="mse"), "p": scce},
+        metrics={"v": MAE},
+        loss_weights={"v": 1.0, "p": 0.1},
     )
     return model
 
