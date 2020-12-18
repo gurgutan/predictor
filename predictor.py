@@ -13,6 +13,7 @@ from tensorflow.keras.utils import plot_model
 
 from dataloader import Dataloader
 from models import (
+    scored_boost,
     rbf_dense,
     spectral,
     spectral_ensemble,
@@ -201,7 +202,7 @@ if __name__ == "__main__":
         input_width, label_width, ensemble_size, lr=1e-2, name=name
     )
     predictor = Predictor(
-        datafile="datas/EURUSD_H1 copy 3.csv",
+        datafile="datas/EURUSD_H1.csv",
         model=model,
         input_width=input_width,
         label_width=label_width,
@@ -210,10 +211,10 @@ if __name__ == "__main__":
         test_ratio=0,
         batch_size=batch_size,
     )
-    predictor.model.summary()
+    # predictor.model.summary()
     for i in range(restarts_count):
         print(f"\nМодель {name}  проход №{i+1}/{restarts_count}\n")
-        predictor.plot_model()
+        # predictor.plot_model()
         history = predictor.fit(batch_size=batch_size, epochs=2 ** 10)
         # perfomance = predictor.evaluate()
         predictor.save_model()
