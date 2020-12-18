@@ -199,6 +199,7 @@ class Server(object):
             use_tensorboard=False,
             use_early_stop=False,
             verbose=0,
+            use_multiprocessing=True,
         )
         logger.info(f"Модель дообучена")
         self.p.save_model()
