@@ -1,11 +1,12 @@
 #FROM tensorflow/tensorflow:latest-gpu
-FROM tensorflow/tensorflow:latest-gpu
+FROM tensorflow/tensorflow:2.3.1-gpu
 
 RUN apt-get -y update && apt-get install -y graphviz 
 RUN pip3 install --upgrade pip setuptools PyWavelets
 RUN pip3 install --upgrade pandas pydot pydotplus  scikit-learn
 RUN pip3 install --upgrade graphviz tqdm matplotlib
 
+ENV TF_CPP_MIN_LOG_LEVEL "3"
 
 EXPOSE 1979/tcp
 

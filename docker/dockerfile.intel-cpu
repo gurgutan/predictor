@@ -13,6 +13,7 @@ RUN pip3 install --upgrade pip setuptools PyWavelets
 RUN pip3 install --upgrade pandas pydot pydotplus scikit-learn
 RUN pip3 install --upgrade graphviz tqdm matplotlib
 
+ENV TF_CPP_MIN_LOG_LEVEL "3"
 
 # Переменные окружения для настройки параллелизма intel cpu
 ENV KMP_ABORT_DELAY 0
@@ -37,7 +38,7 @@ ENV KMP_HOT_TEAMS_MAX_LEVEL  1
 ENV KMP_HOT_TEAMS_MODE  0
 ENV KMP_INIT_AT_FORK  true
 ENV KMP_ITT_PREPARE_DELAY  0
-ENV KMP_LIBRARY  "throughput"
+ENV KMP_LIBRARY  "throughput"ENV TF_CPP_MIN_LOG_LEVEL "3"
 ENV KMP_LOCK_KIND  "queuing"
 ENV KMP_MALLOC_POOL_INCR  1M
 ENV KMP_MWAIT_HINTS  0

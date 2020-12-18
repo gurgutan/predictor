@@ -62,9 +62,10 @@ class Predictor(object):
                 val_ratio=val_ratio,
                 test_ratio=test_ratio,
             )
+        print(type(model))
         if type(model) == str:
             self.load_model(model)
-        elif type(model) == tf.python.keras.engine.functional.Functional:
+        elif isinstance(model, tf.keras.Model):
             self.model = model
         else:
             print(
@@ -190,14 +191,14 @@ if __name__ == "__main__":
             batch_size = 2 ** 12
 
     restarts_count = 2 ** 10
-    dataset_segment = 1.0 / 2
+    dataset_segment = 1.0 / 8.0
     input_width = 2 ** 8
     label_width = 1
-    ensemble_size = 2 ** 5
+    ensemble_size = 2 ** 4
     name = f"boost{ensemble_size}-{input_width}-{label_width}"
 
     model = spectral_ensemble(
-        input_width, label_width, ensemble_size, lr=1e-5, name=name
+        input_width, label_width, ensemble_size, lr=1e-2, name=name
     )
     predictor = Predictor(
         datafile="datas/EURUSD_H1 copy 3.csv",

@@ -351,6 +351,9 @@ def spectral(input_width, out_width, lr=1e-3):
 def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
     # l2 = keras.regularizers.l2(1e-10)
     ltanh = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
+    rad = lambda x: 2 - tf.sqrt(1 + tf.math.square(x))
+    # rad2 = lambda x: 1 - tf.math.log1p(tf.sqrt(tf.abs(x)))
+    # rad3 = lambda x: 2 - tf.math.sqrt(1 + x ** 2)
     # rsig = x / (1.0 + 4 * tf.sqrt(tf.abs(x)))
     n = int(math.log2(input_width))
     slope = 1.0 / (2 ** 10)
@@ -363,7 +366,7 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
     u = Lambda(lambda z: z[:, -sample_width:])(x)
     u = Dense(n)(u)
     # u = ReLU(negative_slope=slope)(u)
-    u = Reshape((-1, 1))(u)
+    # u = Reshape((-1, 1))(u)
     x = [Lambda(lambda z: 2 ** i * z[0][:, -(2 ** z[1]) :])((x, i)) for i in range(n)]
     means = [
         Lambda(lambda z: tf.math.reduce_mean(z, 1, keepdims=True), name=f"mean{i}")(
@@ -372,7 +375,7 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
         for i in range(n)
     ]
     m = Concatenate(1, name=f"concat_means")(means)
-    m = Reshape((-1, 1))(m)
+    # m = Reshape((-1, 1))(m)
     stds = [
         Lambda(
             lambda z: 2 ** i * tf.math.reduce_std(z, 1, keepdims=True), name=f"std{i}"
@@ -380,7 +383,7 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
         for i in range(n)
     ]
     s = Concatenate(1, name=f"concat_stds")(stds)
-    s = Reshape((-1, 1))(s)
+    # s = Reshape((-1, 1))(s)
     r = [
         Lambda(
             lambda z: 2 ** i
@@ -393,22 +396,23 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
         for i in range(n)
     ]
     r = Concatenate(1, name=f"concat_r")(r)
-    r = Reshape((-1, 1))(r)
-    for i in range(3):
-        m = Conv1D(64, kernel_size=k_size, padding="valid")(m)
-        m = Lambda(ltanh)(m)
+    # r = Reshape((-1, 1))(r)
+    p_units = 256
+    for i in range(2):
+        m = Dense(p_units)(m)
+        m = Lambda(rad)(m)
         # m = ReLU(negative_slope=slope)(m)
-        s = Conv1D(64, kernel_size=k_size, padding="valid")(s)
-        s = Lambda(ltanh)(s)
+        s = Dense(p_units)(s)
+        s = Lambda(rad)(s)
         # s = ReLU(negative_slope=slope)(s)
-        r = Conv1D(64, kernel_size=k_size, padding="valid")(r)
-        r = Lambda(ltanh)(r)
+        r = Dense(p_units)(r)
+        r = Lambda(rad)(r)
         # r = ReLU(negative_slope=slope)(r)
-        u = Conv1D(64, kernel_size=k_size, padding="valid")(u)
-        u = Lambda(ltanh)(u)
+        u = Dense(p_units)(u)
+        u = Lambda(rad)(u)
         # u = ReLU(negative_slope=slope)(u)
     x = Concatenate()([m, s, r, u])
-    # x = Reshape((1, -1))(x)
+    x = Reshape((1, -1))(x)
     x = GRU(256, return_sequences=True)(x)
     x = Flatten()(x)
     x = BatchNormalization()(x)
@@ -425,7 +429,7 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
             #     for i in range(out_width)
             # ]
             z[k] = [Lambda(ltanh)(z[k][i]) for i in range(out_width)]
-        z[k] = [Dense(4, name=f"dense-out{k}-{i}")(z[k][i]) for i in range(out_width)]
+        z[k] = [Dense(1, name=f"dense-out{k}-{i}")(z[k][i]) for i in range(out_width)]
     for k in range(size):
         if len(z[k]) == 1:
             z[k] = z[k][0]
