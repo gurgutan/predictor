@@ -16,7 +16,7 @@ from models import (
     scored_boost,
     rbf_dense,
     spectral,
-    spectral_ensemble,
+    dense_boost,
     trend_encoder,
     esum,
     dense_model,
@@ -88,7 +88,7 @@ class Predictor(object):
         return self.model
 
     def save_model(self):
-        self.model.save("models/" + self.model.name + ".h5")
+        # self.model.save("models/" + self.model.name + ".h5")
         self.model.save("models/" + self.model.name)
 
     def plot_model(self):
@@ -120,13 +120,10 @@ class Predictor(object):
         log_dir = "logs/fit/" + start_fit_time.strftime("%Y_%m_%d-%H_%M_%S")
 
         backup = keras.callbacks.ModelCheckpoint(
-            filepath=ckpt,
-            monitor="val_loss",
-            save_weights_only=True,
-            save_best_only=True,
+            filepath=ckpt, monitor="loss", save_weights_only=True, save_best_only=True,
         )
         reduce_lr = keras.callbacks.ReduceLROnPlateau(
-            monitor="loss", factor=0.1, min_delta=0.0001, patience=16, min_lr=1e-14
+            monitor="val_loss", factor=0.1, min_delta=0.0001, patience=16, min_lr=1e-14
         )
 
         callbacks = [backup, reduce_lr]
@@ -149,7 +146,7 @@ class Predictor(object):
             epochs=epochs,
             shuffle=True,
             use_multiprocessing=True,
-            verbose=1,
+            verbose=2,
             callbacks=callbacks,
         )
         end_fit_time = datetime.datetime.now()
@@ -196,16 +193,24 @@ if __name__ == "__main__":
     input_width = 2 ** 8
     label_width = 1
     ensemble_size = 2 ** 4
-    name = f"scored-boost{ensemble_size}-{input_width}-{label_width}"
 
-    # model = spectral_ensemble(
-    #     input_width, label_width, ensemble_size, lr=1e-2, name=name
+    # model = dense_boost(
+    #     input_width,
+    #     label_width,
+    #     ensemble_size,
+    #     lr=1e-2,
+    #     name=f"dense-boost{ensemble_size}-{input_width}-{label_width}",
     # )
-
-    model = scored_boost(input_width, label_width, ensemble_size, lr=1e-2, name=name)
+    model = scored_boost(
+        input_width,
+        label_width,
+        ensemble_size,
+        lr=1e-3,
+        name=f"scored-boost{ensemble_size}-{input_width}-{label_width}",
+    )
 
     predictor = Predictor(
-        datafile="datas/EURUSD_H1.csv",
+        datafile="datas/EURUSD_H1 copy 3.csv",
         model=model,
         input_width=input_width,
         label_width=label_width,
@@ -216,10 +221,10 @@ if __name__ == "__main__":
     )
     predictor.model.summary()
     for i in range(restarts_count):
-        print(f"\nМодель {name}  проход №{i+1}/{restarts_count}\n")
         predictor.plot_model()
-        history = predictor.fit(batch_size=batch_size, epochs=2 ** 10)
-        # perfomance = predictor.evaluate()
+        print(f"\nМодель {model.name} проход №{i+1}/{restarts_count}\n")
+        history = predictor.fit(batch_size=batch_size, epochs=2 ** 15)
         predictor.save_model()
+        # perfomance = predictor.evaluate()
         print("Модель обновлена")
 

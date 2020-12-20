@@ -348,17 +348,17 @@ def spectral(input_width, out_width, lr=1e-3):
     return model
 
 
-def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
+def dense_boost(input_width, out_width, columns=4, lr=1e-3, name="dense-boost"):
     # l2 = keras.regularizers.l2(1e-10)
-    ltanh = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
+    logtanh = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
     rad = lambda x: 2 - tf.sqrt(1 + tf.math.square(x))
     # rad2 = lambda x: 1 - tf.math.log1p(tf.sqrt(tf.abs(x)))
     # rad3 = lambda x: 2 - tf.math.sqrt(1 + x ** 2)
     # rsig = x / (1.0 + 4 * tf.sqrt(tf.abs(x)))
     n = int(math.log2(input_width))
     slope = 1.0 / (2 ** 10)
-    depth = 8
-    units = 64
+    rows = 8
+    units = 32
     k_size = 3
     sample_width = min(4, input_width)
     inputs = Input(shape=(input_width,))
@@ -366,7 +366,7 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
     u = Lambda(lambda z: z[:, -sample_width:])(x)
     u = Dense(n)(u)
     # u = ReLU(negative_slope=slope)(u)
-    # u = Reshape((-1, 1))(u)
+    u = Reshape((-1, 1))(u)
     x = [Lambda(lambda z: 2 ** i * z[0][:, -(2 ** z[1]) :])((x, i)) for i in range(n)]
     means = [
         Lambda(lambda z: tf.math.reduce_mean(z, 1, keepdims=True), name=f"mean{i}")(
@@ -375,7 +375,7 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
         for i in range(n)
     ]
     m = Concatenate(1, name=f"concat_means")(means)
-    # m = Reshape((-1, 1))(m)
+    m = Reshape((-1, 1))(m)
     stds = [
         Lambda(
             lambda z: 2 ** i * tf.math.reduce_std(z, 1, keepdims=True), name=f"std{i}"
@@ -383,7 +383,7 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
         for i in range(n)
     ]
     s = Concatenate(1, name=f"concat_stds")(stds)
-    # s = Reshape((-1, 1))(s)
+    s = Reshape((-1, 1))(s)
     r = [
         Lambda(
             lambda z: 2 ** i
@@ -396,45 +396,45 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
         for i in range(n)
     ]
     r = Concatenate(1, name=f"concat_r")(r)
-    # r = Reshape((-1, 1))(r)
-    p_units = 256
-    for i in range(2):
-        m = Dense(p_units)(m)
-        m = Lambda(rad)(m)
-        # m = ReLU(negative_slope=slope)(m)
-        s = Dense(p_units)(s)
-        s = Lambda(rad)(s)
-        # s = ReLU(negative_slope=slope)(s)
-        r = Dense(p_units)(r)
-        r = Lambda(rad)(r)
-        # r = ReLU(negative_slope=slope)(r)
-        u = Dense(p_units)(u)
-        u = Lambda(rad)(u)
-        # u = ReLU(negative_slope=slope)(u)
+    r = Reshape((-1, 1))(r)
+    filters = 32
+    for i in range(3):
+        m = Conv1D(filters, k_size, padding="valid")(m)
+        m = ReLU(negative_slope=slope)(m)
+        s = Conv1D(filters, k_size, padding="valid")(s)
+        s = ReLU(negative_slope=slope)(s)
+        r = Conv1D(filters, k_size, padding="valid")(r)
+        r = ReLU(negative_slope=slope)(r)
+        u = Conv1D(filters, k_size, padding="valid")(u)
+        u = ReLU(negative_slope=slope)(u)
     x = Concatenate()([m, s, r, u])
     x = Reshape((1, -1))(x)
     x = GRU(256, return_sequences=True)(x)
     x = Flatten()(x)
     x = BatchNormalization()(x)
-    z = [x for k in range(size)]
-    for k in range(size):
-        z[k] = [Dense(units, name=f"dense-in{k}-{i}")(z[k]) for i in range(out_width)]
-        for j in range(depth):
-            z[k] = [
-                Dense(units, name=f"dense{k}-{j}-{i}")(z[k][i])
+    z = [x for k in range(columns)]
+    for col in range(columns):
+        z[col] = [
+            Dense(units, name=f"dense-in{col}-{i}")(z[col]) for i in range(out_width)
+        ]
+        for row in range(rows):
+            z[col] = [
+                Dense(units, name=f"dense{col}-{row}-{i}")(z[col][i])
                 for i in range(out_width)
             ]
             # z[k] = [
             #     ReLU(negative_slope=slope, name=f"lu{k}-{j}-{i}")(z[k][i])
             #     for i in range(out_width)
             # ]
-            z[k] = [Lambda(ltanh)(z[k][i]) for i in range(out_width)]
-        z[k] = [Dense(1, name=f"dense-out{k}-{i}")(z[k][i]) for i in range(out_width)]
-    for k in range(size):
-        if len(z[k]) == 1:
-            z[k] = z[k][0]
+            z[col] = [Lambda(logtanh)(z[col][i]) for i in range(out_width)]
+        z[col] = [
+            Dense(1, name=f"dense-out{col}-{i}")(z[col][i]) for i in range(out_width)
+        ]
+    for col in range(columns):
+        if len(z[col]) == 1:
+            z[col] = z[col][0]
         else:
-            z[k] = Concatenate()(z[k])
+            z[col] = Concatenate()(z[col])
     if len(z) == 1:
         x = z[0]
     else:
@@ -453,23 +453,89 @@ def spectral_ensemble(input_width, out_width, size=4, lr=1e-3, name="boost"):
     return model
 
 
-def scce(y_true, y_pred):
-    value_min, value_max, output_size = -4.0, 3.999999, 16
-    clipped_y_true = tf.clip_by_value(y_true, value_min, value_max)
-    step_size = output_size / (value_max - value_min)
-    n = (clipped_y_true - value_min) * step_size
-    scce_error = losses.sparse_categorical_crossentropy(n, y_pred)
-    return scce_error
+class SparseCategoricalError(losses.Loss):
+    def __init__(
+        self,
+        value_min=-1.0,
+        value_max=1.0,
+        count=8,
+        reduction=losses.Reduction.AUTO,
+        name="sparse_categorical_error",
+    ) -> None:
+        super().__init__(reduction=reduction, name=name)
+        self.value_min = value_min
+        self.value_max = value_max
+        self.count = count
+        self.step = self.count / (self.value_max - self.value_min)
+
+    def call(self, y_true, y_pred):
+        clipped_y_pred = tf.clip_by_value(y_pred, self.value_min, self.value_max)
+        clipped_y_true = tf.clip_by_value(y_true, self.value_min, self.value_max)
+        # n_pred = (clipped_y_pred - self.value_min) * self.step
+        n_true = (clipped_y_true - self.value_min) * self.step
+        return losses.sparse_categorical_crossentropy(n_true, clipped_y_pred)
 
 
-def scored_boost(input_width, out_width, size=4, lr=1e-3, name="scored-boost"):
+def input_block(input_width, filters=32, kernel_size=3):
+    n = int(math.log2(input_width))
+    slope = 1.0 / (2 ** 10)
+    sample_width = min(4, input_width)
+    x = Input(shape=(input_width,))
+    u = Lambda(lambda z: z[:, -sample_width:])(x)
+    u = Dense(n)(u)
+    u = Reshape((-1, 1))(u)
+    x = [Lambda(lambda z: 2 ** i * z[0][:, -(2 ** z[1]) :])((x, i)) for i in range(n)]
+    means = [
+        Lambda(lambda z: tf.math.reduce_mean(z, 1, keepdims=True), name=f"mean{i}")(
+            x[i]
+        )
+        for i in range(n)
+    ]
+    m = Concatenate(1, name=f"concat_means")(means)
+    m = Reshape((-1, 1))(m)
+    stds = [
+        Lambda(
+            lambda z: 2 ** i * tf.math.reduce_std(z, 1, keepdims=True), name=f"std{i}"
+        )(x[i])
+        for i in range(n)
+    ]
+    s = Concatenate(1, name=f"concat_stds")(stds)
+    s = Reshape((-1, 1))(s)
+    r = [
+        Lambda(
+            lambda z: 2 ** i
+            * (
+                tf.math.reduce_max(z, 1, keepdims=True)
+                - tf.math.reduce_min(z, 1, keepdims=True)
+            ),
+            name=f"range{i}",
+        )(x[i])
+        for i in range(n)
+    ]
+    r = Concatenate(1, name=f"concat_r")(r)
+    r = Reshape((-1, 1))(r)
+    for i in range(3):
+        m = Conv1D(filters, kernel_size, padding="valid")(m)
+        m = ReLU(negative_slope=slope)(m)
+        s = Conv1D(filters, kernel_size, padding="valid")(s)
+        s = ReLU(negative_slope=slope)(s)
+        r = Conv1D(filters, kernel_size, padding="valid")(r)
+        r = ReLU(negative_slope=slope)(r)
+        u = Conv1D(filters, kernel_size, padding="valid")(u)
+        u = ReLU(negative_slope=slope)(u)
+    x = Concatenate()([m, s, r, u])
+    return x
+
+
+def scored_boost(input_width, out_width, columns=4, lr=1e-3, name="scored-boost"):
+    p_out_width = 8
+    slope = 1.0 / (2 ** 10)
     logtanh = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
     # rsig = x / (1.0 + 4 * tf.sqrt(tf.abs(x)))
     n = int(math.log2(input_width))
-    slope = 1.0 / (2 ** 10)
-    depth = 8
+    rows = 16
     units = 64
-    k_size = 3
+    kernel_size = 3
     sample_width = min(4, input_width)
     inputs = Input(shape=(input_width,))
     x = inputs
@@ -506,41 +572,48 @@ def scored_boost(input_width, out_width, size=4, lr=1e-3, name="scored-boost"):
     ]
     r = Concatenate(1, name=f"concat_r")(r)
     r = Reshape((-1, 1))(r)
-    for i in range(3):
-        m = Conv1D(64, kernel_size=k_size, padding="valid")(m)
-        m = Lambda(logtanh)(m)
-        s = Conv1D(64, kernel_size=k_size, padding="valid")(s)
-        s = Lambda(logtanh)(s)
-        r = Conv1D(64, kernel_size=k_size, padding="valid")(r)
-        r = Lambda(logtanh)(r)
-        u = Conv1D(64, kernel_size=k_size, padding="valid")(u)
-        u = Lambda(logtanh)(u)
-    x = Concatenate()([m, s, r, u])
-    # x = Reshape((1, -1))(x)
-    x = GRU(256, return_sequences=True)(x)
-    x = Flatten()(x)
-    x = BatchNormalization()(x)
 
-    # Распределение вероятностей
-    p_out_width = 16
-    p = x
-    for i in range(8):
-        p = Dense(64, activation="softsign", name=f"p-dense{i}")(p)
-        # p = Lambda(logtanh)(p)
+    # аппроксимация распределения
+    p = Concatenate()([m, s, r, u])
+    p = Reshape((1, -1))(p)
+    p = GRU(256, return_sequences=True)(p)
+    p = Flatten()(p)
+    p = BatchNormalization()(p)
+    for i in range(rows):
+        p = Dense(units, name=f"p-dense{i}")(p)
+        p = Lambda(logtanh)(p)
     p = Dense(p_out_width, activation="softmax", name=f"p")(p)
 
-    # dense chains array
-    z = [x for k in range(size)]
-    for k in range(size):
-        z[k] = [Dense(units, name=f"dense-in{k}-{i}")(z[k]) for i in range(out_width)]
-        for j in range(depth):
-            z[k] = [
-                Dense(units, name=f"dense{k}-{j}-{i}")(z[k][i])
-                for i in range(out_width)
-            ]
+    # аппроксимация значения
+    for i in range(3):
+        m = Conv1D(64, kernel_size=kernel_size, padding="valid")(m)
+        # m = ReLU(negative_slope=slope)(m)
+        m = Lambda(logtanh)(m)
+        s = Conv1D(64, kernel_size=kernel_size, padding="valid")(s)
+        # s = ReLU(negative_slope=slope)(s)
+        s = Lambda(logtanh)(s)
+        r = Conv1D(64, kernel_size=kernel_size, padding="valid")(r)
+        # r = ReLU(negative_slope=slope)(r)
+        r = Lambda(logtanh)(r)
+        u = Conv1D(64, kernel_size=kernel_size, padding="valid")(u)
+        # u = ReLU(negative_slope=slope)(u)
+        u = Lambda(logtanh)(u)
+    x = Concatenate()([m, s, r, u])
+    x = Reshape((1, -1))(x)
+    x = LSTM(256, return_sequences=True)(x)
+    x = Flatten()(x)
+    x = BatchNormalization()(x)
+    d_range = range(rows)
+    out_range = range(out_width)
+    z = [x for k in range(columns)]
+    for k in range(columns):
+        z[k] = [Dense(units, name=f"dense-in{k}-{i}")(z[k]) for i in out_range]
+        for j in d_range:
+            z[k] = [Dense(units, name=f"dense{k}-{j}-{i}")(z[k][i]) for i in out_range]
+            # z[k] = [ReLU(negative_slope=slope)(z[k][i]) for i in out_range]
             z[k] = [Lambda(logtanh)(z[k][i]) for i in range(out_width)]
-        z[k] = [Dense(4, name=f"dense-out{k}-{i}")(z[k][i]) for i in range(out_width)]
-    for k in range(size):
+        z[k] = [Dense(1, name=f"dense-out{k}-{i}")(z[k][i]) for i in out_range]
+    for k in range(columns):
         if len(z[k]) == 1:
             z[k] = z[k][0]
         else:
@@ -549,22 +622,18 @@ def scored_boost(input_width, out_width, size=4, lr=1e-3, name="scored-boost"):
         x = z[0]
     else:
         x = Concatenate()(z)
-    # x = Dropout(1 / 16)(x)
+    # x = Dropout(1 / size)(x)
     x = Dense(out_width, name=f"v")(x)
-
-    # x = Concatenate()([x, p])
-
-    # value_output = Dense(out_width)(x)
-    # score_output = Dense(p_out_width)(x)
-    outputs = x
-    model = keras.Model(inputs, outputs=[outputs, p], name=name)
+    model = keras.Model(inputs, outputs=[x, p], name=name)
+    MSE = keras.losses.MeanSquaredError(name="mse")
+    HBR = losses.Huber(name="hbr")
     MAE = keras.metrics.MeanAbsoluteError(name="mae")
+    SCCE = SparseCategoricalError(value_min=-8.0, value_max=7.9999, count=p_out_width)
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=lr),
-        # loss=keras.losses.Huber(),
-        loss={"v": keras.losses.MeanSquaredError(name="mse"), "p": scce},
-        metrics={"v": MAE},
-        loss_weights={"v": 1.0, "p": 0.1},
+        loss={"v": MSE, "p": SCCE},
+        metrics={"v": MAE, "p": None},
+        loss_weights={"v": 1.0, "p": 1.0},
     )
     return model
 
