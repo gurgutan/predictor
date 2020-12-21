@@ -1,25 +1,37 @@
-# from predictor import Predictor
-# import numpy as np
+import tensorflow as tf
+import numpy as np
+from tensorflow import keras
+from tensorflow.python.keras.engine.base_layer import Layer
+from predictor import Predictor
+import matplotlib.pyplot as plt
+import pandas as pd
+import math
+from models import esum2, esum
+import random
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Activation, Input, Concatenate
 
-# p = Predictor(
-#     "models/37",
-#     input_shape=(4, 4, 4, 1),
-#     output_shape=(8,),
-#     predict_size=16,
-#     filters=256,
-#     kernel_size=2,
-#     dense_size=64,
-# )
-# x0, y0 = p.load_dataset(
-#     tsv_file="datas/EURUSD_M5_200001030000_202006122350.csv", count=151320, skip=4608
-# )
-# x1, y1 = p.load_dataset2(
-#     tsv_file="datas/EURUSD_M5_200001030000_202006122350.csv", count=151320, skip=4608
-# )
 
-# dx = np.sum(x0 - x1)
-# dy = np.sum(y0 - y1)
-# print(dx, dy)
+def cross(kernels):
+    return lambda x: Concatenate()([l(x) for l in kernels])
 
-assert 5==0, "dssdsdds"
+
+def add(kernels):
+    return (
+        lambda x: kernels[0](x)
+        if (len(kernels) == 1)
+        else kernels[-1](add(kernels[:-1])(x))
+    )
+
+
+i = Input(shape=(8,))
+u1 = [Dense(8), Dense(16), Dense(32)]
+u2 = [Dense(3), Dense(3)]
+u3 = [Dense(5), add(u2)]
+a = add([Dense(8), cross(u1), cross(u3)])
+model = tf.keras.Model(inputs=i, outputs=a(i))
+# model = tf.keras.Model(inputs=i, outputs=cross(u1)(i))
+tf.keras.utils.plot_model(
+    model, show_shapes=True, show_layer_names=False, to_file="models/test1.png"
+)
 

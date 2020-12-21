@@ -528,7 +528,7 @@ def input_block(input_width, filters=32, kernel_size=3):
 
 
 def scored_boost(input_width, out_width, columns=4, lr=1e-3, name="scored-boost"):
-    p_out_width = 8
+    p_out_width = 9
     slope = 1.0 / (2 ** 10)
     logtanh = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
     # rsig = x / (1.0 + 4 * tf.sqrt(tf.abs(x)))
@@ -576,7 +576,7 @@ def scored_boost(input_width, out_width, columns=4, lr=1e-3, name="scored-boost"
     # аппроксимация распределения
     p = Concatenate()([m, s, r, u])
     p = Reshape((1, -1))(p)
-    p = GRU(256, return_sequences=True)(p)
+    p = LSTM(256, return_sequences=True)(p)
     p = Flatten()(p)
     p = BatchNormalization()(p)
     for i in range(rows):
@@ -611,7 +611,7 @@ def scored_boost(input_width, out_width, columns=4, lr=1e-3, name="scored-boost"
         for j in d_range:
             z[k] = [Dense(units, name=f"dense{k}-{j}-{i}")(z[k][i]) for i in out_range]
             # z[k] = [ReLU(negative_slope=slope)(z[k][i]) for i in out_range]
-            z[k] = [Lambda(logtanh)(z[k][i]) for i in range(out_width)]
+            z[k] = [Lambda(logtanh)(z[k][i]) for i in out_range]
         z[k] = [Dense(1, name=f"dense-out{k}-{i}")(z[k][i]) for i in out_range]
     for k in range(columns):
         if len(z[k]) == 1:
@@ -628,7 +628,7 @@ def scored_boost(input_width, out_width, columns=4, lr=1e-3, name="scored-boost"
     MSE = keras.losses.MeanSquaredError(name="mse")
     HBR = losses.Huber(name="hbr")
     MAE = keras.metrics.MeanAbsoluteError(name="mae")
-    SCCE = SparseCategoricalError(value_min=-8.0, value_max=7.9999, count=p_out_width)
+    SCCE = SparseCategoricalError(value_min=-4.0, value_max=4.0, count=p_out_width)
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=lr),
         loss={"v": MSE, "p": SCCE},
