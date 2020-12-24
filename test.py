@@ -13,7 +13,11 @@ from tensorflow.keras.layers import Dense, Activation, Input, Concatenate
 
 
 def cross(kernels):
-    return lambda x: Concatenate()([l(x) for l in kernels])
+    return (
+        lambda x: kernels[0](x)
+        if (len(kernels) == 1)
+        else Concatenate()([l(x) for l in kernels])
+    )
 
 
 def add(kernels):
@@ -26,9 +30,9 @@ def add(kernels):
 
 i = Input(shape=(8,))
 u1 = [Dense(8), Dense(16), Dense(32)]
-u2 = [Dense(3), Dense(3)]
-u3 = [Dense(5), add(u2)]
-a = add([Dense(8), cross(u1), cross(u3)])
+u2 = [Dense(3), cross(u1)]
+u3 = [add([Dense(10), cross(u2)])]
+a = add([Dense(8), cross(u3), Dense(10)])
 model = tf.keras.Model(inputs=i, outputs=a(i))
 # model = tf.keras.Model(inputs=i, outputs=cross(u1)(i))
 tf.keras.utils.plot_model(

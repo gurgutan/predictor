@@ -190,24 +190,26 @@ if __name__ == "__main__":
 
     restarts_count = 2 ** 10
     dataset_segment = 1.0 / 8.0
-    input_width = 2 ** 8
+    input_width = 2 ** 9
     label_width = 1
     ensemble_size = 2 ** 4
 
-    # model = dense_boost(
-    #     input_width,
-    #     label_width,
-    #     ensemble_size,
-    #     lr=1e-2,
-    #     name=f"dense-boost{ensemble_size}-{input_width}-{label_width}",
-    # )
-    model = scored_boost(
+    model = dense_boost(
         input_width,
         label_width,
         ensemble_size,
         lr=1e-3,
-        name=f"scored-boost{ensemble_size}-{input_width}-{label_width}",
+        min_v=-2.0,
+        max_v=2.0,
+        name=f"dense-boost{ensemble_size}-{input_width}-{label_width}",
     )
+    # model = scored_boost(
+    #     input_width,
+    #     label_width,
+    #     ensemble_size,
+    #     lr=1e-3,
+    #     name=f"scored-boost{ensemble_size}-{input_width}-{label_width}",
+    # )
 
     predictor = Predictor(
         datafile="datas/EURUSD_H1 copy 3.csv",

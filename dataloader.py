@@ -33,7 +33,7 @@ class Dataloader:
         self.batch_size = batch_size
         self.scale_coef = 1000.0
         self.bias = 0.0
-        self.clip_value = 2.0
+        self.clip_value = 4.0
 
     def load_tsv(
         self,
@@ -158,7 +158,7 @@ class Dataloader:
 
     def transform(self, data):
         # ds = tf.math.subtract(data, data[:, 0:1])
-        self.first_value = data[0:1]
+        # self.first_value = data[0:1]
         ds = np.diff(data) * self.scale_coef + self.bias
         std = np.std(ds)
         ds = np.clip(ds, -std * self.clip_value, std * self.clip_value)

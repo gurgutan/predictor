@@ -348,7 +348,27 @@ def spectral(input_width, out_width, lr=1e-3):
     return model
 
 
-def dense_boost(input_width, out_width, columns=4, lr=1e-3, name="dense-boost"):
+class ClippedMSE(losses.Loss):
+    def __init__(
+        self,
+        value_min=-1.0,
+        value_max=1.0,
+        reduction=losses.Reduction.AUTO,
+        name="clipped_mse",
+    ) -> None:
+        super().__init__(reduction=reduction, name=name)
+        self.value_min = value_min
+        self.value_max = value_max
+
+    def call(self, y_true, y_pred):
+        clipped_y_pred = tf.clip_by_value(y_pred, self.value_min, self.value_max)
+        clipped_y_true = tf.clip_by_value(y_true, self.value_min, self.value_max)
+        return losses.mean_squared_error(clipped_y_true, clipped_y_pred)
+
+
+def dense_boost(
+    input_width, out_width, columns=4, lr=1e-3, min_v=-1, max_v=1, name="dense-boost"
+):
     # l2 = keras.regularizers.l2(1e-10)
     logtanh = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
     rad = lambda x: 2 - tf.sqrt(1 + tf.math.square(x))
@@ -358,9 +378,9 @@ def dense_boost(input_width, out_width, columns=4, lr=1e-3, name="dense-boost"):
     n = int(math.log2(input_width))
     slope = 1.0 / (2 ** 10)
     rows = 8
-    units = 32
+    units = 64
     k_size = 3
-    sample_width = min(4, input_width)
+    sample_width = min(2, input_width)
     inputs = Input(shape=(input_width,))
     x = inputs
     u = Lambda(lambda z: z[:, -sample_width:])(x)
@@ -397,39 +417,40 @@ def dense_boost(input_width, out_width, columns=4, lr=1e-3, name="dense-boost"):
     ]
     r = Concatenate(1, name=f"concat_r")(r)
     r = Reshape((-1, 1))(r)
-    filters = 32
+    filters = 64
     for i in range(3):
         m = Conv1D(filters, k_size, padding="valid")(m)
-        m = ReLU(negative_slope=slope)(m)
+        # m = ReLU(negative_slope=slope)(m)
+        m = Lambda(logtanh)(m)
         s = Conv1D(filters, k_size, padding="valid")(s)
-        s = ReLU(negative_slope=slope)(s)
+        # s = ReLU(negative_slope=slope)(s)
+        s = Lambda(logtanh)(s)
         r = Conv1D(filters, k_size, padding="valid")(r)
-        r = ReLU(negative_slope=slope)(r)
+        # r = ReLU(negative_slope=slope)(r)
+        r = Lambda(logtanh)(r)
         u = Conv1D(filters, k_size, padding="valid")(u)
-        u = ReLU(negative_slope=slope)(u)
+        # u = ReLU(negative_slope=slope)(u)
+        u = Lambda(logtanh)(u)
     x = Concatenate()([m, s, r, u])
-    x = Reshape((1, -1))(x)
-    x = GRU(256, return_sequences=True)(x)
-    x = Flatten()(x)
     x = BatchNormalization()(x)
+    x = Reshape((1, -1))(x)
+    x = LSTM(256, return_sequences=True)(x)
+    x = Flatten()(x)
     z = [x for k in range(columns)]
+    out_range = range(out_width)
     for col in range(columns):
-        z[col] = [
-            Dense(units, name=f"dense-in{col}-{i}")(z[col]) for i in range(out_width)
-        ]
+        z[col] = [Dense(units, name=f"d-in{col}-{i}")(z[col]) for i in out_range]
         for row in range(rows):
             z[col] = [
-                Dense(units, name=f"dense{col}-{row}-{i}")(z[col][i])
-                for i in range(out_width)
+                Dense(units, name=f"d{col}-{row}-{i}")(z[col][i]) for i in out_range
             ]
             # z[k] = [
             #     ReLU(negative_slope=slope, name=f"lu{k}-{j}-{i}")(z[k][i])
             #     for i in range(out_width)
             # ]
             z[col] = [Lambda(logtanh)(z[col][i]) for i in range(out_width)]
-        z[col] = [
-            Dense(1, name=f"dense-out{col}-{i}")(z[col][i]) for i in range(out_width)
-        ]
+        z[col] = [Dense(1, name=f"d-out{col}-{i}")(z[col][i]) for i in out_range]
+        # z[col] = [GaussianDropout(1 / 256)(z[col][i]) for i in out_range]
     for col in range(columns):
         if len(z[col]) == 1:
             z[col] = z[col][0]
@@ -439,14 +460,15 @@ def dense_boost(input_width, out_width, columns=4, lr=1e-3, name="dense-boost"):
         x = z[0]
     else:
         x = Concatenate()(z)
-    # x = Dropout(1 / 16)(x)
     x = Dense(out_width)(x)
     outputs = x
     model = keras.Model(inputs, outputs, name=name)
     MAE = keras.metrics.MeanAbsoluteError()
+    CMSE = ClippedMSE(min_v, max_v)
     model.compile(
-        # loss=keras.losses.Huber(),
-        loss=keras.losses.MeanSquaredError(),
+        # loss=keras.losses .Huber(),
+        # loss=keras.losses.MeanSquaredError(),
+        loss=CMSE,
         optimizer=keras.optimizers.Adam(learning_rate=lr),
         metrics=[MAE],
     )
