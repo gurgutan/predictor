@@ -5,8 +5,10 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras import losses
 from tensorflow.keras import metrics
 from tensorflow import keras
+from tensorflow.python.framework.tensor_util import SlowAppendBFloat16ArrayToTensorProto
 from tensorflow.python.keras.layers import LSTMV2
 from rbflayer import RBFLayer
+import numpy as np
 
 
 def mse_dir(y_true, y_pred):
@@ -474,20 +476,56 @@ class ClippedSCE(losses.Loss):
         return losses.sparse_categorical_crossentropy(n_true, clipped_y_pred)
 
 
+# class ClippedCSE(tf.keras.losses.Loss):
+#     def __init__(
+#         self,
+#         value_min=-1.0,
+#         value_max=1.0,
+#         count=8,
+#         reduction=tf.keras.losses.Reduction.AUTO,
+#         name="clipped_cse",
+#     ) -> None:
+#         super().__init__(reduction=reduction, name=name)
+#         self.value_min = value_min
+#         self.value_max = value_max
+#         self.count = count
+#         self.step = (self.count - 1) / (self.value_max - self.value_min)
+
+#     def call(self, y_true, y_pred):
+#         clipped_y_pred = tf.clip_by_value(y_pred, self.value_min, self.value_max)
+#         clipped_y_true = tf.clip_by_value(y_true, self.value_min, self.value_max)
+#         # n_pred = (clipped_y_pred - self.value_min) * self.step
+#         indices = tf.cast((clipped_y_true - self.value_min) * self.step, tf.int32)
+#         indices = tf.reshape(indices, [-1])
+#         y_true_batch = tf.zeros_like(y_pred)
+#         # np.arange(y_pred.shape[0])
+#         y_true_batch[1, indices] = 1.0
+#         return tf.losses.cosine_similarity(y_true_batch, clipped_y_pred)
+
+
 def prob_block(inputs, out_width, name="p"):
+    # x = Flatten()(inputs)
     x = Dense(64)(inputs)
     x = Reshape((-1, 1))(x)
-    for i, f in enumerate([32] * 6 + [64] * 4 + [128] * 4 + [256] * 4):
+    for i, f in enumerate([16] * 4 + [32] * 4 + [64] * 4 + [128] * 4):
         x = Conv1D(f, 8, activation="softsign", name=f"p-conv{i}")(x)
         # x = BatchNormalization()(x)
     x = Flatten()(x)
-    x = Dense(64, "relu", name=f"p-dense{64}")(x)
+    x = Dense(64, name=f"p-dense{64}")(x)
+    x = ReLU(negative_slope=1 / 2 ** 10)(x)
     x = Dense(out_width, "softmax", name=name)(x)
     return x
 
 
 def scored_boost(
-    input_width, out_width, columns=4, min_v=-4, max_v=4, lr=1e-3, name="scored-boost"
+    input_width,
+    out_width,
+    prob_width=8,
+    columns=4,
+    min_v=-4,
+    max_v=4,
+    lr=1e-3,
+    name="scored-boost",
 ):
     init_scale = 2 ** 10
     kernel_init = keras.initializers.RandomUniform(-init_scale, init_scale)
@@ -502,7 +540,7 @@ def scored_boost(
     # rsig = x / (1.0 + 4 * tf.sqrt(tf.abs(x)))
     n = int(math.log2(input_width))
     rows = 8
-    units = 64
+
     k_size = 3
     sample_width = min(2, input_width)
     inputs = Input(shape=(input_width,))
@@ -520,8 +558,7 @@ def scored_boost(
     t = [Lambda(f_vrange, name=f"range{i}",)(2 ** i * x[i]) for i in range(n)]
     t = Concatenate(1, name=f"concat_r")(t)
     t = Reshape((-1, 1))(t)
-    filters = 64
-    for i in range(3):
+    for filters in [32, 64, 128]:
         m = Conv1D(filters, k_size, padding="valid", kernel_initializer=kernel_init)(m)
         m = Lambda(f_logtanh)(m)
         s = Conv1D(filters, k_size, padding="valid", kernel_initializer=kernel_init)(s)
@@ -534,10 +571,10 @@ def scored_boost(
     x = BatchNormalization()(x)
 
     # вероятностная
-    p_out_width = 16
-    p = prob_block(x, p_out_width)
+    p = prob_block(x, prob_width)
 
     # регрессионная
+    units = 32
     x = Reshape((1, -1))(x)
     x = LSTM(256, return_sequences=True)(x)
     x = Flatten()(x)
@@ -559,12 +596,13 @@ def scored_boost(
     model = keras.Model(inputs, outputs=[x, p], name=name)
     MAE = keras.metrics.MeanAbsoluteError(name="mae")
     CMSE = ClippedMSE(min_v, max_v)
-    SCCE = ClippedSCE(min_v, max_v, p_out_width)
+    SCCE = ClippedSCE(min_v, max_v, prob_width)
+    # CCSE = ClippedCSE(min_v, max_v, prob_width)
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=lr),
         loss={"v": CMSE, "p": SCCE},
         metrics={"v": MAE, "p": None},
-        loss_weights={"v": 1.0, "p": 1.0},
+        loss_weights={"v": 1.0, "p": 0.1},
     )
     return model
 

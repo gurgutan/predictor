@@ -192,12 +192,12 @@ if __name__ == "__main__":
     dataset_segment = 1.0 / 4.0
     input_width = 2 ** 8
     label_width = 1
-    ensemble_size = 2 ** 4
+    columns = 2 ** 4
 
     # model = dense_boost(
     #     input_width,
     #     label_width,
-    #     ensemble_size,
+    #     ensemble_size=columns,
     #     lr=1e-5,
     #     min_v=-3.0,
     #     max_v=3.0,
@@ -206,11 +206,12 @@ if __name__ == "__main__":
     model = scored_boost(
         input_width,
         label_width,
-        ensemble_size,
+        prob_width=8,
+        columns=8,
         lr=1e-3,
         min_v=-4.0,
         max_v=4.0,
-        name=f"scored-boost{ensemble_size}-{input_width}-{label_width}",
+        name=f"scored-boost{columns}-{input_width}-{label_width}",
     )
 
     predictor = Predictor(
