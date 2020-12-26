@@ -189,7 +189,7 @@ if __name__ == "__main__":
             batch_size = 2 ** 12
 
     restarts_count = 2 ** 10
-    dataset_segment = 1.0 / 4.0
+    dataset_segment = 1.0 / 8.0
     input_width = 2 ** 8
     label_width = 1
     columns = 2 ** 4
@@ -208,9 +208,9 @@ if __name__ == "__main__":
         label_width,
         prob_width=8,
         columns=8,
-        lr=1e-3,
-        min_v=-4.0,
-        max_v=4.0,
+        lr=1e-6,
+        min_v=-3.0,
+        max_v=3.0,
         name=f"scored-boost{columns}-{input_width}-{label_width}",
     )
 

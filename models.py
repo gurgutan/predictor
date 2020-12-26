@@ -507,11 +507,11 @@ def prob_block(inputs, out_width, name="p"):
     # x = Flatten()(inputs)
     x = Dense(64)(inputs)
     x = Reshape((-1, 1))(x)
-    for i, f in enumerate([16] * 4 + [32] * 4 + [64] * 4 + [128] * 4):
-        x = Conv1D(f, 8, activation="softsign", name=f"p-conv{i}")(x)
-        # x = BatchNormalization()(x)
+    for i, f in enumerate([16] * 4 + [32] * 4 + [64] * 8):
+        x = Conv1D(f, 8, name=f"p-c{i}")(x)
+        x = ReLU(negative_slope=1 / 2 ** 10)(x)
     x = Flatten()(x)
-    x = Dense(64, name=f"p-dense{64}")(x)
+    x = Dense(64, name=f"p-d{64}")(x)
     x = ReLU(negative_slope=1 / 2 ** 10)(x)
     x = Dense(out_width, "softmax", name=name)(x)
     return x
