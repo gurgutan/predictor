@@ -2,10 +2,11 @@ from datetime import timedelta, datetime
 
 
 class DelayTimer:
-    def __init__(self, seconds=60):
+    def __init__(self, seconds=60, shift=0):
+        """Параметры: seconds - задержка таймера в секундах, shift - сдвиг таймера от начала часа"""
         self.seconds = seconds
         # Выравнивание времени по начальной дате
-        self.last = datetime(2000, 1, 1)
+        self.last = datetime(2000, 1, 1) + timedelta(seconds=shift)
 
     def elapsed(self):
         """

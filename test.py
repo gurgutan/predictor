@@ -10,6 +10,7 @@ from models import esum2, esum
 import random
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Activation, Input, Concatenate
+import pydot
 
 
 def cross(kernels):
@@ -28,7 +29,7 @@ i = Input(shape=(8,))
 u1 = [Dense(8), Dense(16), Dense(32)]
 u2 = [Dense(3), Dense(3)]
 u3 = [Dense(5), add(u2)]
-a = add([Dense(8), cross(u1), cross(u3)])
+a = add([Dense(8), cross([Dense(10), add(u2), cross(u3)])])
 model = tf.keras.Model(inputs=i, outputs=a(i))
 # model = tf.keras.Model(inputs=i, outputs=cross(u1)(i))
 tf.keras.utils.plot_model(
