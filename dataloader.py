@@ -33,7 +33,7 @@ class Dataloader:
         self.batch_size = batch_size
         self.scale_coef = 1000.0
         self.bias = 0.0
-        self.clip_value = 2.0
+        self.clip_value = 4.0
 
     def load_tsv(
         self,
@@ -89,12 +89,14 @@ class Dataloader:
         """
         df = dataframe.dropna()
         df_size = df[input_column].size
-        train_len = int(df_size * train_ratio)
-        val_len = int(df_size * val_ratio)
-        test_len = int(df_size * test_ratio)
-        train_slice = slice(0, train_len)
-        val_slice = slice(train_len, train_len + val_len)
-        test_slice = slice(train_len + val_len, train_len + val_len + test_len)
+        train_size = int(df_size * train_ratio)
+        val_size = int(df_size * val_ratio)
+        test_size = int(df_size * test_ratio)
+        train_slice = slice(-train_size, None)
+        val_slice = slice(-(train_size + val_size), -train_size)
+        test_slice = slice(
+            -(train_size + val_size + test_size), -(train_size + val_size)
+        )
         self.train_df = df[input_column][train_slice]
         self.val_df = df[input_column][val_slice]
         self.test_df = df[input_column][test_slice]
@@ -158,7 +160,7 @@ class Dataloader:
 
     def transform(self, data):
         # ds = tf.math.subtract(data, data[:, 0:1])
-        self.first_value = data[0:1]
+        # self.first_value = data[0:1]
         ds = np.diff(data) * self.scale_coef + self.bias
         std = np.std(ds)
         ds = np.clip(ds, -std * self.clip_value, std * self.clip_value)

@@ -14,7 +14,11 @@ import pydot
 
 
 def cross(kernels):
-    return lambda x: Concatenate()([l(x) for l in kernels])
+    return (
+        lambda x: kernels[0](x)
+        if (len(kernels) == 1)
+        else Concatenate()([l(x) for l in kernels])
+    )
 
 
 def add(kernels):
