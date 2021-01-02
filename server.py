@@ -109,7 +109,19 @@ class Server(object):
         if mt5rates is None:
             logger.error("Ошибка:" + str(mt5.last_error()))
             return None
-        rates = pd.DataFrame(mt5rates)
+        rates = pd.DataFrame(
+            mt5rates,
+            columns=[
+                "time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "tickvol",
+                "spread",
+                "real_volume",
+            ],
+        )
         # logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
@@ -188,8 +200,8 @@ class Server(object):
         self.p.dataloader.load_df(
             df,
             input_column="open",
-            train_ratio=1 - 1.0 / 32,
-            val_ratio=1.0 / 32,
+            train_ratio=1 - 1.0 / 8,
+            val_ratio=1.0 / 8,
             test_ratio=0,
             verbose=1,
         )
@@ -198,7 +210,7 @@ class Server(object):
             epochs=8,
             use_tensorboard=False,
             use_early_stop=False,
-            verbose=0,
+            verbose=1,
             use_multiprocessing=True,
         )
         logger.info(f"Модель дообучена")
@@ -215,7 +227,7 @@ class Server(object):
 
     def start(self):
         compute_timer = DelayTimer(self.compute_delay)
-        train_timer = DelayTimer(self.train_delay)
+        train_timer = DelayTimer(self.train_delay, shift=600)
         self.__compute_old__()  # обновление данных начиная с даты
         logger.info(f"Запуск таймера с периодом {self.compute_delay}")
         while True:
