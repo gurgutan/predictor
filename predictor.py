@@ -9,6 +9,7 @@ import datetime
 from os import path
 from tensorflow import keras
 from tensorflow.keras.utils import plot_model
+import MetaTrader5 as mt5
 
 
 from dataloader import Dataloader
@@ -44,7 +45,6 @@ class Predictor(object):
             input_width=input_width,
             label_width=label_width,
             shift=shift,
-            ma=3,
             batch_size=batch_size,
         )
         if type(datafile) == str:
@@ -63,7 +63,6 @@ class Predictor(object):
                 val_ratio=val_ratio,
                 test_ratio=test_ratio,
             )
-        print(type(model))
         if type(model) == str:
             self.load_model(model)
         elif isinstance(model, tf.keras.Model):
@@ -93,12 +92,12 @@ class Predictor(object):
 
     def plot_model(self):
         model_png_name = "models/" + self.model.name + ".png"
-        keras.utils.plot_model(
-            self.model,
-            show_shapes=True,
-            show_layer_names=False,
-            to_file=model_png_name,
-        )
+        # keras.utils.plot_model(
+        #     self.model,
+        #     show_shapes=True,
+        #     show_layer_names=False,
+        #     to_file=model_png_name,
+        # )
         # self.model.summary()
 
     def fit(
@@ -108,6 +107,7 @@ class Predictor(object):
         use_tensorboard=True,
         use_early_stop=True,
         verbose=1,
+        use_multiprocessing=True,
     ):
         start_fit_time = datetime.datetime.now()
         ckpt = "ckpt/" + self.model.name + ".ckpt"
@@ -145,7 +145,7 @@ class Predictor(object):
             batch_size=batch_size,
             epochs=epochs,
             shuffle=True,
-            use_multiprocessing=True,
+            use_multiprocessing=use_multiprocessing,
             verbose=2,
             callbacks=callbacks,
         )
@@ -192,27 +192,27 @@ if __name__ == "__main__":
     dataset_segment = 1.0 / 8.0
     input_width = 2 ** 8
     label_width = 1
-    columns = 2 ** 4
+    columns = 2 ** 5
 
-    # model = dense_boost(
+    model = dense_boost(
+        input_width,
+        label_width,
+        columns=columns,
+        lr=1e-3,
+        min_v=-3.0,
+        max_v=3.0,
+        name=f"ed-boost{columns}-{input_width}-{label_width}",
+    )
+    # model = scored_boost(
     #     input_width,
     #     label_width,
-    #     ensemble_size=columns,
+    #     prob_width=8,
+    #     columns=8,
     #     lr=1e-5,
     #     min_v=-3.0,
     #     max_v=3.0,
-    #     name=f"dense-boost{ensemble_size}-{input_width}-{label_width}",
+    #     name=f"scored-boost{columns}-{input_width}-{label_width}",
     # )
-    model = scored_boost(
-        input_width,
-        label_width,
-        prob_width=8,
-        columns=8,
-        lr=1e-6,
-        min_v=-3.0,
-        max_v=3.0,
-        name=f"scored-boost{columns}-{input_width}-{label_width}",
-    )
 
     predictor = Predictor(
         datafile="datas/EURUSD_H1 copy 3.csv",
@@ -224,6 +224,17 @@ if __name__ == "__main__":
         test_ratio=0,
         batch_size=batch_size,
     )
+
+    # Использовать загрузку котировок из терминала для обучения
+    # mt5.initialize(path="E:/Dev/Alpari MT5/terminal64.exe")
+    # sleep(5)
+    # mt5rates = mt5.copy_rates_from_pos("EURUSD", mt5.TIMEFRAME_H1, 0, 2**15)
+    # if mt5rates is None:
+    #     print("Ошибка:" + str(mt5.last_error()))
+    # else:
+    #     df = pd.DataFrame(mt5rates)
+    # predictor.dataloader.load_df(df,input_column="open",train_ratio=1 - 1.0/8,val_ratio=1.0/8,test_ratio=0,verbose=1)
+
     predictor.model.summary()
     for i in range(restarts_count):
         predictor.plot_model()

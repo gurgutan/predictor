@@ -369,7 +369,7 @@ class ClippedMSE(losses.Loss):
 
 
 def dense_boost(
-    input_width, out_width, columns=4, lr=1e-3, min_v=-1, max_v=1, name="dense-boost"
+    input_width, out_width, columns=4, lr=1e-3, min_v=-1, max_v=1, name="d-boost"
 ):
     init_scale = 2 ** 10
     kernel_init = keras.initializers.RandomUniform(-init_scale, init_scale)

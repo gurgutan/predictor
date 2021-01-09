@@ -14,13 +14,11 @@ class Dataloader:
         input_width,
         label_width,
         shift=1,
-        ma=3,
         train_ratio=0.6,
         val_ratio=0.2,
         test_ratio=0.2,
         batch_size=256,
     ):
-        self.ma = ma
         self.input_width = input_width
         self.label_width = label_width
         self.shift = shift
