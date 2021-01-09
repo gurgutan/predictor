@@ -9,20 +9,8 @@ import datetime
 from os import path
 from tensorflow import keras
 from tensorflow.keras.utils import plot_model
-import MetaTrader5 as mt5
-
-
 from dataloader import Dataloader
-from models import (
-    scored_boost,
-    rbf_dense,
-    spectral,
-    dense_boost,
-    trend_encoder,
-    esum,
-    dense_model,
-    conv_model,
-)
+from models import scored_boost, dense_boost
 import sys
 
 
@@ -92,13 +80,13 @@ class Predictor(object):
 
     def plot_model(self):
         model_png_name = "models/" + self.model.name + ".png"
-        # keras.utils.plot_model(
-        #     self.model,
-        #     show_shapes=True,
-        #     show_layer_names=False,
-        #     to_file=model_png_name,
-        # )
-        # self.model.summary()
+        keras.utils.plot_model(
+            self.model,
+            show_shapes=True,
+            show_layer_names=False,
+            to_file=model_png_name,
+        )
+        self.model.summary()
 
     def fit(
         self,
@@ -109,10 +97,10 @@ class Predictor(object):
         use_checkpoints=True,
         use_multiprocessing=True,
         verbose=1,
-        use_multiprocessing=True,
     ):
-        log_dir = "logs/fit/" + start_fit_time.strftime("%Y_%m_%d-%H_%M_%S")
+        callbacks = []
         start_fit_time = datetime.datetime.now()
+        log_dir = "logs/fit/" + start_fit_time.strftime("%Y_%m_%d-%H_%M_%S")
         if use_checkpoints:
             ckpt = "ckpt/" + self.model.name + ".ckpt"
             backup = keras.callbacks.ModelCheckpoint(
@@ -121,6 +109,7 @@ class Predictor(object):
                 save_weights_only=True,
                 save_best_only=True,
             )
+            callbacks.append(backup)
             try:
                 self.model.load_weights(ckpt)
                 if verbose > 0:
@@ -130,9 +119,6 @@ class Predictor(object):
             except Exception as e:
                 pass
 
-        callbacks = []
-        if use_checkpoints:
-            callbacks.append(backup)
         if use_tensorboard:
             tb = keras.callbacks.TensorBoard(log_dir=log_dir, write_graph=True)
             callbacks.append(tb)
@@ -230,16 +216,6 @@ if __name__ == "__main__":
         test_ratio=0,
         batch_size=batch_size,
     )
-
-    # Использовать загрузку котировок из терминала для обучения
-    # mt5.initialize(path="E:/Dev/Alpari MT5/terminal64.exe")
-    # sleep(5)
-    # mt5rates = mt5.copy_rates_from_pos("EURUSD", mt5.TIMEFRAME_H1, 0, 2**15)
-    # if mt5rates is None:
-    #     print("Ошибка:" + str(mt5.last_error()))
-    # else:
-    #     df = pd.DataFrame(mt5rates)
-    # predictor.dataloader.load_df(df,input_column="open",train_ratio=1 - 1.0/8,val_ratio=1.0/8,test_ratio=0,verbose=1)
 
     predictor.model.summary()
     for i in range(restarts_count):
