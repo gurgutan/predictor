@@ -84,7 +84,7 @@ class Dataloader:
     ):
         """
         Преобразует dataframe в обучающую выборку
-        dataframe - Pandas Dataframe с колонками ["date", "time", "open", "high", "low", "close", "tickvol", "vol"]
+        dataframe - Pandas Dataframe с колонками ["date", "time", "open", "high", "low", "close", "tickvol", "spread", "real_volume"]
         input_column - колонка с основными данными
         """
         df_size = df[input_column].size

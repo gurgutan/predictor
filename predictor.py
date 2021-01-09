@@ -129,11 +129,7 @@ class Predictor(object):
             except Exception as e:
                 pass
 
-        reduce_lr = keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss", factor=0.1, min_delta=0.0001, patience=16, min_lr=1e-14
-        )
-
-        callbacks = [reduce_lr]
+        callbacks = []
         if use_checkpoints:
             callbacks.append(backup)
         if use_tensorboard:

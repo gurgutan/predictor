@@ -4,19 +4,21 @@
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-import dbcommon
-from predictor import Predictor
+
 import json
 import sqlite3
 import datetime as dt
 import pandas as pd
-from time import sleep
-from timer import DelayTimer
 import logging
-import MetaTrader5 as mt5
 import os
 import pytz
 import tensorflow as tf
+from tensorflow.keras import backend as K
+import MetaTrader5 as mt5
+from time import sleep
+from timer import DelayTimer
+import dbcommon
+from predictor import Predictor
 
 tf.get_logger().setLevel("INFO")
 
@@ -205,11 +207,13 @@ class Server(object):
             test_ratio=0,
             verbose=1,
         )
+        K.set_value(self.p.model.optimizer.learning_rate, 1e-3)
         self.p.fit(
             batch_size=2 ** 14,
             epochs=8,
             use_tensorboard=False,
             use_early_stop=False,
+            use_checkpoint=False,
             verbose=1,
             use_multiprocessing=True,
         )
@@ -227,7 +231,7 @@ class Server(object):
 
     def start(self):
         compute_timer = DelayTimer(self.compute_delay)
-        train_timer = DelayTimer(self.train_delay, shift=600)
+        train_timer = DelayTimer(self.train_delay, shift=8 * 60)
         self.__compute_old__()  # обновление данных начиная с даты
         logger.info(f"Запуск таймера с периодом {self.compute_delay}")
         while True:
