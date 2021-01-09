@@ -106,27 +106,33 @@ class Predictor(object):
         epochs=8,
         use_tensorboard=True,
         use_early_stop=True,
+        use_checkpoints=True,
+        use_multiprocessing=True,
         verbose=1,
         use_multiprocessing=True,
     ):
-        start_fit_time = datetime.datetime.now()
-        ckpt = "ckpt/" + self.model.name + ".ckpt"
-        try:
-            self.model.load_weights(ckpt)
-            if verbose > 0:
-                print("Загружены веса последней контрольной точки " + self.model.name)
-        except Exception as e:
-            pass
         log_dir = "logs/fit/" + start_fit_time.strftime("%Y_%m_%d-%H_%M_%S")
+        start_fit_time = datetime.datetime.now()
+        if use_checkpoints:
+            ckpt = "ckpt/" + self.model.name + ".ckpt"
+            backup = keras.callbacks.ModelCheckpoint(
+                filepath=ckpt,
+                monitor="loss",
+                save_weights_only=True,
+                save_best_only=True,
+            )
+            try:
+                self.model.load_weights(ckpt)
+                if verbose > 0:
+                    print(
+                        "Загружены веса последней контрольной точки " + self.model.name
+                    )
+            except Exception as e:
+                pass
 
-        backup = keras.callbacks.ModelCheckpoint(
-            filepath=ckpt, monitor="loss", save_weights_only=True, save_best_only=True,
-        )
-        reduce_lr = keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss", factor=0.1, min_delta=0.0001, patience=16, min_lr=1e-14
-        )
-
-        callbacks = [backup, reduce_lr]
+        callbacks = []
+        if use_checkpoints:
+            callbacks.append(backup)
         if use_tensorboard:
             tb = keras.callbacks.TensorBoard(log_dir=log_dir, write_graph=True)
             callbacks.append(tb)
@@ -146,7 +152,7 @@ class Predictor(object):
             epochs=epochs,
             shuffle=True,
             use_multiprocessing=use_multiprocessing,
-            verbose=2,
+            verbose=verbose,
             callbacks=callbacks,
         )
         end_fit_time = datetime.datetime.now()

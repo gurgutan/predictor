@@ -73,7 +73,7 @@ class Dataloader:
 
     def load_df(
         self,
-        dataframe: pd.core.frame.DataFrame,
+        df: pd.core.frame.DataFrame,
         input_column="open",
         train_ratio=0.6,
         val_ratio=0.2,
@@ -82,19 +82,16 @@ class Dataloader:
     ):
         """
         Преобразует dataframe в обучающую выборку
-        dataframe - Pandas Dataframe с колонками ["date", "time", "open", "high", "low", "close", "tickvol", "vol"]
+        dataframe - Pandas Dataframe с колонками ["date", "time", "open", "high", "low", "close", "tickvol", "spread", "real_volume"]
         input_column - колонка с основными данными
         """
-        df = dataframe.dropna()
         df_size = df[input_column].size
         train_size = int(df_size * train_ratio)
         val_size = int(df_size * val_ratio)
         test_size = int(df_size * test_ratio)
-        train_slice = slice(-train_size, None)
-        val_slice = slice(-(train_size + val_size), -train_size)
-        test_slice = slice(
-            -(train_size + val_size + test_size), -(train_size + val_size)
-        )
+        train_slice = slice(-train_len, None)
+        val_slice = slice(-(train_len + val_len), -train_len)
+        test_slice = slice(-(train_len + val_len + test_len), -(train_len + val_len))
         self.train_df = df[input_column][train_slice]
         self.val_df = df[input_column][val_slice]
         self.test_df = df[input_column][test_slice]

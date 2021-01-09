@@ -4,19 +4,21 @@
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-import dbcommon
-from predictor import Predictor
+
 import json
 import sqlite3
 import datetime as dt
 import pandas as pd
-from time import sleep
-from timer import DelayTimer
 import logging
-import MetaTrader5 as mt5
 import os
 import pytz
 import tensorflow as tf
+from tensorflow.keras import backend as K
+import MetaTrader5 as mt5
+from time import sleep
+from timer import DelayTimer
+import dbcommon
+from predictor import Predictor
 
 tf.get_logger().setLevel("INFO")
 
@@ -109,7 +111,19 @@ class Server(object):
         if mt5rates is None:
             logger.error("Ошибка:" + str(mt5.last_error()))
             return None
-        rates = pd.DataFrame(mt5rates)
+        rates = pd.DataFrame(
+            mt5rates,
+            columns=[
+                "time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "tickvol",
+                "spread",
+                "real_volume",
+            ],
+        )
         # logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
@@ -188,17 +202,19 @@ class Server(object):
         self.p.dataloader.load_df(
             df,
             input_column="open",
-            train_ratio=1 - 1.0 / 32,
-            val_ratio=1.0 / 32,
+            train_ratio=1 - 1.0 / 8,
+            val_ratio=1.0 / 8,
             test_ratio=0,
             verbose=1,
         )
+        K.set_value(self.p.model.optimizer.learning_rate, 1e-3)
         self.p.fit(
             batch_size=2 ** 14,
             epochs=8,
             use_tensorboard=False,
             use_early_stop=False,
-            verbose=0,
+            use_checkpoint=False,
+            verbose=1,
             use_multiprocessing=True,
         )
         logger.info(f"Модель дообучена")
@@ -215,7 +231,7 @@ class Server(object):
 
     def start(self):
         compute_timer = DelayTimer(self.compute_delay)
-        train_timer = DelayTimer(self.train_delay)
+        train_timer = DelayTimer(self.train_delay, shift=8 * 60)
         self.__compute_old__()  # обновление данных начиная с даты
         logger.info(f"Запуск таймера с периодом {self.compute_delay}")
         while True:
