@@ -213,7 +213,7 @@ class Server(object):
             epochs=8,
             use_tensorboard=False,
             use_early_stop=False,
-            use_checkpoint=False,
+            use_checkpoints=False,
             verbose=1,
             use_multiprocessing=True,
         )

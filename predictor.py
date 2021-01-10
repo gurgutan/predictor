@@ -91,7 +91,7 @@ class Predictor(object):
     def fit(
         self,
         batch_size=256,
-        epochs=8,
+        epochs=2,
         use_tensorboard=True,
         use_early_stop=True,
         use_checkpoints=True,
