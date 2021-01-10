@@ -230,8 +230,8 @@ class Server(object):
         return True
 
     def start(self):
-        compute_timer = DelayTimer(self.compute_delay)
-        train_timer = DelayTimer(self.train_delay, shift=8 * 60)
+        compute_timer = DelayTimer(self.compute_delay, name="Таймер прогноза")
+        train_timer = DelayTimer(self.train_delay, shift=8 * 60, name="Таймер обучения")
         self.__compute_old__()  # обновление данных начиная с даты
         logger.info(f"Запуск таймера с периодом {self.compute_delay}")
         while True:
