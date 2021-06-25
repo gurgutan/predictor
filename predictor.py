@@ -86,7 +86,6 @@ class Predictor(object):
             show_layer_names=False,
             to_file=model_png_name,
         )
-        self.model.summary()
 
     def fit(
         self,
@@ -176,11 +175,11 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 12
         elif param == "--cpu":
-            batch_size = 2 ** 16
+            batch_size = 2 ** 17
         else:
             batch_size = 2 ** 12
 
-    restarts_count = 2 ** 10
+    restarts_count = 2 ** 16
     dataset_segment = 1.0 / 8.0
     input_width = 2 ** 8
     label_width = 1
@@ -190,10 +189,10 @@ if __name__ == "__main__":
         input_width,
         label_width,
         columns=columns,
-        lr=1e-3,
+        lr=1e-5,
         min_v=-3.0,
         max_v=3.0,
-        name=f"ed-boost{columns}-{input_width}-{label_width}",
+        name=f"eurusd-d-boost{columns}-{input_width}-{label_width}",
     )
     # model = scored_boost(
     #     input_width,
@@ -207,7 +206,7 @@ if __name__ == "__main__":
     # )
 
     predictor = Predictor(
-        datafile="datas/EURUSD_H1 copy 3.csv",
+        datafile="datas/EURUSD_H1 copy.csv",
         model=model,
         input_width=input_width,
         label_width=label_width,
@@ -218,10 +217,16 @@ if __name__ == "__main__":
     )
 
     predictor.model.summary()
+    onednn_enabled = int(os.environ.get("TF_ENABLE_ONEDNN_OPTS", "0"))
+    print("\nWe are using Tensorflow version", tf.__version__)
+    print("\nMKL enabled :", onednn_enabled)
+
     for i in range(restarts_count):
-        predictor.plot_model()
+        # predictor.plot_model()
         print(f"\nМодель {model.name} проход №{i+1}/{restarts_count}\n")
-        history = predictor.fit(batch_size=batch_size, epochs=2 ** 16)
+        history = predictor.fit(
+            use_tensorboard=False, batch_size=batch_size, epochs=2 ** 16
+        )
         predictor.save_model()
         # perfomance = predictor.evaluate()
         print("Модель обновлена")

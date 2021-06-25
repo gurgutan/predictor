@@ -2,7 +2,7 @@
 # FROM docker.io/intelaipg/intel-optimized-tensorflow:2.0.0-mkl-py3
 # FROM docker.io/intelaipg/intel-optimized-tensorflow:latest-mkl-py3
 
-FROM  docker.io/intel/intel-optimized-tensorflow
+FROM  docker.io/intel/intel-optimized-tensorflow:latest
 
 
 RUN apt-get -y update && apt-get install -y graphviz 

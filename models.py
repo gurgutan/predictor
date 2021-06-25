@@ -387,8 +387,8 @@ def dense_boost(
     # rsig = x / (1.0 + 4 * tf.sqrt(tf.abs(x)))
     n = int(math.log2(input_width))
     slope = 1.0 / (2 ** 10)
-    rows = 8
-    units = 64
+    rows = 6
+    units = 32
     k_size = 3
     sample_width = min(2, input_width)
     inputs = Input(shape=(input_width,))
@@ -420,11 +420,11 @@ def dense_boost(
         # t = ReLU(negative_slope=slope)(t)
         u = Conv1D(filters, k_size, padding="valid", kernel_initializer=kernel_init)(u)
         u = Lambda(f_logtanh)(u)
-        # u = ReLU(negative_slope=slope)(u)
+        # u = ReLU(negative_slope=slope)(u)ENV TF_ENABLE_ONEDNN_OPTS 1
     x = Concatenate()([m, s, t, u])
     x = BatchNormalization()(x)
     x = Reshape((1, -1))(x)
-    x = LSTM(256, return_sequences=True)(x)
+    x = LSTM(128, return_sequences=True)(x)
     x = Flatten()(x)
     z = [x for k in range(columns)]
     out_range = range(out_width)
@@ -444,7 +444,7 @@ def dense_boost(
     MAE = keras.metrics.MeanAbsoluteError()
     CMSE = ClippedMSE(min_v, max_v)
     model.compile(
-        # loss=keras.losses .Huber(),
+        # loss=keras.losses.Huber(),
         # loss=keras.losses.MeanSquaredError(),
         loss=CMSE,
         optimizer=keras.optimizers.Adam(learning_rate=lr),

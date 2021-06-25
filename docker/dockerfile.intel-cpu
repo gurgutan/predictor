@@ -2,11 +2,12 @@
 # FROM docker.io/intelaipg/intel-optimized-tensorflow:2.0.0-mkl-py3
 # FROM docker.io/intelaipg/intel-optimized-tensorflow:latest-mkl-py3
 
-FROM docker.io/intel/intel-optimized-tensorflow:latest
+FROM docker.io/intel/intel-optimized-tensorflow
 
 
 ENV http_proxy ""
 ENV https_proxy ""
+
 
 RUN apt-get -y update && apt-get install -y graphviz 
 RUN pip3 install --upgrade pip setuptools PyWavelets
@@ -14,6 +15,7 @@ RUN pip3 install --upgrade pandas pydot pydotplus scikit-learn
 RUN pip3 install --upgrade graphviz tqdm matplotlib
 
 ENV TF_CPP_MIN_LOG_LEVEL "3"
+ENV TF_ENABLE_ONEDNN_OPTS 1
 
 # Переменные окружения для настройки параллелизма intel cpu
 ENV KMP_ABORT_DELAY 0
@@ -21,7 +23,7 @@ ENV KMP_ADAPTIVE_LOCK_PROPS 1,1024
 ENV KMP_ALIGN_ALLOC 64
 ENV KMP_ALL_THREADPRIVATE  128
 ENV KMP_ATOMIC_MODE  2
-ENV KMP_BLOCKTIME  30
+ENV KMP_BLOCKTIME  1
 ENV KMP_DETERMINISTIC_REDUCTION  false
 ENV KMP_DEVICE_THREAD_LIMIT  2147483647
 ENV KMP_DISP_HAND_THREAD  false
@@ -38,7 +40,7 @@ ENV KMP_HOT_TEAMS_MAX_LEVEL  1
 ENV KMP_HOT_TEAMS_MODE  0
 ENV KMP_INIT_AT_FORK  true
 ENV KMP_ITT_PREPARE_DELAY  0
-ENV KMP_LIBRARY  "throughput"ENV TF_CPP_MIN_LOG_LEVEL "3"
+ENV KMP_LIBRARY  "throughput"
 ENV KMP_LOCK_KIND  "queuing"
 ENV KMP_MALLOC_POOL_INCR  1M
 ENV KMP_MWAIT_HINTS  0
@@ -81,7 +83,7 @@ ENV OMP_STACKSIZE  "8M"
 ENV OMP_TARGET_OFFLOAD  "DEFAULT"
 ENV OMP_THREAD_LIMIT  2147483647
 ENV OMP_TOOL  "enabled"
-ENV KMP_AFFINITY "verbose,warnings,respect,granularity=core,compact,1,0"
+ENV KMP_AFFINITY "verbose,warnings,respect,granularity=fine,compact,1,0"
 
 
 EXPOSE 1979/tcp
