@@ -2,14 +2,14 @@
     "dbname": "D:/Dev/Alpari MT5/MQL5/Files/predictions.sqlite",
     "mt5path": "D:/Dev/Alpari MT5/terminal64.exe",
     "initialdate": "2015-01-01T00:00:00",
-    "modelname": "models/boost16-256-2",
+    "modelname": "models/d-boost32-256-1",
     "symbol": "EURUSD",
     "timeunit": 3600,
-    "compute_delay": 300,
-    "train_delay": 3600,
+    "compute_delay": 1800,
+    "train_delay": 7200,
     "train_rates_count": 32768,
     "input_width": 256,
-    "label_width": 2,
+    "label_width": 1,
     "sample_width": 1,
-    "shift": 2
+    "shift": 1
 }

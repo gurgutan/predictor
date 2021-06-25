@@ -194,7 +194,7 @@ class Server(object):
     def is_waiting_train(self, dtimer):
         return not dtimer.elapsed()
 
-    def train(self) -> bool:
+    def train(self, epochs=8, lr=1e-3) -> bool:
         df = self.__get_last_rates__(self.train_rates_count)
         if df is None:
             return False
@@ -207,13 +207,13 @@ class Server(object):
             test_ratio=0,
             verbose=1,
         )
-        K.set_value(self.p.model.optimizer.learning_rate, 1e-3)
+        K.set_value(self.p.model.optimizer.learning_rate, lr)
         self.p.fit(
             batch_size=2 ** 14,
-            epochs=8,
+            epochs=epochs,
             use_tensorboard=False,
             use_early_stop=False,
-            use_checkpoint=False,
+            use_checkpoints=False,
             verbose=1,
             use_multiprocessing=True,
         )
@@ -230,8 +230,9 @@ class Server(object):
         return True
 
     def start(self):
-        compute_timer = DelayTimer(self.compute_delay)
-        train_timer = DelayTimer(self.train_delay, shift=8 * 60)
+        self.train(epochs=8, lr=1e-4)  # предобучение
+        compute_timer = DelayTimer(self.compute_delay, name="Таймер прогноза")
+        train_timer = DelayTimer(self.train_delay, shift=8 * 60, name="Таймер обучения")
         self.__compute_old__()  # обновление данных начиная с даты
         logger.info(f"Запуск таймера с периодом {self.compute_delay}")
         while True:
@@ -269,7 +270,7 @@ class Server(object):
 
             if train_timer.elapsed():
                 logger.debug(f"Дообучение...")
-                self.train()
+                self.train(epochs=8, lr=1e-4)
 
 
 DEBUG = False
