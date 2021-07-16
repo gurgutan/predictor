@@ -1,6 +1,8 @@
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["ENV TF_ENABLE_ONEDNN_OPTS"] = "1"
+
 import numpy as np
 import pandas as pd
 import math
@@ -10,7 +12,7 @@ from os import path
 from tensorflow import keras
 from tensorflow.keras.utils import plot_model
 from dataloader import Dataloader
-from models import scored_boost, dense_boost
+from models import dense_att, scored_boost, dense_boost
 import sys
 
 
@@ -84,6 +86,7 @@ class Predictor(object):
             self.model,
             show_shapes=True,
             show_layer_names=False,
+            rankdir="LR",
             to_file=model_png_name,
         )
 
@@ -175,24 +178,31 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 12
         elif param == "--cpu":
-            batch_size = 2 ** 17
-        else:
-            batch_size = 2 ** 12
+            batch_size = 2 ** 16
 
-    restarts_count = 2 ** 16
     dataset_segment = 1.0 / 8.0
     input_width = 2 ** 8
     label_width = 1
-    columns = 2 ** 5
+    columns = 2 ** 6
 
-    model = dense_boost(
+    # model = dense_boost(
+    #     input_width,
+    #     label_width,
+    #     columns=columns,
+    #     lr=1e-4,
+    #     min_v=-2.0,
+    #     max_v=2.0,
+    #     name=f"eurusd-{columns}-{input_width}-{label_width}",
+    # )
+
+    model = dense_att(
         input_width,
         label_width,
         columns=columns,
-        lr=1e-5,
-        min_v=-3.0,
-        max_v=3.0,
-        name=f"eurusd-d-boost{columns}-{input_width}-{label_width}",
+        lr=1e-3,
+        min_v=-2.0,
+        max_v=2.0,
+        name=f"eurusd-{columns}-{input_width}-{label_width}",
     )
     # model = scored_boost(
     #     input_width,
@@ -206,7 +216,7 @@ if __name__ == "__main__":
     # )
 
     predictor = Predictor(
-        datafile="datas/EURUSD_H1 copy.csv",
+        datafile="datas/EURUSD_H1.csv",
         model=model,
         input_width=input_width,
         label_width=label_width,
@@ -216,16 +226,21 @@ if __name__ == "__main__":
         batch_size=batch_size,
     )
 
+    # predictor.plot_model()
     predictor.model.summary()
     onednn_enabled = int(os.environ.get("TF_ENABLE_ONEDNN_OPTS", "0"))
     print("\nWe are using Tensorflow version", tf.__version__)
-    print("\nMKL enabled :", onednn_enabled)
+    print("MKL enabled :", onednn_enabled)
 
-    for i in range(restarts_count):
-        # predictor.plot_model()
-        print(f"\nМодель {model.name} проход №{i+1}/{restarts_count}\n")
+    i = 0
+    while True:
+        i += 1
+        print(f"\nМодель {model.name} проход №{i+1}\n")
         history = predictor.fit(
-            use_tensorboard=False, batch_size=batch_size, epochs=2 ** 16
+            use_tensorboard=False,
+            use_early_stop=True,
+            batch_size=batch_size,
+            epochs=2 ** 8,
         )
         predictor.save_model()
         # perfomance = predictor.evaluate()
