@@ -387,10 +387,8 @@ def dense_boost(
     # rsig = x / (1.0 + 4 * tf.sqrt(tf.abs(x)))
     n = int(math.log2(input_width))
     slope = 1.0 / (2 ** 10)
-    rows = 6
-    units = 32
     k_size = 3
-    sample_width = min(2, input_width)
+    sample_width = min(4, input_width)
     inputs = Input(shape=(input_width,))
     x = inputs
     u = Lambda(lambda z: z[:, -sample_width:])(x)
@@ -420,14 +418,16 @@ def dense_boost(
         # t = ReLU(negative_slope=slope)(t)
         u = Conv1D(filters, k_size, padding="valid", kernel_initializer=kernel_init)(u)
         u = Lambda(f_logtanh)(u)
-        # u = ReLU(negative_slope=slope)(u)ENV TF_ENABLE_ONEDNN_OPTS 1
+        # u = ReLU(negative_slope=slope)(u)
     x = Concatenate()([m, s, t, u])
     x = BatchNormalization()(x)
     x = Reshape((1, -1))(x)
-    x = LSTM(128, return_sequences=True)(x)
+    x = LSTM(64, return_sequences=True)(x)
     x = Flatten()(x)
     z = [x for k in range(columns)]
     out_range = range(out_width)
+    rows = 4
+    units = 16
     for c in range(columns):
         z[c] = [Dense(units, name=f"d-in{c}-{i}")(z[c]) for i in out_range]
         for r in range(rows):
@@ -474,6 +474,85 @@ class ClippedSCE(losses.Loss):
         # n_pred = (clipped_y_pred - self.value_min) * self.step
         n_true = (clipped_y_true - self.value_min) * self.step
         return losses.sparse_categorical_crossentropy(n_true, clipped_y_pred)
+
+
+def dense_att(
+    input_width, out_width, columns=4, lr=1e-3, min_v=-1, max_v=1, name="dense-att"
+):
+    init_scale = 2 ** 10
+    kernel_init = keras.initializers.RandomUniform(-init_scale, init_scale)
+    # l2 = keras.regularizers.l2(1e-10)
+    f_std = lambda z: tf.math.reduce_std(z, 1, keepdims=True)
+    f_mean = lambda z: tf.math.reduce_mean(z, 1, keepdims=True)
+    f_vrange = lambda z: (
+        tf.math.reduce_max(z, 1, keepdims=True)
+        - tf.math.reduce_min(z, 1, keepdims=True)
+    )
+    f_logtanh = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
+    rad = lambda x: 2 - tf.sqrt(1 + tf.math.square(x))
+    # rad2 = lambda x: 1 - tf.math.log1p(tf.sqrt(tf.abs(x)))
+    # rad3 = lambda x: 2 - tf.math.sqrt(1 + x ** 2)
+    # rsig = x / (1.0 + 4 * tf.sqrt(tf.abs(x)))
+    n = int(math.log2(input_width))
+    slope = 1.0 / (2 ** 10)
+    k_size = 3
+    sample_width = min(8, input_width)
+    inputs = Input(shape=(input_width,))
+    x = inputs
+    u = Lambda(lambda z: z[:, -sample_width:])(x)
+    u = Dense(n)(u)
+    u = Reshape((-1, 1))(u)
+    x = [Lambda(lambda z: 2 ** i * z[0][:, -(2 ** z[1]) :])((x, i)) for i in range(n)]
+    means = [Lambda(f_mean, name=f"mean{i}")(2 ** i * x[i]) for i in range(n)]
+    m = Concatenate(1, name=f"concat_means")(means)
+    m = Reshape((-1, 1))(m)
+    stds = [Lambda(f_std, name=f"std{i}")(2 ** i * x[i]) for i in range(n)]
+    s = Concatenate(1, name=f"concat_stds")(stds)
+    s = Reshape((-1, 1))(s)
+    t = [Lambda(f_vrange, name=f"range{i}",)(2 ** i * x[i]) for i in range(n)]
+    t = Concatenate(1, name=f"concat_r")(t)
+    t = Reshape((-1, 1))(t)
+    filters = 64
+    for i in range(3):
+        m = Conv1D(filters, k_size, padding="valid", kernel_initializer=kernel_init)(m)
+        m = Lambda(f_logtanh)(m)
+        s = Conv1D(filters, k_size, padding="valid", kernel_initializer=kernel_init)(s)
+        s = Lambda(f_logtanh)(s)
+        t = Conv1D(filters, k_size, padding="valid", kernel_initializer=kernel_init)(t)
+        t = Lambda(f_logtanh)(t)
+        u = Conv1D(filters, k_size, padding="valid", kernel_initializer=kernel_init)(u)
+        u = Lambda(f_logtanh)(u)
+
+    x1 = Concatenate()([s, t, m])
+    x = MultiHeadAttention(32, 32, dropout=0.2)(x1, u)
+    x = Flatten()(x)
+    z = [x for k in range(columns)]
+    out_range = range(out_width)
+    rows = 4
+    units = 16
+    for c in range(columns):
+        z[c] = [Dense(units, name=f"d-in{c}-{i}")(z[c]) for i in out_range]
+        for r in range(rows):
+            z[c] = [Dense(units, name=f"d{c}-{r}-{i}")(z[c][i]) for i in out_range]
+            z[c] = [Lambda(f_logtanh)(z[c][i]) for i in range(out_width)]
+        z[c] = [Dense(1, name=f"d-out{c}-{i}")(z[c][i]) for i in out_range]
+        # z[col] = [GaussianDropout(1 / 256)(z[col][i]) for i in out_range]
+    for c in range(columns):
+        z[c] = z[c][0] if len(z[c]) == 1 else Concatenate()(z[c])
+    x = z[0] if len(z) == 1 else Concatenate()(z)
+    x = Dense(out_width)(x)
+    outputs = x
+    model = keras.Model(inputs, outputs, name=name)
+    MAE = keras.metrics.MeanAbsoluteError()
+    CMSE = ClippedMSE(min_v, max_v)
+    model.compile(
+        # loss=keras.losses.Huber(),
+        # loss=keras.losses.MeanSquaredError(),
+        loss=CMSE,
+        optimizer=keras.optimizers.Adam(learning_rate=lr),
+        metrics=[MAE],
+    )
+    return model
 
 
 # class ClippedCSE(tf.keras.losses.Loss):
