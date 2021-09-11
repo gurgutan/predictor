@@ -161,7 +161,7 @@ class Server(object):
         from_date = self.initialdate
         # определяем "крайнюю" дату для последующих вычислений
         date = dbcommon.db_get_lowdate(self.db)
-        delta = dt.timedelta(days=2)
+        delta = dt.timedelta(days=4)
         # delta = dt.timedelta(minutes=(self.p.datainfo._in_size() + 1) * 5)
         if not date is None:
             from_date = date - delta
@@ -230,7 +230,7 @@ class Server(object):
         return True
 
     def start(self):
-        self.train(epochs=8, lr=1e-4)  # предобучение
+        self.train(epochs=2 ** 10, lr=1e-5)  # предобучение
         compute_timer = DelayTimer(self.compute_delay, name="Таймер прогноза")
         train_timer = DelayTimer(self.train_delay, shift=8 * 60, name="Таймер обучения")
         self.__compute_old__()  # обновление данных начиная с даты
@@ -266,11 +266,11 @@ class Server(object):
                 confidence,
             ) = results[-1]
             d = round((price - rprice), 5)
-            logger.debug(f"delta={d}")
+            logger.debug(f"time={rdate}  delta={d}")
 
             if train_timer.elapsed():
                 logger.debug(f"Дообучение...")
-                self.train(epochs=8, lr=1e-4)
+                self.train(epochs=32, lr=1e-5)
 
 
 DEBUG = False
