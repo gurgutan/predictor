@@ -1,12 +1,12 @@
 import math
+from numpy.core import umath
 import tensorflow as tf
 from tensorflow.keras.layers import *
 from tensorflow.keras.models import Sequential
 from tensorflow.keras import losses
 from tensorflow.keras import metrics
 from tensorflow import keras
-from tensorflow.python.framework.tensor_util import SlowAppendBFloat16ArrayToTensorProto
-from tensorflow.python.keras.layers import LSTMV2
+from tensorflow.python.ops.gen_math_ops import Mul
 from rbflayer import RBFLayer
 import numpy as np
 
@@ -368,6 +368,47 @@ class ClippedMSE(losses.Loss):
         return losses.mean_squared_error(clipped_y_true, clipped_y_pred)
 
 
+class ClippedMAE(losses.Loss):
+    def __init__(
+        self,
+        value_min=-1.0,
+        value_max=1.0,
+        reduction=losses.Reduction.AUTO,
+        name="clipped_mae",
+    ) -> None:
+        super().__init__(reduction=reduction, name=name)
+        self.value_min = value_min
+        self.value_max = value_max
+
+    def call(self, y_true, y_pred):
+        clipped_y_pred = tf.clip_by_value(y_pred, self.value_min, self.value_max)
+        clipped_y_true = tf.clip_by_value(y_true, self.value_min, self.value_max)
+        return losses.mean_absolute_error(clipped_y_true, clipped_y_pred)
+
+
+class ClippedSCE(losses.Loss):
+    def __init__(
+        self,
+        value_min=-1.0,
+        value_max=1.0,
+        count=8,
+        reduction=losses.Reduction.AUTO,
+        name="clipped_sce",
+    ) -> None:
+        super().__init__(reduction=reduction, name=name)
+        self.value_min = value_min
+        self.value_max = value_max
+        self.count = count
+        self.step = (self.count - 1) / (self.value_max - self.value_min)
+
+    def call(self, y_true, y_pred):
+        clipped_y_pred = tf.clip_by_value(y_pred, self.value_min, self.value_max)
+        clipped_y_true = tf.clip_by_value(y_true, self.value_min, self.value_max)
+        # n_pred = (clipped_y_pred - self.value_min) * self.step
+        n_true = (clipped_y_true - self.value_min) * self.step
+        return losses.sparse_categorical_crossentropy(n_true, clipped_y_pred)
+
+
 def dense_boost(
     input_width, out_width, columns=4, lr=1e-3, min_v=-1, max_v=1, name="d-boost"
 ):
@@ -453,34 +494,114 @@ def dense_boost(
     return model
 
 
-class ClippedSCE(losses.Loss):
-    def __init__(
-        self,
-        value_min=-1.0,
-        value_max=1.0,
-        count=8,
-        reduction=losses.Reduction.AUTO,
-        name="clipped_sce",
-    ) -> None:
-        super().__init__(reduction=reduction, name=name)
-        self.value_min = value_min
-        self.value_max = value_max
-        self.count = count
-        self.step = (self.count - 1) / (self.value_max - self.value_min)
+def transformer_encoder(inputs, head_size, num_heads, ff_dim, kernel_size, dropout=0):
+    x = Conv1D(filters=ff_dim, kernel_size=kernel_size, padding="same")(inputs)
+    x = MultiHeadAttention(key_dim=head_size, num_heads=num_heads, dropout=dropout)(
+        inputs, inputs
+    )
+    x = LayerNormalization(epsilon=1e-8)(x)
+    res = x + inputs
+    # Feed Forward Part
+    x = Conv1D(filters=ff_dim, kernel_size=1, activation="relu")(res)
+    x = Dropout(dropout)(x)
+    x = Conv1D(filters=inputs.shape[-1], kernel_size=1)(x)
+    x = LayerNormalization(epsilon=1e-8)(x)
+    return x + res
 
-    def call(self, y_true, y_pred):
-        clipped_y_pred = tf.clip_by_value(y_pred, self.value_min, self.value_max)
-        clipped_y_true = tf.clip_by_value(y_true, self.value_min, self.value_max)
-        # n_pred = (clipped_y_pred - self.value_min) * self.step
-        n_true = (clipped_y_true - self.value_min) * self.step
-        return losses.sparse_categorical_crossentropy(n_true, clipped_y_pred)
+
+def mh_att(
+    input_width,
+    out_width,
+    columns_count=16,
+    lr=1e-4,
+    min_v=-2,
+    max_v=2,
+    training=True,
+    name="dense-att",
+):
+    if training:
+        dropout = 1.0 / 8.0
+    else:
+        dropout = 0
+
+    init_scale = 2 ** 8
+    kern_init = keras.initializers.RandomUniform(-init_scale, init_scale)
+    l2 = keras.regularizers.L2(l2=1e-10)
+    f_std = lambda z: tf.math.reduce_std(z, 1, keepdims=True)
+    f_mean = lambda z: tf.math.reduce_mean(z, 1, keepdims=True)
+    f_vrange = lambda z: (
+        tf.math.reduce_max(z, 1, keepdims=True)
+        - tf.math.reduce_min(z, 1, keepdims=True)
+    )
+    f_logtanh = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
+    f_log = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x))
+    n = int(math.log2(input_width)) + 1
+    sample_width = 16
+    inputs = Input(shape=(input_width,))
+    x = inputs
+    u = Lambda(lambda z: z[:, -sample_width:])(x)
+    # u = Dense(n)(u)
+    u = Reshape((-1, 1))(u)
+    # x = [Lambda(lambda z: z[:, -(2 ** i) :])(x) for i in range(n)]
+    # means = [Lambda(f_mean, name=f"mean{i}")(x[i]) for i in range(n)]
+    # m = Concatenate(1, name=f"concat_means")(means)
+    # m = Reshape((-1, 1))(m)
+    # stds = [Lambda(f_std, name=f"std{i}")(x[i]) for i in range(n)]
+    # s = Concatenate(1, name=f"concat_stds")(stds)
+    # s = Reshape((-1, 1))(s)
+    # y = Concatenate(axis=-2)([s, m, u])
+    filters = 8
+    head_size = 16
+    num_heads = 32
+    kernel = 4
+    y = u
+    for i in range(4):
+        y = transformer_encoder(y, head_size, num_heads, filters, kernel, dropout)
+    x = Flatten()(y)
+    rows_count = 4
+    units = 32
+    z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns_count)]
+    z = [Lambda(f_logtanh)(z[c]) for c in range(columns_count)]
+    for c in range(columns_count):
+        for r in range(rows_count - 1):
+            z[c] = Dense(units, name=f"d{c}-{r}")(z[c])
+            z[c] = Lambda(f_logtanh)(z[c])
+        z[c] = Dense(out_width)(z[c] * (c + 1))
+    x = Concatenate()(z)
+    x = Dense(out_width)(x)
+    outputs = x
+    model = keras.Model(inputs, outputs, name=name)
+    MAE = keras.metrics.MeanAbsoluteError()
+    CMSE = ClippedMSE(min_v, max_v)
+    CMAE = ClippedMAE(min_v, max_v)
+    model.compile(
+        # loss=keras.losses.Huber(),
+        # loss=keras.losses.MeanSquaredError(),
+        loss=CMSE,
+        optimizer=keras.optimizers.Adam(learning_rate=lr),
+        metrics=[MAE],
+    )
+    return model
 
 
 def dense_att(
-    input_width, out_width, columns=4, lr=1e-3, min_v=-1, max_v=1, name="dense-att"
+    input_width,
+    out_width,
+    columns_count=4,
+    lr=1e-3,
+    min_v=-1,
+    max_v=1,
+    training=True,
+    name="dense-att",
 ):
-    init_scale = 2 ** 10
-    kernel_init = keras.initializers.RandomUniform(-init_scale, init_scale)
+    if training:
+        dropout = 0  # 1.0 / columns_count
+    else:
+        dropout = 0
+
+    init_scale = 2 ** 8
+    kern_init = keras.initializers.RandomUniform(-init_scale, init_scale)
+    kern_reg = keras.regularizers.L2(l2=1e-10)
     # l2 = keras.regularizers.l2(1e-10)
     f_std = lambda z: tf.math.reduce_std(z, 1, keepdims=True)
     f_mean = lambda z: tf.math.reduce_mean(z, 1, keepdims=True)
@@ -489,62 +610,54 @@ def dense_att(
         - tf.math.reduce_min(z, 1, keepdims=True)
     )
     f_logtanh = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
-    rad = lambda x: 2 - tf.sqrt(1 + tf.math.square(x))
-    # rad2 = lambda x: 1 - tf.math.log1p(tf.sqrt(tf.abs(x)))
-    # rad3 = lambda x: 2 - tf.math.sqrt(1 + x ** 2)
-    # rsig = x / (1.0 + 4 * tf.sqrt(tf.abs(x)))
-    n = int(math.log2(input_width))
-    slope = 1.0 / (2 ** 10)
-    k_size = 3
-    sample_width = min(8, input_width)
+    f_log = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x))
+    n = int(math.log2(input_width)) + 1
+    k_size = 4
+    sample_width = n
     inputs = Input(shape=(input_width,))
     x = inputs
     u = Lambda(lambda z: z[:, -sample_width:])(x)
     u = Dense(n)(u)
     u = Reshape((-1, 1))(u)
-    x = [Lambda(lambda z: 2 ** i * z[0][:, -(2 ** z[1]) :])((x, i)) for i in range(n)]
-    means = [Lambda(f_mean, name=f"mean{i}")(2 ** i * x[i]) for i in range(n)]
+    x = [Lambda(lambda z: z[:, -(2 ** i) :])(x) for i in range(n)]
+    means = [Lambda(f_mean, name=f"mean{i}")(x[i]) for i in range(n)]
     m = Concatenate(1, name=f"concat_means")(means)
     m = Reshape((-1, 1))(m)
-    stds = [Lambda(f_std, name=f"std{i}")(2 ** i * x[i]) for i in range(n)]
+    stds = [Lambda(f_std, name=f"std{i}")(x[i]) for i in range(n)]
     s = Concatenate(1, name=f"concat_stds")(stds)
     s = Reshape((-1, 1))(s)
-    t = [Lambda(f_vrange, name=f"range{i}",)(2 ** i * x[i]) for i in range(n)]
-    t = Concatenate(1, name=f"concat_r")(t)
-    t = Reshape((-1, 1))(t)
     filters = 64
-    for i in range(3):
-        m = Conv1D(filters, k_size, padding="valid", kernel_initializer=kernel_init)(m)
+    for i in range(2):
+        m = Conv1D(filters, k_size, padding="valid")(m)
         m = Lambda(f_logtanh)(m)
-        s = Conv1D(filters, k_size, padding="valid", kernel_initializer=kernel_init)(s)
-        s = Lambda(f_logtanh)(s)
-        t = Conv1D(filters, k_size, padding="valid", kernel_initializer=kernel_init)(t)
-        t = Lambda(f_logtanh)(t)
-        u = Conv1D(filters, k_size, padding="valid", kernel_initializer=kernel_init)(u)
+        s = Conv1D(filters, k_size, padding="valid")(s)
+        s = Lambda(f_log)(s)
+        u = Conv1D(filters, k_size, padding="valid")(u)
         u = Lambda(f_logtanh)(u)
-
-    x1 = Concatenate()([s, t, m])
-    x = MultiHeadAttention(32, 32, dropout=0.2)(x1, u)
+    # y = Concatenate(axis=-2)([s, m, u])
+    x = Attention()([u, s, m])
     x = Flatten()(x)
-    z = [x for k in range(columns)]
-    out_range = range(out_width)
-    rows = 4
+    x = LayerNormalization(epsilon=1e-6)(x)
+    # x = BatchNormalization()(x)
+    rows_count = 4
     units = 16
-    for c in range(columns):
-        z[c] = [Dense(units, name=f"d-in{c}-{i}")(z[c]) for i in out_range]
-        for r in range(rows):
-            z[c] = [Dense(units, name=f"d{c}-{r}-{i}")(z[c][i]) for i in out_range]
-            z[c] = [Lambda(f_logtanh)(z[c][i]) for i in range(out_width)]
-        z[c] = [Dense(1, name=f"d-out{c}-{i}")(z[c][i]) for i in out_range]
-        # z[col] = [GaussianDropout(1 / 256)(z[col][i]) for i in out_range]
-    for c in range(columns):
-        z[c] = z[c][0] if len(z[c]) == 1 else Concatenate()(z[c])
-    x = z[0] if len(z) == 1 else Concatenate()(z)
+    z = [Dense(units, name=f"d-in{k}-{0}")(x) for k in range(columns_count)]
+    res = z
+    for c in range(columns_count):
+        for r in range(rows_count - 1):
+            z[c] = Dense(units, name=f"d{c}-{r}")(z[c])
+            z[c] = Lambda(f_logtanh)(z[c])
+
+        z[c] = Dense(out_width)(z[c])
+    x = Concatenate()(z)
+    x = Dropout(rate=dropout)(x)
+    # x = Dropout(rate=dropout)(x)
     x = Dense(out_width)(x)
     outputs = x
     model = keras.Model(inputs, outputs, name=name)
     MAE = keras.metrics.MeanAbsoluteError()
     CMSE = ClippedMSE(min_v, max_v)
+    CMAE = ClippedMAE(min_v, max_v)
     model.compile(
         # loss=keras.losses.Huber(),
         # loss=keras.losses.MeanSquaredError(),
