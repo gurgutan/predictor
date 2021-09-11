@@ -31,7 +31,7 @@ class Dataloader:
         self.batch_size = batch_size
         self.scale_coef = 1000.0
         self.bias = 0.0
-        self.clip_value = 4.0
+        self.clip_value = 2.0
 
     def load_tsv(
         self,
@@ -52,7 +52,17 @@ class Dataloader:
                 "tickvol": np.float32,
                 "vol": np.float32,
             },
-            names=["date", "time", "open", "high", "low", "close", "tickvol", "vol"],
+            names=[
+                "date",
+                "time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "tickvol",
+                "vol",
+                "spread",
+            ],
         )
         df_size = df[input_column].size
         train_size = int(df_size * train_ratio)
@@ -161,9 +171,6 @@ class Dataloader:
         ds = np.diff(data) * self.scale_coef + self.bias
         std = np.std(ds)
         ds = np.clip(ds, -std * self.clip_value, std * self.clip_value)
-        # ds = np.concatenate((ds[0:1], ds))
-        # ds = np.diff(ds) * self.scale_coef + self.bias
-        # ds = np.log(ds)
         return ds
 
     def inverse_transform(self, output_data):
