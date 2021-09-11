@@ -230,7 +230,7 @@ class Server(object):
         return True
 
     def start(self):
-        self.train(epochs=2 ** 10, lr=1e-5)  # предобучение
+        self.train(epochs=2 ** 8, lr=1e-6)  # предобучение
         compute_timer = DelayTimer(self.compute_delay, name="Таймер прогноза")
         train_timer = DelayTimer(self.train_delay, shift=8 * 60, name="Таймер обучения")
         self.__compute_old__()  # обновление данных начиная с даты
@@ -270,7 +270,7 @@ class Server(object):
 
             if train_timer.elapsed():
                 logger.debug(f"Дообучение...")
-                self.train(epochs=32, lr=1e-5)
+                self.train(epochs=64, lr=1e-6)
 
 
 DEBUG = False
