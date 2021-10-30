@@ -4,7 +4,6 @@
 
 FROM  docker.io/intel/intel-optimized-tensorflow:latest
 
-
 RUN apt-get -y update && apt-get install -y graphviz 
 RUN pip3 install --upgrade pip setuptools PyWavelets
 RUN pip3 install --upgrade pandas pydot pydotplus scikit-learn
@@ -16,7 +15,7 @@ ENV TF_CPP_MIN_LOG_LEVEL "3"
 ENV KMP_ABORT_DELAY 0
 ENV KMP_ADAPTIVE_LOCK_PROPS 1,1024
 ENV KMP_ALIGN_ALLOC 64
-ENV KMP_ALL_THREADPRIVATE  128
+ENV KMP_ALL_THREADPRIVATE  192
 ENV KMP_ATOMIC_MODE  2
 ENV KMP_BLOCKTIME  30
 ENV KMP_DETERMINISTIC_REDUCTION  false
@@ -84,5 +83,9 @@ ENV KMP_AFFINITY  "verbose,warnings,respect,granularity=core,compact,1,0"
 
 
 EXPOSE 1979/tcp
-
+RUN ["mkdir", "/home/predictor"]
+ADD ./ /home/predictor/
+WORKDIR /home/predictor/
+EXPOSE 1979/tcp
+USER 1000
 ENTRYPOINT /bin/bash -c "python3 ./predictor.py --cpu"

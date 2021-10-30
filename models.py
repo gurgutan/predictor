@@ -1,5 +1,4 @@
 import math
-from numpy.core import umath
 import tensorflow as tf
 from tensorflow.keras.layers import *
 from tensorflow.keras.models import Sequential
@@ -8,7 +7,6 @@ from tensorflow.keras import metrics
 from tensorflow import keras
 from tensorflow.python.ops.gen_math_ops import Mul
 from rbflayer import RBFLayer
-import numpy as np
 
 
 def mse_dir(y_true, y_pred):
@@ -58,7 +56,9 @@ def spectral_rbf(input_width, output_width):
     m = Concatenate(1, name=f"means")(means)
     m = Reshape((-1, 1))(m)
     stds = [
-        Lambda(lambda z: tf.math.reduce_std(z, 1, keepdims=True))(x[i])
+        Lambda(
+            lambda z: tf.math.reduce_std(z, 1, keepdims=True)
+            )(x[i])
         for i in range(n)
     ]
     s = Concatenate(1, name=f"stds")(stds)
@@ -494,8 +494,7 @@ def dense_boost(
     return model
 
 
-def transformer_encoder(inputs, head_size, num_heads, ff_dim, kernel_size, dropout=0):
-    x = Conv1D(filters=ff_dim, kernel_size=kernel_size, padding="same")(inputs)
+def transformer_encoder(inputs, head_size, num_heads, ff_dim, dropout=0):
     x = MultiHeadAttention(key_dim=head_size, num_heads=num_heads, dropout=dropout)(
         inputs, inputs
     )
@@ -505,14 +504,14 @@ def transformer_encoder(inputs, head_size, num_heads, ff_dim, kernel_size, dropo
     x = Conv1D(filters=ff_dim, kernel_size=1, activation="relu")(res)
     x = Dropout(dropout)(x)
     x = Conv1D(filters=inputs.shape[-1], kernel_size=1)(x)
-    x = LayerNormalization(epsilon=1e-8)(x)
+    x = LayerNormalization()(x)
     return x + res
 
 
 def mh_att(
     input_width,
     out_width,
-    columns_count=16,
+    columns=16,
     lr=1e-4,
     min_v=-2,
     max_v=2,
@@ -536,39 +535,38 @@ def mh_att(
     f_logtanh = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
     f_log = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x))
     n = int(math.log2(input_width)) + 1
-    sample_width = 16
+    sample_width = 8
     inputs = Input(shape=(input_width,))
-    x = inputs
-    u = Lambda(lambda z: z[:, -sample_width:])(x)
-    # u = Dense(n)(u)
+    x = [Lambda(lambda z: z[:, -(2 ** i) :])(inputs) for i in range(n)]
+    u = Lambda(lambda z: z[:, -sample_width:])(inputs)
+    u = Dense(n)(u)
     u = Reshape((-1, 1))(u)
-    # x = [Lambda(lambda z: z[:, -(2 ** i) :])(x) for i in range(n)]
-    # means = [Lambda(f_mean, name=f"mean{i}")(x[i]) for i in range(n)]
-    # m = Concatenate(1, name=f"concat_means")(means)
-    # m = Reshape((-1, 1))(m)
-    # stds = [Lambda(f_std, name=f"std{i}")(x[i]) for i in range(n)]
-    # s = Concatenate(1, name=f"concat_stds")(stds)
-    # s = Reshape((-1, 1))(s)
-    # y = Concatenate(axis=-2)([s, m, u])
-    filters = 8
-    head_size = 16
+    means = [Lambda(f_mean, name=f"mean{i}")(x[i]) for i in range(n)]
+    m = Concatenate(1, name=f"concat_means")(means)
+    m = Reshape((-1, 1))(m)
+    stds = [Lambda(f_std, name=f"std{i}")(x[i]) for i in range(n)]
+    s = Concatenate(1, name=f"concat_stds")(stds)
+    s = Reshape((-1, 1))(s)
+    filters = 32
+    head_size = 8
     num_heads = 32
-    kernel = 4
-    y = u
-    for i in range(4):
-        y = transformer_encoder(y, head_size, num_heads, filters, kernel, dropout)
+    y = Concatenate(axis=-2)([u, s, m])
+    for i in range(6):
+        y = transformer_encoder(y, head_size, num_heads, filters, dropout)
     x = Flatten()(y)
     rows_count = 4
-    units = 32
-    z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns_count)]
-    z = [Lambda(f_logtanh)(z[c]) for c in range(columns_count)]
-    for c in range(columns_count):
+    units = 16
+    z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns)]
+    z = [Lambda(f_logtanh)(z[c]) for c in range(columns)]
+    for c in range(columns):
         for r in range(rows_count - 1):
             z[c] = Dense(units, name=f"d{c}-{r}")(z[c])
             z[c] = Lambda(f_logtanh)(z[c])
-        z[c] = Dense(out_width)(z[c] * (c + 1))
+        z[c] = Dense(out_width)(z[c])
+        z[c] = Lambda(f_logtanh)(z[c])
     x = Concatenate()(z)
     x = Dense(out_width)(x)
+    # x = Lambda(f_logtanh)(x)
     outputs = x
     model = keras.Model(inputs, outputs, name=name)
     MAE = keras.metrics.MeanAbsoluteError()
@@ -584,24 +582,27 @@ def mh_att(
     return model
 
 
+def ConvAdaptiveKernelSize(
+    x, activation, filters=8, kernel_size=2, initializer="random_uniform"
+):
+    k_size = kernel_size if x.shape[-2] >= kernel_size else x.shape[-2]
+    x = Conv1D(filters, k_size, padding="valid", kernel_initializer=initializer)(x)
+    x = Lambda(activation)(x)
+    return x
+
+
 def dense_att(
     input_width,
     out_width,
-    columns_count=4,
-    lr=1e-3,
-    min_v=-1,
-    max_v=1,
+    columns=4,
+    lr=1e-4,
+    min_v=-2.0,
+    max_v=2.0,
     training=True,
     name="dense-att",
 ):
-    if training:
-        dropout = 0  # 1.0 / columns_count
-    else:
-        dropout = 0
-
-    init_scale = 2 ** 8
-    kern_init = keras.initializers.RandomUniform(-init_scale, init_scale)
-    kern_reg = keras.regularizers.L2(l2=1e-10)
+    init_scale = 2 ** 3
+    init = keras.initializers.RandomUniform(-init_scale, init_scale)
     # l2 = keras.regularizers.l2(1e-10)
     f_std = lambda z: tf.math.reduce_std(z, 1, keepdims=True)
     f_mean = lambda z: tf.math.reduce_mean(z, 1, keepdims=True)
@@ -610,54 +611,59 @@ def dense_att(
         - tf.math.reduce_min(z, 1, keepdims=True)
     )
     f_logtanh = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
-    f_log = lambda x: tf.math.log(tf.exp(1.0) + tf.abs(x))
-    n = int(math.log2(input_width)) + 1
-    k_size = 4
-    sample_width = n
+    # rad = lambda x: 2 - tf.sqrt(1 + tf.math.square(x))
+    # rad2 = lambda x: 1 - tf.math.log1p(tf.sqrt(tf.abs(x)))
+    # rad3 = lambda x: 2 - tf.math.sqrt(1 + x ** 2)
+    # rsig = x / (1.0 + 4 * tf.sqrt(tf.abs(x)))
+    n = int(math.log2(input_width))
+    slope = 1.0 / (2 ** 10)
+    kernel_size = 4
+    dropout = 0.0
+    # if training:
+    #     dropout = 0.0
+    sample_width = min(8, input_width)
     inputs = Input(shape=(input_width,))
     x = inputs
     u = Lambda(lambda z: z[:, -sample_width:])(x)
     u = Dense(n)(u)
     u = Reshape((-1, 1))(u)
-    x = [Lambda(lambda z: z[:, -(2 ** i) :])(x) for i in range(n)]
-    means = [Lambda(f_mean, name=f"mean{i}")(x[i]) for i in range(n)]
-    m = Concatenate(1, name=f"concat_means")(means)
+    x = [Lambda(lambda z: z[:, -(2 ** (i + 1)) :])(inputs) for i in range(n)]
+    m = [Lambda(f_mean, name=f"mean{i}")(x[i]) for i in range(n)]
+    m = Concatenate(1, name=f"concat_means")(m)
     m = Reshape((-1, 1))(m)
-    stds = [Lambda(f_std, name=f"std{i}")(x[i]) for i in range(n)]
-    s = Concatenate(1, name=f"concat_stds")(stds)
+    s = [Lambda(f_std, name=f"std{i}")(x[i]) for i in range(n)]
+    s = Concatenate(1, name=f"concat_stds")(s)
     s = Reshape((-1, 1))(s)
-    filters = 64
-    for i in range(2):
-        m = Conv1D(filters, k_size, padding="valid")(m)
-        m = Lambda(f_logtanh)(m)
-        s = Conv1D(filters, k_size, padding="valid")(s)
-        s = Lambda(f_log)(s)
-        u = Conv1D(filters, k_size, padding="valid")(u)
-        u = Lambda(f_logtanh)(u)
-    # y = Concatenate(axis=-2)([s, m, u])
-    x = Attention()([u, s, m])
+    # r = [Lambda(f_vrange, name=f"rng{i}")(x[i]) for i in range(n)]
+    # r = Concatenate(1, name=f"concat_rngs")(r)
+    # r = Reshape((-1, 1))(r)
+
+    filters = 8
+    for i in range(3):
+        m = ConvAdaptiveKernelSize(m, f_logtanh, filters, kernel_size, init)
+        s = ConvAdaptiveKernelSize(s, tf.nn.relu, filters, kernel_size, init)
+        # r = ConvAdaptiveKernelSize(r, f_logtanh, filters, kernel_size, init)
+        u = ConvAdaptiveKernelSize(u, f_logtanh, filters, kernel_size, init)
+
+    x1 = Concatenate(axis=-2)([s, m, u])
+    x = MultiHeadAttention(256, 8, dropout=dropout)(x1, x1, training=training)
     x = Flatten()(x)
-    x = LayerNormalization(epsilon=1e-6)(x)
-    # x = BatchNormalization()(x)
-    rows_count = 4
+    rows = 3
     units = 16
-    z = [Dense(units, name=f"d-in{k}-{0}")(x) for k in range(columns_count)]
-    res = z
-    for c in range(columns_count):
-        for r in range(rows_count - 1):
+    z = [Dense(units, name=f"d-{c}-in")(x) for c in range(columns)]
+    z = [Lambda(f_logtanh)(z[c]) for c in range(columns)]
+    for c in range(columns):
+        for r in range(rows):
             z[c] = Dense(units, name=f"d{c}-{r}")(z[c])
             z[c] = Lambda(f_logtanh)(z[c])
-
-        z[c] = Dense(out_width)(z[c])
+        z[c] = Dense(out_width, name=f"d-{c}-out")(z[c])
+        # z[c] = Lambda(f_logtanh)(z[c])
     x = Concatenate()(z)
-    x = Dropout(rate=dropout)(x)
-    # x = Dropout(rate=dropout)(x)
     x = Dense(out_width)(x)
     outputs = x
     model = keras.Model(inputs, outputs, name=name)
     MAE = keras.metrics.MeanAbsoluteError()
     CMSE = ClippedMSE(min_v, max_v)
-    CMAE = ClippedMAE(min_v, max_v)
     model.compile(
         # loss=keras.losses.Huber(),
         # loss=keras.losses.MeanSquaredError(),

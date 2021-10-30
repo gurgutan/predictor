@@ -33,7 +33,7 @@ class Predictor(object):
         test_ratio=0.1,
         batch_size=256,
     ):
-        if shift == None:
+        if shift is None:
             shift = label_width
         self.dataloader = Dataloader(
             input_width=input_width,
@@ -177,38 +177,27 @@ class Predictor(object):
 
 
 if __name__ == "__main__":
-    batch_size = 2 ** 10
+    batch_size = 2 ** 18
     for param in sys.argv:
         if param == "--gpu":
-            batch_size = 2 ** 8
+            batch_size = 2 ** 10
         elif param == "--cpu":
-            batch_size = 2 ** 13
+            batch_size = 2 ** 14
 
-    dataset_segment = 1.0 / 8.0
+    dataset_segment = 1.0 / 4.0
     input_width = 2 ** 8
     label_width = 1
     columns = 16
 
-    # model = scored_boost(
-    #     input_width,
-    #     label_width,
-    #     prob_width=8,
-    #     columns=8,
-    #     lr=1e-5,
-    #     min_v=-3.0,
-    #     max_v=3.0,
-    #     name=f"scored-boost{columns}-{input_width}-{label_width}",
-    # )
-
-    model = mh_att(
+    model = dense_att(
         input_width,
         label_width,
-        columns_count=columns,
+        columns=columns,
         lr=1e-4,
         min_v=-2.0,
         max_v=2.0,
         training=True,
-        name=f"eurusd-{columns}-{input_width}-{label_width}",
+        name=f"eurusd-h1-{columns}",
     )
 
     predictor = Predictor(
@@ -236,9 +225,8 @@ if __name__ == "__main__":
             use_tensorboard=False,
             use_early_stop=False,
             batch_size=batch_size,
-            epochs=2 ** 16,
+            epochs=2 ** 10,
         )
         predictor.save_model()
         # perfomance = predictor.evaluate()
         print("Модель обновлена")
-

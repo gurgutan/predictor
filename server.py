@@ -4,21 +4,21 @@
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
+import dbcommon
+from predictor import Predictor
 import json
 import sqlite3
 import datetime as dt
 import pandas as pd
+from time import sleep
+from timer import DelayTimer
 import logging
+import MetaTrader5 as mt5
 import os
 import pytz
 import tensorflow as tf
 from tensorflow.keras import backend as K
-import MetaTrader5 as mt5
-from time import sleep
-from timer import DelayTimer
-import dbcommon
-from predictor import Predictor
+
 
 tf.get_logger().setLevel("INFO")
 
@@ -52,13 +52,6 @@ class Server(object):
         else:
             logger.error("Ошибка инициализации сервера")
             self.ready = False
-
-    def is_tflite(self):
-        """
-        Возвращает True, если используется модель tflite, иначе False
-        Определяется по расширению имени модели
-        """
-        return self.p.is_tflite()
 
     def __init_db__(self):
         logger.info("Открытие БД " + self.dbname)
@@ -106,8 +99,10 @@ class Server(object):
         logger.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
-    def __get_last_rates__(self, count):
-        mt5rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_H1, 0, count)
+    def __get_last_rates__(self, count, start_pos=0):
+        mt5rates = mt5.copy_rates_from_pos(
+            self.symbol, mt5.TIMEFRAME_H1, start_pos, count
+        )
         if mt5rates is None:
             logger.error("Ошибка:" + str(mt5.last_error()))
             return None
@@ -161,7 +156,7 @@ class Server(object):
         from_date = self.initialdate
         # определяем "крайнюю" дату для последующих вычислений
         date = dbcommon.db_get_lowdate(self.db)
-        delta = dt.timedelta(days=4)
+        delta = dt.timedelta(days=2)
         # delta = dt.timedelta(minutes=(self.p.datainfo._in_size() + 1) * 5)
         if not date is None:
             from_date = date - delta
@@ -194,11 +189,12 @@ class Server(object):
     def is_waiting_train(self, dtimer):
         return not dtimer.elapsed()
 
-    def train(self, epochs=8, lr=1e-3) -> bool:
-        df = self.__get_last_rates__(self.train_rates_count)
+    def train(self, epochs=8, lr=1e-4) -> bool:
+        df = self.__get_last_rates__(self.train_rates_count, start_pos=0)
         if df is None:
             return False
         logger.info(f"Получено {len(df.index)} котировок")
+        self.p.dataloader.batch_size = 2 ** 16
         self.p.dataloader.load_df(
             df,
             input_column="open",
@@ -208,16 +204,16 @@ class Server(object):
             verbose=1,
         )
         K.set_value(self.p.model.optimizer.learning_rate, lr)
+
         self.p.fit(
-            batch_size=2 ** 14,
+            batch_size=2 ** 16,
             epochs=epochs,
             use_tensorboard=False,
             use_early_stop=False,
-            use_checkpoints=False,
+            use_checkpoint=True,
             verbose=1,
             use_multiprocessing=True,
         )
-        logger.info(f"Модель дообучена")
         self.p.save_model()
         logger.info("Модель сохранена")
         return True
@@ -230,9 +226,9 @@ class Server(object):
         return True
 
     def start(self):
-        self.train(epochs=2 ** 8, lr=1e-6)  # предобучение
-        compute_timer = DelayTimer(self.compute_delay, name="Таймер прогноза")
-        train_timer = DelayTimer(self.train_delay, shift=8 * 60, name="Таймер обучения")
+        self.train(epochs=2 ** 10, lr=1e-5)  # Pretrain
+        compute_timer = DelayTimer(self.compute_delay)
+        train_timer = DelayTimer(self.train_delay, shift=8 * 60)
         self.__compute_old__()  # обновление данных начиная с даты
         logger.info(f"Запуск таймера с периодом {self.compute_delay}")
         while True:
@@ -254,23 +250,13 @@ class Server(object):
             # Запись в БД
             dbcommon.db_replace(self.db, results)
             # Вывод на экран
-            (
-                rdate,
-                rprice,
-                symbol,
-                modelname,
-                pdate,
-                price,
-                low,
-                high,
-                confidence,
-            ) = results[-1]
+            _, rprice, _, _, _, price, _, _, _ = results[-1]
             d = round((price - rprice), 5)
-            logger.debug(f"time={rdate}  delta={d}")
+            logger.debug(f"delta={d}")
 
             if train_timer.elapsed():
                 logger.debug(f"Дообучение...")
-                self.train(epochs=64, lr=1e-6)
+                self.train(epochs=64, lr=1e-5)
 
 
 DEBUG = False

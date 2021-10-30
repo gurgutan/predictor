@@ -9,12 +9,10 @@ RUN pip3 install --upgrade graphviz tqdm matplotlib
 ENV TF_CPP_MIN_LOG_LEVEL "3"
 
 RUN ["mkdir", "/home/predictor"]
-
 ADD ./ /home/predictor/
-
 WORKDIR /home/predictor/
-
 EXPOSE 1979/tcp
+USER 1000
 
 ENTRYPOINT ["python3", "./predictor.py", "--gpu"]
 # ENTRYPOINT /bin/bash -c "python3 .home/predictor/predictor.py --gpu"

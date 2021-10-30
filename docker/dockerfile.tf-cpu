@@ -10,5 +10,9 @@ ENV TF_CPP_MIN_LOG_LEVEL "3"
 ENV TF_ENABLE_ONEDNN_OPTS 1
 
 EXPOSE 1979/tcp
-
+RUN ["mkdir", "/home/predictor"]
+ADD ./ /home/predictor/
+WORKDIR /home/predictor/
+EXPOSE 1979/tcp
+USER 1000
 ENTRYPOINT /bin/bash -c "python3 ./predictor.py --cpu"
