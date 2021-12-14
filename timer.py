@@ -28,7 +28,7 @@ class DelayTimer:
         Возвращает число секунд, оставшихся до окончания цикла
         """
         delta = (datetime.now() - self.last).total_seconds()
-        return delta % self.seconds
+        return self.seconds - delta % self.seconds
 
 
 # Тест

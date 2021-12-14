@@ -25,7 +25,7 @@ def main():
     if len(sys.argv) == 1:
         print("Для справки используйте '-h'")
         server = Server()
-        if server.ready:
+        if server.ready: 
             server.start()
         return 0
     for param in sys.argv:
@@ -36,7 +36,7 @@ def main():
             server = Server()
             if server.ready:
                 server.start()
-            else:
+            else: 
                 print("Сервер не запущен из-за ошибки")
                 sys.exit(3)
 
@@ -44,7 +44,7 @@ def main():
 if __name__ == "__main__":
     main()
 
-
+ 
 # Планы:
 # +1. Отладить создание БД с прогнозами
 # +2. Порядок заполнения БД от последних котировок к старым
@@ -57,4 +57,3 @@ if __name__ == "__main__":
 # +9. Продумать дообучение по таймеру
 # +10. Добавить логирование
 # +11. Переподключение к mt5 в случае потери связи
-# 12. Добавить параметры для дообучения в config.json: epochs, learning_rate

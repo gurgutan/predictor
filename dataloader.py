@@ -168,13 +168,21 @@ class Dataloader:
     def transform(self, data):
         # ds = tf.math.subtract(data, data[:, 0:1])
         # self.first_value = data[0:1]
-        ds = np.diff(data) * self.scale_coef + self.bias
-        std = np.std(ds)
-        ds = np.clip(ds, -std * self.clip_value, std * self.clip_value)
+        # ds = np.diff(data) * self.scale_coef + self.bias
+        d = np.diff(data)
+        std = np.std(d)
+        mean = np.mean(d)
+        self.bias = mean
+        self.scale_coef = std
+        ds = d / std - mean
+        ds = np.clip(ds, -self.clip_value, self.clip_value)
+        # ds = np.clip(ds, -std * self.clip_value, std * self.clip_value)
+        print(f"std={std}, mean={mean}")
         return ds
 
     def inverse_transform(self, output_data):
-        d = (output_data - self.bias) / self.scale_coef
+        d = (output_data + self.bias)*self.scale_coef
+        # d = (output_data - self.bias) / self.scale_coef
         return d
 
     def moving_average(self, a, n=1):

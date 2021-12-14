@@ -78,6 +78,7 @@ class Server(object):
             input_width=self.input_width,
             label_width=self.label_width,
             shift=self.shift,
+            batch_size=4096
         )
         return True
 
@@ -100,25 +101,11 @@ class Server(object):
         return rates
 
     def __get_last_rates__(self, count, start_pos=0):
-        mt5rates = mt5.copy_rates_from_pos(
-            self.symbol, mt5.TIMEFRAME_H1, start_pos, count
-        )
+        mt5rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_H1, start_pos, count)        
         if mt5rates is None:
             logger.error("Ошибка:" + str(mt5.last_error()))
             return None
-        rates = pd.DataFrame(
-            mt5rates,
-            columns=[
-                "time",
-                "open",
-                "high",
-                "low",
-                "close",
-                "tickvol",
-                "spread",
-                "real_volume",
-            ],
-        )
+        rates = pd.DataFrame(mt5rates, columns=["time", "open", "high", "low", "close", "tickvol", "spread", "real_volume"])
         # logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
@@ -187,33 +174,34 @@ class Server(object):
             return False
 
     def is_waiting_train(self, dtimer):
-        return not dtimer.elapsed()
+        if not dtimer.elapsed():
+            return True
+        return False
 
     def train(self, epochs=8, lr=1e-4) -> bool:
         df = self.__get_last_rates__(self.train_rates_count, start_pos=0)
         if df is None:
             return False
         logger.info(f"Получено {len(df.index)} котировок")
-        self.p.dataloader.batch_size = 2 ** 16
         self.p.dataloader.load_df(
             df,
             input_column="open",
-            train_ratio=1 - 1.0 / 8,
-            val_ratio=1.0 / 8,
+            train_ratio=1 - 1.0 / 4,
+            val_ratio=1.0 / 4,
             test_ratio=0,
             verbose=1,
         )
         K.set_value(self.p.model.optimizer.learning_rate, lr)
-
         self.p.fit(
             batch_size=2 ** 16,
             epochs=epochs,
             use_tensorboard=False,
             use_early_stop=False,
-            use_checkpoint=True,
+            use_checkpoint=False,
             verbose=1,
-            use_multiprocessing=True,
+            use_multiprocessing=False
         )
+        logger.info(f"Модель дообучена")
         self.p.save_model()
         logger.info("Модель сохранена")
         return True
@@ -225,38 +213,38 @@ class Server(object):
                 return False
         return True
 
-    def start(self):
-        self.train(epochs=2 ** 10, lr=1e-5)  # Pretrain
+    def start(self):       
+        self.train(epochs=16, lr=1e-5) # Pretrain
         compute_timer = DelayTimer(self.compute_delay)
-        train_timer = DelayTimer(self.train_delay, shift=8 * 60)
+        train_timer = DelayTimer(self.train_delay, shift=10*60)
         self.__compute_old__()  # обновление данных начиная с даты
         logger.info(f"Запуск таймера с периодом {self.compute_delay}")
         while True:
-            if self.is_waiting_compute(compute_timer):
-                continue
-            if not self.is_mt5_ready():
-                continue
-
-            sleep(2)  # задержка для получения последнего бара
-            rates = self.__get_last_rates__(self.input_width + 1)
-            if rates is None:
-                logger.debug("Отсутствуют новые котировки")
-                continue
-            times, prices = rates["time"], rates["open"]
-            results = self.compute(times, prices, verbose=0)
-            if results is None or len(results) == 0:
-                logger.error("Ошибка вычислений")
-                continue
-            # Запись в БД
-            dbcommon.db_replace(self.db, results)
-            # Вывод на экран
-            _, rprice, _, _, _, price, _, _, _ = results[-1]
-            d = round((price - rprice), 5)
-            logger.debug(f"delta={d}")
+            if compute_timer.elapsed():
+                rates = None
+                results = None
+                if self.is_mt5_ready():
+                    sleep(2)  # задержка для получения последнего бара
+                    rates = self.__get_last_rates__(self.input_width + 1)
+                if rates is None:
+                    logger.debug("Отсутствуют новые котировки")
+                else:
+                    times, prices = rates["time"], rates["open"]
+                    results = self.compute(times, prices, verbose=0)
+                if results is None or len(results) == 0:
+                    logger.error("Ошибка вычислений")
+                else:
+                    # Запись в БД
+                    dbcommon.db_replace(self.db, results)
+                    # Вывод на экран
+                    _, rprice, _, _, _, price, _, _, _ = results[-1]
+                    d = round((price - rprice), 5)
+                    logger.debug(f"delta={d}")    
 
             if train_timer.elapsed():
                 logger.debug(f"Дообучение...")
-                self.train(epochs=64, lr=1e-5)
+                self.train(epochs=64, lr=1e-5)            
+                
 
 
 DEBUG = False

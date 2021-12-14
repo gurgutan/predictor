@@ -1,23 +1,23 @@
+import pydot
+import sys
+from models import *
+from dataloader import Dataloader
+import matplotlib.pyplot as plt
+from tensorflow.keras.utils import plot_model
+from tensorflow import keras
+from os import path
+import datetime
+import tensorflow as tf
+import math
+import pandas as pd
+import numpy as np
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["ENV TF_ENABLE_ONEDNN_OPTS"] = "1"
 
-import numpy as np
-import pandas as pd
-import math
-import tensorflow as tf
-import datetime
-from os import path
-from tensorflow import keras
-from tensorflow.keras.utils import plot_model
 
 # from tensorflow.keras.utils import plot_model
-import matplotlib.pyplot as plt
-from dataloader import Dataloader
-from models import *
-import sys
-import pydot
 
 
 class Predictor(object):
@@ -63,15 +63,17 @@ class Predictor(object):
             self.model = model
         else:
             print(
-                "Ошибка загрузки модели модели. Параметр model должен быть либо строкой, либо моделью keras"
+                "Ошибка загрузки модели модели. \n" +
+                "Параметр model должен быть либо строкой, либо моделью keras"
             )
 
     def __call__(self, data):
         # x = self.dataloader.make_input(data)
-        return self.model(data[-self.dataloader.input_width - 1 :])
+        return self.model(data[-self.dataloader.input_width - 1:])
 
     def load_model(self, filename, lr=1e-5):
-        # self.model = keras.models.load_model(self.name, custom_objects={"shifted_mse": shifted_mse})
+        # self.model = keras.models.load_model(self.name, custom_objects={
+        #                                      "shifted_mse": shifted_mse})
         self.model = keras.models.load_model(filename, compile=False)
         self.model.compile(
             loss="mse",
@@ -120,7 +122,8 @@ class Predictor(object):
                 self.model.load_weights(ckpt)
                 if verbose > 0:
                     print(
-                        "Загружены веса последней контрольной точки " + self.model.name
+                        "Загружены веса последней контрольной точки " +
+                        self.model.name
                     )
             except Exception as e:
                 pass
@@ -177,19 +180,19 @@ class Predictor(object):
 
 
 if __name__ == "__main__":
-    batch_size = 2 ** 18
+    batch_size = 2 ** 14
     for param in sys.argv:
         if param == "--gpu":
-            batch_size = 2 ** 10
+            batch_size = 2 ** 13
         elif param == "--cpu":
-            batch_size = 2 ** 14
+            batch_size = 2 ** 16
 
     dataset_segment = 1.0 / 4.0
-    input_width = 2 ** 8
+    input_width = 2 ** 6
     label_width = 1
     columns = 16
 
-    model = dense_att(
+    model = red(
         input_width,
         label_width,
         columns=columns,
@@ -197,7 +200,7 @@ if __name__ == "__main__":
         min_v=-2.0,
         max_v=2.0,
         training=True,
-        name=f"eurusd-h1-{columns}",
+        name=f"red-eurusd-h1-{columns}",
     )
 
     predictor = Predictor(
@@ -211,7 +214,7 @@ if __name__ == "__main__":
         batch_size=batch_size,
     )
 
-    predictor.plot()
+    # predictor.plot()
     predictor.model.summary()
     onednn_enabled = int(os.environ.get("TF_ENABLE_ONEDNN_OPTS", "0"))
     print("\nWe are using Tensorflow version", tf.__version__)
