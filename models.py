@@ -618,7 +618,7 @@ def ConvAdaptiveKernelSize(x, activation, filters=8, kernel_size=2, dropout=0.5)
     x = LayerNormalization()(x)
     # x = BatchNormalization()(x)
     x = Lambda(activation)(x)
-    x = Dropout(rate=dropout)(x)
+    # x = Dropout(rate=dropout)(x)
     return x
 
 
@@ -733,7 +733,7 @@ def red(
     name="red",
 ):
     if training:
-        dropout = 1.0 / 8.0
+        dropout = 1.0 / 256.0
     else:
         dropout = 0
 
@@ -746,7 +746,7 @@ def red(
     # def f_dct(x): return tf.signal.mdct(
     # x, frame_length = 8, norm = 'ortho', pad_end = True)
     n = int(math.log2(input_width))
-    filters = 64
+    filters = 32
     inputs = Input(shape=(input_width,))
     # key = [Lambda(lambda z: z[:, -(2 ** (i+1)) :])(inputs) for i in range(n)]
     # m = [Lambda(f_mean, name=f"mean{i}")(key[i]) for i in range(n)]
@@ -755,17 +755,17 @@ def red(
     # m = Reshape((1, -1))(m)
     f = Lambda(f_dct, name=f"dct")(inputs)
     f = Reshape((-1, 1))(f)
-    # while f.shape[-2] > 1:
-    #     f = ConvAdaptiveKernelSize(f, tf.nn.tanh, filters, 8, dropout)
+    while f.shape[-2] > 1:
+        f = ConvAdaptiveKernelSize(f, tf.nn.tanh, filters, 16, dropout)
     # f = Dropout(rate=dropout)(f)
     # x = Multiply()([m, f])
     # x = Flatten()(f)
-    # x = Dense(32)(x)
-    # x = Reshape((-1, 1))(f)
-    x = LSTM(64, return_sequences=True, dropout=dropout)(f)
+    # x = Dense(64)(x)
+    x = Reshape((-1, 1))(f)
+    x = LSTM(64, return_sequences=True, dropout=dropout)(x)
     x = Flatten()(x)
     x = Dense(32)(x)
-    rows_count = 6
+    rows_count = 8
     units = 32
     z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns)]
     z = [Lambda(f_logtanh)(z[c]) for c in range(columns)]

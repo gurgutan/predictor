@@ -183,14 +183,14 @@ if __name__ == "__main__":
     batch_size = 2 ** 14
     for param in sys.argv:
         if param == "--gpu":
-            batch_size = 2 ** 13
+            batch_size = 2 ** 12
         elif param == "--cpu":
             batch_size = 2 ** 16
 
     dataset_segment = 1.0 / 4.0
     input_width = 2 ** 6
     label_width = 1
-    columns = 16
+    columns = 32
 
     model = red(
         input_width,
