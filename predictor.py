@@ -203,8 +203,9 @@ if __name__ == "__main__":
         name=f"red-eurusd-h1-{columns}",
     )
 
+    data_file = "datas/EURUSD_H1.csv"
     predictor = Predictor(
-        datafile="datas/EURUSD_H1.csv",
+        datafile=data_file,
         model=model,
         input_width=input_width,
         label_width=label_width,
@@ -224,6 +225,13 @@ if __name__ == "__main__":
     while True:
         i += 1
         print(f"\nМодель {model.name} проход №{i}\n")
+        predictor.dataloader.load_tsv(
+            data_file,
+            input_column="open",
+            train_ratio=1.0 - 1.0 * dataset_segment,
+            val_ratio=dataset_segment,
+            test_ratio=0,
+        )
         history = predictor.fit(
             use_tensorboard=False,
             use_early_stop=False,

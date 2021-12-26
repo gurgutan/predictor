@@ -1,13 +1,13 @@
+from server import Server
+import logging
+import getopt
+import sys
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
-import sys
-import getopt
-import logging
-from server import Server
 
 logging.basicConfig(
     handlers=(
@@ -22,29 +22,38 @@ logger = logging.getLogger(__name__)
 
 
 def main():
+    cmd_types = {"--help": "help", "-h": "help",
+                 "--run": "start", "-r": "start"}
     if len(sys.argv) == 1:
         print("Для справки используйте '-h'")
         server = Server()
-        if server.ready: 
+        if server.ready:
             server.start()
         return 0
+    commands = []
     for param in sys.argv:
-        if param in ("-h", "--help"):
+        if param in cmd_types:
+            commands.append(cmd_types[param])
+
+    for cmd in commands:
+        if(cmd == "help"):
             logger.info(__doc__)
             sys.exit(0)
-        if param in ("-r", "--run"):
+        elif(cmd == "start"):
             server = Server()
             if server.ready:
                 server.start()
-            else: 
+            else:
                 print("Сервер не запущен из-за ошибки")
                 sys.exit(3)
+        else:
+            print("Для справки используйте '-h'")
 
 
 if __name__ == "__main__":
     main()
 
- 
+
 # Планы:
 # +1. Отладить создание БД с прогнозами
 # +2. Порядок заполнения БД от последних котировок к старым

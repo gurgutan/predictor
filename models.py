@@ -611,17 +611,6 @@ def mh_att(
     return model
 
 
-def ConvAdaptiveKernelSize(x, activation, filters=8, kernel_size=2, dropout=0.5):
-    k_size = kernel_size if x.shape[-2] >= kernel_size else x.shape[-2]
-    l2 = keras.regularizers.l2(1e-10)
-    x = Conv1D(filters, k_size, padding="valid")(x)
-    x = LayerNormalization()(x)
-    # x = BatchNormalization()(x)
-    x = Lambda(activation)(x)
-    # x = Dropout(rate=dropout)(x)
-    return x
-
-
 def dense_att(
     input_width,
     out_width,
@@ -721,6 +710,16 @@ def MultiKernel(num_heads=1, head_size=8, out_size=8, dropout=0.1, activation="r
     )
     return dense
 
+
+def ConvAdaptiveKernelSize(x, activation, filters=8, kernel_size=2, dropout=0.5):
+    k_size = kernel_size if x.shape[-2] >= kernel_size else x.shape[-2]
+    l2 = keras.regularizers.l2(1e-10)
+    x = Conv1D(filters, k_size, padding="valid")(x)
+    x = LayerNormalization()(x)
+    # x = BatchNormalization()(x)
+    x = Lambda(activation)(x)
+    # x = Dropout(rate=dropout)(x)
+    return x
 
 def red(
     input_width,
