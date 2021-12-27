@@ -1,10 +1,10 @@
 # При использовании оптимизированного Intel образа производительность деградирует более чем в 2 раза
 # FROM docker.io/intelaipg/intel-optimized-tensorflow:2.0.0-mkl-py3
-# FROM docker.io/intelaipg/intel-optimized-tensorflow:latest-mkl-py3
+FROM intel/intel-optimized-tensorflow:mpi-horovod
 
-FROM docker.io/intel/intel-optimized-tensorflow
+# FROM docker.io/intel/intel-optimized-tensorflow
 
-
+# docker pull intel/intel-optimized-tensorflow:mpi-horovod
 ENV http_proxy ""
 ENV https_proxy ""
 

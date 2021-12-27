@@ -721,6 +721,7 @@ def ConvAdaptiveKernelSize(x, activation, filters=8, kernel_size=2, dropout=0.5)
     # x = Dropout(rate=dropout)(x)
     return x
 
+
 def red(
     input_width,
     out_width,
@@ -732,7 +733,7 @@ def red(
     name="red",
 ):
     if training:
-        dropout = 1.0 / 256.0
+        dropout = 0  # 1.0 / 256.0
     else:
         dropout = 0
 

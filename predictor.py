@@ -185,7 +185,7 @@ if __name__ == "__main__":
         if param == "--gpu":
             batch_size = 2 ** 12
         elif param == "--cpu":
-            batch_size = 2 ** 16
+            batch_size = 2 ** 17
 
     dataset_segment = 1.0 / 4.0
     input_width = 2 ** 6
