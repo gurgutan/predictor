@@ -196,7 +196,7 @@ if __name__ == "__main__":
         input_width,
         label_width,
         columns=columns,
-        lr=1e-4,
+        lr=1e-5,
         min_v=-2.0,
         max_v=2.0,
         training=True,

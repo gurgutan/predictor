@@ -214,9 +214,9 @@ class Server(object):
         return True
 
     def start(self):       
-        self.train(epochs=16, lr=1e-5) # Pretrain
+        self.train(epochs=32, lr=1e-5) # Pretrain
         compute_timer = DelayTimer(self.compute_delay)
-        train_timer = DelayTimer(self.train_delay, shift=10*60)
+        train_timer = DelayTimer(self.train_delay, shift=5*60)
         self.__compute_old__()  # обновление данных начиная с даты
         logger.info(f"Запуск таймера с периодом {self.compute_delay}")
         while True:
@@ -224,26 +224,30 @@ class Server(object):
                 rates = None
                 results = None
                 if self.is_mt5_ready():
-                    sleep(2)  # задержка для получения последнего бара
+                    sleep(2)
                     rates = self.__get_last_rates__(self.input_width + 1)
                 if rates is None:
                     logger.debug("Отсутствуют новые котировки")
                 else:
                     times, prices = rates["time"], rates["open"]
                     results = self.compute(times, prices, verbose=0)
-                if results is None or len(results) == 0:
-                    logger.error("Ошибка вычислений")
-                else:
-                    # Запись в БД
-                    dbcommon.db_replace(self.db, results)
-                    # Вывод на экран
-                    _, rprice, _, _, _, price, _, _, _ = results[-1]
-                    d = round((price - rprice), 5)
-                    logger.debug(f"delta={d}")    
+                    if results is None or len(results) == 0:
+                        logger.error("Ошибка вычислений")
+                    else:
+                        # Запись в БД
+                        dbcommon.db_replace(self.db, results)
+                        # Вывод на экран
+                        _, rprice, _, _, _, price, _, _, _ = results[-1]
+                        d = round((price - rprice), 5)
+                        logger.debug(f"delta={d}") 
+            else:
+                sleep(1)
 
             if train_timer.elapsed():
                 logger.debug(f"Дообучение...")
-                self.train(epochs=64, lr=1e-5)            
+                self.train(epochs=32, lr=1e-5)
+            else:
+                sleep(1)
                 
 
 
