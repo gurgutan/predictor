@@ -733,7 +733,7 @@ def red(
     name="red",
 ):
     if training:
-        dropout = 0  # 1.0 / 256.0
+        dropout = 1.0 / 256.0
     else:
         dropout = 0
 
@@ -762,9 +762,9 @@ def red(
     # x = Flatten()(f)
     # x = Dense(64)(x)
     x = Reshape((-1, 1))(f)
-    x = LSTM(64, return_sequences=True, dropout=dropout)(x)
+    x = LSTM(64, return_sequences=True, dropout=dropout, name="lstm-1")(x)
     x = Flatten()(x)
-    x = Dense(32)(x)
+    x = Dense(32, name=f"d-in-0")(x)
     rows_count = 8
     units = 32
     z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns)]
