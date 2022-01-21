@@ -772,7 +772,7 @@ def red(
     for c in range(columns):
         for r in range(rows_count - 1):
             z[c] = Dense(units, name=f"d{c}-{r}")(z[c])
-            z[c] = BatchNormalization()(z[c])
+            z[c] = BatchNormalization()(z[c])g
             z[c] = Lambda(f_logtanh)(z[c])
         z[c] = Dense(out_width)(z[c])
         # z[c] = Lambda(f_logtanh)(z[c])

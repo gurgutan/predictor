@@ -1,0 +1,1 @@
+python -m mt5linux -p 1949 "/home/ivan/.wine/drive_c/Program Files/Python38/python.exe"
