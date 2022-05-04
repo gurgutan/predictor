@@ -156,11 +156,14 @@ class Predictor(object):
             print(f"\nВремя {start_fit_time}->{end_fit_time} : {delta_time}")
         return history
 
-    def evaluate(self):
-        return self.model.evaluate(self.dataloader.test, verbose=1)
+    def evaluate(self, x):
+        return self.model(x, training=False)
 
     def predict(self, data, verbose=0):
-        """Вычисление результата для набора data - массив размерности n"""
+        """
+        Вычисление результата для набора data - массив размерности n
+        Результат - массив numpy размерности (n-in_size, out_size)
+        """
         x = self.dataloader.make_input(data)
         f = self.model.predict(x, use_multiprocessing=True, verbose=verbose)
         y = self.dataloader.make_output(f)
@@ -179,11 +182,14 @@ class Predictor(object):
         return results
 
 
+# ===========================================================================
+# Точка входа
+# ===========================================================================
 if __name__ == "__main__":
     batch_size = 2 ** 14
     for param in sys.argv:
         if param == "--gpu":
-            batch_size = 2 ** 12
+            batch_size = 2 ** 12+2**10
         elif param == "--cpu":
             batch_size = 2 ** 17
 
@@ -196,14 +202,14 @@ if __name__ == "__main__":
         input_width,
         label_width,
         columns=columns,
-        lr=1e-5,
+        lr=1e-4,
         min_v=-2.0,
         max_v=2.0,
         training=True,
         name=f"red-eurusd-h1-{columns}",
     )
 
-    data_file = "datas/EURUSD_H1.csv"
+    data_file = "datas/EURUSD_H1 copy.csv"
     predictor = Predictor(
         datafile=data_file,
         model=model,

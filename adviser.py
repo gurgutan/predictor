@@ -17,6 +17,22 @@
 # ---------------------------------------------------------
 
 # Общие константы
+from mt5common import (
+    send_order,
+    is_trade_allowed,
+    get_account_info,
+    get_equity,
+    is_mt5_connected,
+    init_mt5,
+)
+from timer import DelayTimer
+from time import sleep
+from predictor import Predictor
+import logging
+from datetime import timedelta, datetime
+import pandas as pd
+import numpy as np
+import MetaTrader5 as mt5
 ROBOT_NAME = "Аля"
 VERSION = "0.1"
 AUTHOR = "Слеповичев Иван Иванович"
@@ -33,24 +49,6 @@ DELAY = 300
 USE_TFLITE = False
 REINVEST = 0.01
 # ---------------------------------------------------------
-
-
-import MetaTrader5 as mt5
-import numpy as np
-import pandas as pd
-from datetime import timedelta, datetime
-import logging
-from predictor import Predictor
-from time import sleep
-from timer import DelayTimer
-from mt5common import (
-    send_order,
-    is_trade_allowed,
-    get_account_info,
-    get_equity,
-    is_mt5_connected,
-    init_mt5,
-)
 
 
 logging.basicConfig(
@@ -117,7 +115,8 @@ class Adviser:
         return result
 
     def get_last_rates(self, count):
-        mt5rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M5, 0, count)
+        mt5rates = mt5.copy_rates_from_pos(
+            self.symbol, mt5.TIMEFRAME_M5, 0, count)
         if mt5rates is None:
             logging.error("Ошибка:" + str(mt5.last_error()))
             return None
@@ -176,12 +175,12 @@ class Adviser:
         equity = get_equity()
         if equity is None:
             equity = 0
-        reinvest_k = 1.0 + REINVEST * equity / 10000.0  # для RUB
+        reinvest_k = 1.0 + REINVEST * equity / 90000.0  # для RUB
         trend = self.get_trend()
         targ_vol = round(self.max_vol * round(trend[0], 2) * reinvest_k, 2)
         pos_vol = self._get_pos_vol()
         # защита от открытия ордера при неизвестном объеме позиции
-        if pos_vol == None:
+        if pos_vol is None:
             return
         d = round(targ_vol - pos_vol, 2)
         lot = self.min_vol * sign(d)
@@ -221,7 +220,8 @@ class Adviser:
             if not dtimer.elapsed():
                 remained = dtimer.remained()
                 if remained > 1:
-                    sleep(remained - 0.01)  # ожидаем на 10 мс меньше, чем осталось
+                    # ожидаем на 10 мс меньше, чем осталось
+                    sleep(remained - 0.01)
                 continue
             if not is_mt5_connected():
                 logger.error("Потеряно подключение к MetaTrader5")
@@ -233,7 +233,7 @@ class Adviser:
 
 
 def main():
-    logger.info("===============================================================")
+    logger.info("============================================================")
     logger.info(f"Робот {ROBOT_NAME} v{VERSION}, автор: {AUTHOR}")
     predictor = Predictor(modelname=MODEL_PATH)
     if not predictor.trained:

@@ -764,15 +764,15 @@ def red(
     x = Reshape((-1, 1))(f)
     x = LSTM(64, return_sequences=True, dropout=dropout, name="lstm-1")(x)
     x = Flatten()(x)
-    x = Dense(32, name=f"d-in-0")(x)
+    x = Dense(64, name=f"d-in-0")(x)
     rows_count = 8
-    units = 32
+    units = 16
     z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns)]
     z = [Lambda(f_logtanh)(z[c]) for c in range(columns)]
     for c in range(columns):
         for r in range(rows_count - 1):
             z[c] = Dense(units, name=f"d{c}-{r}")(z[c])
-            z[c] = BatchNormalization()(z[c])g
+            z[c] = BatchNormalization()(z[c])
             z[c] = Lambda(f_logtanh)(z[c])
         z[c] = Dense(out_width)(z[c])
         # z[c] = Lambda(f_logtanh)(z[c])
