@@ -202,14 +202,14 @@ if __name__ == "__main__":
         input_width,
         label_width,
         columns=columns,
-        lr=1e-4,
+        lr=1e-6,
         min_v=-2.0,
         max_v=2.0,
         training=True,
-        name=f"red-eurusd-h1-{columns}",
+        name=f"red-usdchf-h1-{columns}",
     )
 
-    data_file = "datas/EURUSD_H1 copy.csv"
+    data_file = "datas/USDCHF_H1 copy.csv"
     predictor = Predictor(
         datafile=data_file,
         model=model,

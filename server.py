@@ -150,7 +150,7 @@ class Server(object):
         date = dbcommon.db_get_lowdate(self.db)
         delta = dt.timedelta(days=2)
         # delta = dt.timedelta(minutes=(self.p.datainfo._in_size() + 1) * 5)
-        if not date is None:
+        if date is not None:
             from_date = date - delta
         logger.info(f"Вычисление прошлых значений с даты {from_date}")
         rates = self.__get_rates_from_date__(from_date)

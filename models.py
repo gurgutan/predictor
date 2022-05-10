@@ -711,13 +711,13 @@ def MultiKernel(num_heads=1, head_size=8, out_size=8, dropout=0.1, activation="r
     return dense
 
 
-def ConvAdaptiveKernelSize(x, activation, filters=8, kernel_size=2, dropout=0.5):
+def ConvAdaptiveKernelSize(x, activation, filters=8, kernel_size=2, dropout=0.5, name=""):
     k_size = kernel_size if x.shape[-2] >= kernel_size else x.shape[-2]
     l2 = keras.regularizers.l2(1e-10)
     x = Conv1D(filters, k_size, padding="valid")(x)
     x = LayerNormalization()(x)
     # x = BatchNormalization()(x)
-    x = Lambda(activation)(x)
+    x = Lambda(activation, name=f"lamda-{name}")(x)
     # x = Dropout(rate=dropout)(x)
     return x
 
@@ -755,8 +755,11 @@ def red(
     # m = Reshape((1, -1))(m)
     f = Lambda(f_dct, name=f"dct")(inputs)
     f = Reshape((-1, 1))(f)
+    i = 1
     while f.shape[-2] > 1:
-        f = ConvAdaptiveKernelSize(f, tf.nn.tanh, filters, 16, dropout)
+        i = i + 1
+        f = ConvAdaptiveKernelSize(
+            f, tf.nn.tanh, filters, 16, dropout, name=f"{i}")
     # f = Dropout(rate=dropout)(f)
     # x = Multiply()([m, f])
     # x = Flatten()(f)
@@ -768,12 +771,13 @@ def red(
     rows_count = 8
     units = 16
     z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns)]
-    z = [Lambda(f_logtanh)(z[c]) for c in range(columns)]
+    z = [Lambda(f_logtanh, name=f"logtanh-in-{c}")(z[c])
+         for c in range(columns)]
     for c in range(columns):
         for r in range(rows_count - 1):
             z[c] = Dense(units, name=f"d{c}-{r}")(z[c])
             z[c] = BatchNormalization()(z[c])
-            z[c] = Lambda(f_logtanh)(z[c])
+            z[c] = Lambda(f_logtanh, name=f"logtanh-{c}-{r}")(z[c])
         z[c] = Dense(out_width)(z[c])
         # z[c] = Lambda(f_logtanh)(z[c])
     x = Concatenate()(z)
