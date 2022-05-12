@@ -1,12 +1,13 @@
 import math
+
 import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import losses, metrics
 from tensorflow.keras.layers import *
 from tensorflow.keras.models import Sequential
-from tensorflow.keras import losses
-from tensorflow.keras import metrics
-from tensorflow import keras
 from tensorflow.python.keras.layers.convolutional import Conv
 from tensorflow.python.ops.gen_math_ops import Mul
+
 from rbflayer import RBFLayer
 
 
@@ -753,7 +754,8 @@ def red(
     # m = Concatenate(name=f"concat_means")(m)
     # m = Dense(filters)(m)
     # m = Reshape((1, -1))(m)
-    f = Lambda(f_dct, name=f"dct")(inputs)
+    f = Dense(64)(inputs)
+    f = Lambda(f_dct, name=f"dct")(f)
     f = Reshape((-1, 1))(f)
     i = 1
     while f.shape[-2] > 1:

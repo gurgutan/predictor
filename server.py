@@ -183,7 +183,8 @@ class Server(object):
             return True
         return False
 
-    def train(self, epochs=8, lr=1e-4) -> bool:
+    def train(self, epochs=8, lr=1e-4, batch_size=2 ** 10) -> bool:
+        self.p.dataloader.batch_size = batch_size
         df = self.__get_last_rates__(self.train_rates_count, start_pos=0)
         if df is None:
             return False
@@ -202,9 +203,9 @@ class Server(object):
             epochs=epochs,
             use_tensorboard=False,
             use_early_stop=False,
-            use_checkpoint=False,
+            use_checkpoints=False,
             verbose=1,
-            use_multiprocessing=False
+            use_multiprocessing=True,
         )
         logger.info(f"Модель дообучена")
         self.p.save_model()
@@ -219,7 +220,7 @@ class Server(object):
         return True
 
     def start(self):
-        self.train(epochs=32, lr=1e-5)  # Pretrain
+        self.train(epochs=32, lr=1e-5, batch_size=2**6)  # Pretrain
         compute_timer = DelayTimer(self.compute_delay)
         train_timer = DelayTimer(self.train_delay, shift=5*60)
         self.__compute_old__()  # обновление данных начиная с даты
@@ -250,7 +251,7 @@ class Server(object):
 
             if train_timer.elapsed():
                 logger.debug(f"Дообучение...")
-                self.train(epochs=32, lr=1e-5)
+                self.train(epochs=32, lr=1e-5, batch_size=2**6)
             else:
                 sleep(1)
 

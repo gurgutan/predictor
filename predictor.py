@@ -12,6 +12,8 @@ import math
 import pandas as pd
 import numpy as np
 import os
+# import shutil
+from subprocess import call
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["ENV TF_ENABLE_ONEDNN_OPTS"] = "1"
@@ -181,6 +183,11 @@ class Predictor(object):
             results.append(output)
         return results
 
+    def copy_model(self, dst_folder):
+        src = "models/" + self.model.name
+        call(['cp', '-arvu', src, dst_folder])
+        # shutil.copy(src, dst_folder)
+
 
 # ===========================================================================
 # Точка входа
@@ -189,12 +196,12 @@ if __name__ == "__main__":
     batch_size = 2 ** 14
     for param in sys.argv:
         if param == "--gpu":
-            batch_size = 2 ** 12+2**10
+            batch_size = 2 ** 12
         elif param == "--cpu":
             batch_size = 2 ** 17
 
     dataset_segment = 1.0 / 4.0
-    input_width = 2 ** 6
+    input_width = 2 ** 7
     label_width = 1
     columns = 32
 
@@ -202,11 +209,11 @@ if __name__ == "__main__":
         input_width,
         label_width,
         columns=columns,
-        lr=1e-6,
+        lr=1e-4,
         min_v=-2.0,
         max_v=2.0,
         training=True,
-        name=f"red-usdchf-h1-{columns}",
+        name=f"red-usdchfh1-{columns}",
     )
 
     data_file = "datas/USDCHF_H1 copy.csv"
@@ -245,5 +252,7 @@ if __name__ == "__main__":
             epochs=2 ** 10,
         )
         predictor.save_model()
+        # predictor.copy_model(
+        # "smb://keenetic-smb.local/temp/dev/predictor.rc/models/")
         # perfomance = predictor.evaluate()
         print("Модель обновлена")
