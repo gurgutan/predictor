@@ -114,7 +114,7 @@ class Server(object):
         # logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
-    def compute(self, times, prices, verbose=0):
+    def compute(self, times: list, prices: list, verbose=0):
         assert len(times) != 0, f"Ошибка: пустой список котировок"
         # count = len(opens) - self.input_width
         results = []
@@ -157,7 +157,8 @@ class Server(object):
         if rates is None:
             logger.error("Отсутствуют новые котировки")
             return
-        times, prices = rates["time"], rates["open"]
+        times = rates["time"].to_list()
+        prices = rates["open"].to_list()
         results = self.compute(times, prices, verbose=1)
         if results is None:
             return
@@ -235,7 +236,8 @@ class Server(object):
                 if rates is None:
                     logger.debug("Отсутствуют новые котировки")
                 else:
-                    times, prices = rates["time"], rates["open"]
+                    times = rates["time"].to_list()
+                    prices = rates["open"].to_list()
                     results = self.compute(times, prices, verbose=0)
                     if results is None or len(results) == 0:
                         logger.error("Ошибка вычислений")
