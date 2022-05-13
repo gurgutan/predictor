@@ -1,5 +1,5 @@
 import math
-
+from matplotlib.pyplot import axes
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import losses, metrics
@@ -7,6 +7,7 @@ from tensorflow.keras.layers import *
 from tensorflow.keras.models import Sequential
 from tensorflow.python.keras.layers.convolutional import Conv
 from tensorflow.python.ops.gen_math_ops import Mul
+from tensorflow.keras.utils import to_categorical
 
 from rbflayer import RBFLayer
 
@@ -723,6 +724,81 @@ def ConvAdaptiveKernelSize(x, activation, filters=8, kernel_size=2, dropout=0.5,
     return x
 
 
+def tired(
+    input_width,
+    out_width,
+    columns=16,
+    lr=1e-2,
+    min_v=-2,
+    max_v=2,
+    training=True,
+    name="tired",
+):
+    if training:
+        dropout = 1.0 / 16.0
+    else:
+        dropout = 0
+
+    init = keras.initializers.RandomUniform(-1024, 1024)
+    l2 = keras.regularizers.L2(l2=1e-10)
+    dct_length = input_width
+    def f_mean(z): return tf.math.reduce_mean(z, 1, keepdims=True)
+    def f_logtanh(x): return tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
+    def f_dct(x): return tf.signal.dct(x, n=dct_length, norm='ortho')
+    n = int(math.log2(input_width))
+    filters = 32
+    inputs = Input(shape=(input_width, 2))
+    # hours = Dense(dct_length)(inputs[:, 1])
+    # hours = Reshape((-1, 1))(hours)
+    # rates = Dense(dct_length)(inputs[:, 0])
+    # rates = Lambda(f_dct, name=f"dct")(rates)
+    # rates = Reshape((-1, 1))(rates)
+    hours = LayerNormalization()(inputs[:, 1])
+    rates = Concatenate()([inputs[:, 0], hours])
+    rates = Dense(1)(inputs)
+    rates = Reshape((-1, dct_length))(rates)
+    rates = Lambda(f_dct, name=f"dct")(rates)
+    x = Reshape((-1, 1))(rates)
+    i = 1
+    while rates.shape[-2] > 1:
+        i = i + 1
+        x = ConvAdaptiveKernelSize(
+            x, tf.nn.tanh, filters, 16, dropout, name=f"r{i}")
+        # rates = ConvAdaptiveKernelSize(
+        #     rates, tf.nn.tanh, filters, 16, dropout, name=f"r{i}")
+        # hours = ConvAdaptiveKernelSize(
+        #     hours, tf.nn.tanh, filters, 16, dropout, name=f"h{i}")
+    # x = Add()([rates, hours])
+    x = Reshape((-1, 1))(x)
+    x = LSTM(64, return_sequences=True, dropout=dropout, name="lstm-1")(x)
+    x = Flatten()(x)
+    x = Dense(32, name=f"d-in-0")(x)
+    rows_count = 4
+    units = 16
+    z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns)]
+    z = [Lambda(f_logtanh, name=f"logtanh-in-{c}")(z[c])
+         for c in range(columns)]
+    for c in range(columns):
+        for r in range(rows_count - 1):
+            z[c] = Dense(units, name=f"d{c}-{r}")(z[c])
+            z[c] = BatchNormalization()(z[c])
+            z[c] = Lambda(f_logtanh, name=f"logtanh-{c}-{r}")(z[c])
+        z[c] = Dense(out_width)(z[c])
+    x = Concatenate()(z)
+    x = Dense(out_width)(x)
+    outputs = x
+    model = keras.Model(inputs, outputs, name=name)
+    MAE = keras.metrics.MeanAbsoluteError()
+    CMSE = ClippedMSE(min_v, max_v)
+    CMAE = ClippedMAE(min_v, max_v)
+    model.compile(
+        loss=CMSE,
+        optimizer=keras.optimizers.Adam(learning_rate=lr),
+        metrics=[MAE],
+    )
+    return model
+
+
 def red(
     input_width,
     out_width,
@@ -734,7 +810,7 @@ def red(
     name="red",
 ):
     if training:
-        dropout = 1.0 / 256.0
+        dropout = 1.0 / 16.0
     else:
         dropout = 0
 

@@ -196,14 +196,14 @@ if __name__ == "__main__":
     batch_size = 2 ** 14
     for param in sys.argv:
         if param == "--gpu":
-            batch_size = 2 ** 12
+            batch_size = 2 ** 13
         elif param == "--cpu":
             batch_size = 2 ** 17
 
     dataset_segment = 1.0 / 4.0
-    input_width = 2 ** 7
+    input_width = 2 ** 6
     label_width = 1
-    columns = 32
+    columns = 16
 
     model = red(
         input_width,
@@ -213,10 +213,10 @@ if __name__ == "__main__":
         min_v=-2.0,
         max_v=2.0,
         training=True,
-        name=f"red-usdchfh1-{columns}",
+        name=f"tired-usdchfh1-{columns}",
     )
 
-    data_file = "datas/USDCHF_H1 copy.csv"
+    data_file = "datas/USDCHF_H1.csv"
     predictor = Predictor(
         datafile=data_file,
         model=model,
@@ -244,6 +244,7 @@ if __name__ == "__main__":
             train_ratio=1.0 - 1.0 * dataset_segment,
             val_ratio=dataset_segment,
             test_ratio=0,
+            nrows=2**16
         )
         history = predictor.fit(
             use_tensorboard=False,
