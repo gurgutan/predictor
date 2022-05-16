@@ -213,7 +213,7 @@ if __name__ == "__main__":
         min_v=-2.0,
         max_v=2.0,
         training=True,
-        name=f"tired-usdchfh1-{columns}",
+        name=f"red-usdchfh1-{columns}",
     )
 
     data_file = "datas/USDCHF_H1.csv"
