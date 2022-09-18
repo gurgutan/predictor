@@ -12,6 +12,8 @@ import math
 import pandas as pd
 import numpy as np
 import os
+# import shutil
+from subprocess import call
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["ENV TF_ENABLE_ONEDNN_OPTS"] = "1"
@@ -182,6 +184,11 @@ class Predictor(object):
             results.append(output)
         return results
 
+    def copy_model(self, dst_folder):
+        src = "models/" + self.model.name
+        call(['cp', '-arvu', src, dst_folder])
+        # shutil.copy(src, dst_folder)
+
 
 # ===========================================================================
 # Точка входа
@@ -190,14 +197,14 @@ if __name__ == "__main__":
     batch_size = 2 ** 14
     for param in sys.argv:
         if param == "--gpu":
-            batch_size = 2 ** 12+2**10
+            batch_size = 2 ** 13
         elif param == "--cpu":
             batch_size = 2 ** 17
 
     dataset_segment = 1.0 / 4.0
     input_width = 2 ** 6
     label_width = 1
-    columns = 32
+    columns = 16
 
     model = red(
         input_width,
@@ -207,7 +214,7 @@ if __name__ == "__main__":
         min_v=-2.0,
         max_v=2.0,
         training=True,
-        name=f"red-eurusd-h1-{columns}",
+        name=f"red-usdchfh1-{columns}",
     )
 
     data_file = "datas/EURUSD_H1.csv"
@@ -238,6 +245,7 @@ if __name__ == "__main__":
             train_ratio=1.0 - 1.0 * dataset_segment,
             val_ratio=dataset_segment,
             test_ratio=0,
+            nrows=2**16
         )
         history = predictor.fit(
             use_tensorboard=False,
@@ -246,5 +254,7 @@ if __name__ == "__main__":
             epochs=2 ** 10,
         )
         predictor.save_model()
+        # predictor.copy_model(
+        # "smb://keenetic-smb.local/temp/dev/predictor.rc/models/")
         # perfomance = predictor.evaluate()
         print("Модель обновлена")

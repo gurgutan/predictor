@@ -13,8 +13,8 @@ from tensorflow.python.keras.layers.recurrent import LSTM
 # tf.compat.v1.disable_eager_execution()
 
 
-def reduce_mul(t: tuple) -> int:
-    return reduce(operator.mul, self.output_shape)
+# def reduce_mul(t: tuple) -> int:
+#     return reduce(operator.mul, t.output_shape)
 
 
 def shifted_mse(y_true, y_pred):
@@ -41,7 +41,8 @@ def lstm_block(input_shape, output_shape, units, count=2):
     branch1 = branch2 = x
     for i in range(count - 1):
         branch1 = layers.LSTM(units, return_sequences=True)(branch1)
-        branch2 = layers.Conv1D(units, 4, padding="same", activation="relu")(branch2)
+        branch2 = layers.Conv1D(units, 4, padding="same",
+                                activation="relu")(branch2)
 
     x = layers.Multiply()([branch1, branch2])
 
@@ -511,7 +512,8 @@ def multiConv2D(input_shape, output_shape, filters, kernel_size, dense_size):
         )(x)
         x = layers.Activation("softsign")(x)
         x = layers.BatchNormalization()(x)
-        s = layers.MaxPool2D(pool_size=(x.shape[1], x.shape[2]), strides=(1, 1))(x)
+        s = layers.MaxPool2D(pool_size=(
+            x.shape[1], x.shape[2]), strides=(1, 1))(x)
         l.append(s)
         ksize = min([x.shape[1], x.shape[2], kernel_size])
         i += 1

@@ -1,5 +1,5 @@
 """
-Сервер длѝ обновлениѝ БД прогнозов
+Сервер для обновления БД прогнозов
 """
 
 from tensorflow.keras import backend as K
@@ -69,8 +69,7 @@ class Server(object):
             logger.error("Ошибка подключпения к терминалу MT5")
             mt5.shutdown()
             return False
-        logger.info("Подключение к терминалу MT5, версия:" + 
-                str(mt5.version()))
+        logger.info("Подключение к MT5, версия:" + str(mt5.version()))
         return True
 
     def __init_predictor__(self):
@@ -85,7 +84,7 @@ class Server(object):
         )
         return True
 
-    def __get_rates_from_date__(self, from_date):
+    def get_rates_from_date(self, from_date):
         # установим таймзону в UTC
         timezone = pytz.timezone("Etc/UTC")
         rates_count = 0
@@ -103,18 +102,27 @@ class Server(object):
         logger.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
-    def __get_last_rates__(self, count, start_pos=0):
+    def get_rates(self, count, start_pos=0):
+        if not self.is_mt5_ready():
+            return None
         mt5rates = mt5.copy_rates_from_pos(
             self.symbol, mt5.TIMEFRAME_H1, start_pos, count)
         if mt5rates is None:
             logger.error("Ошибка:" + str(mt5.last_error()))
             return None
         rates = pd.DataFrame(mt5rates, columns=[
-            "time", "open", "high", "low", "close", "tickvol", "spread", "real_volume"])
+            "time",
+            "open",
+            "high",
+            "low",
+            "close",
+            "tickvol",
+            "spread",
+            "real_volume"])
         # logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
-    def compute(self, times, prices, verbose=0):
+    def compute(self, times: list, prices: list, verbose=0):
         assert len(times) != 0, f"Ошибка: пустой список котировок"
         assert len(prices) != 0, f"Ошибка: пустой список котировок"
         # последнюю цену усредняем
@@ -160,7 +168,7 @@ class Server(object):
         if date is not None:
             from_date = date - delta
         logger.info(f"Вычисление прошлых значений с даты {from_date}")
-        rates = self.__get_rates_from_date__(from_date)
+        rates = self.get_rates_from_date(from_date)
         if rates is None:
             logger.error("Отсутствуют новые котировки")
             return
@@ -172,9 +180,12 @@ class Server(object):
         # logging.info("Вычислено %d " % len(results))
         dbcommon.db_replace(self.db, results)
 
-    def __is_mt5_connected__(self):
+    def mean(self, a: list) -> float:
+        return sum(a) / len(a)
+
+    def is_mt5_connected(self):
         info = mt5.account_info()
-        if mt5.last_error()[0] < 0:
+        if info is None or mt5.last_error()[0] < 0:
             return False
         return True
 
@@ -191,9 +202,17 @@ class Server(object):
             return True
         return False
 
+    def is_mt5_ready(self):
+        if not self.is_mt5_connected():
+            logger.error("Ошибка подключения к МТ5:" + str(mt5.last_error()))
+            if not self.__init_mt5__():
+                return False
+        return True
+
     def train(self, epochs=8, lr=1e-4, batch_size=2 ** 10) -> bool:
+        logger.debug(f"Дообучение...")
         self.p.dataloader.batch_size = batch_size
-        df = self.__get_last_rates__(self.train_rates_count, start_pos=0)
+        df = self.get_rates(self.train_rates_count, start_pos=0)
         if df is None:
             return False
         logger.info(f"Получено {len(df.index)} котировок")
@@ -217,21 +236,14 @@ class Server(object):
         )
         logger.info(f"Модель дообучена")
         self.p.save_model()
-        logger.info("Модель ѝохранена")
-        return True
-
-    def is_mt5_ready(self):
-        if not self.__is_mt5_connected__():
-            logger.error("Ошибка подключениѝ к МТ5:" + str(mt5.last_error()))
-            if not self.__init_mt5__():
-                return False
+        logger.info("Модель сохранена")
         return True
 
     def start(self):
         self.train(epochs=32, lr=1e-5, batch_size=2 ** 12)  # Pretrain
         compute_timer = DelayTimer(self.compute_delay)
         train_timer = DelayTimer(self.train_delay, shift=5 * 60)
-        self.__compute_old__()  # обновление данных начинаѝ ѝ даты
+        self.__compute_old__()  # обновление данных начиная с даты
         logger.info(f"Запуcк таймера c периодом {self.compute_delay}")
         while True:
             if compute_timer.elapsed():
@@ -241,13 +253,13 @@ class Server(object):
                     sleep(2)
                     rates = self.__get_last_rates__(self.input_width + 1)
                 if rates is None:
-                    logger.debug("Отѝутѝтвуют новые котировки")
+                    logger.debug("Отсутствуют новые котировки")
                 else:
                     times = rates["time"].to_list()
                     prices = rates["open"].to_list()
                     results = self.compute(times, prices, verbose=0)
                     if results is None or len(results) == 0:
-                        logger.error("Ошибка вычиѝлений")
+                        logger.error("Ошибка вычислений")
                     else:
                         # Запись в БД
                         dbcommon.db_replace(self.db, results)
