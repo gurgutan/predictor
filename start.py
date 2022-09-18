@@ -1,13 +1,13 @@
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 from server import Server
 import logging
 import getopt
 import sys
-import os
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
-
 
 logging.basicConfig(
     handlers=(
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     cmd_types = {"--help": "help", "-h": "help",
-                 "--run": "start", "-r": "start"}
+                "--run": "start", "-r": "start"}
     if len(sys.argv) == 1:
         print("Для справки используйте '-h'")
         server = Server()
@@ -36,10 +36,10 @@ def main():
             commands.append(cmd_types[param])
 
     for cmd in commands:
-        if(cmd == "help"):
+        if cmd == "help":
             logger.info(__doc__)
             sys.exit(0)
-        elif(cmd == "start"):
+        elif cmd == "start":
             server = Server()
             if server.ready:
                 server.start()

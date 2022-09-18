@@ -17,6 +17,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["ENV TF_ENABLE_ONEDNN_OPTS"] = "1"
 
 
+
 # from tensorflow.keras.utils import plot_model
 
 
@@ -202,14 +203,14 @@ if __name__ == "__main__":
         input_width,
         label_width,
         columns=columns,
-        lr=1e-4,
+        lr=1e-5,
         min_v=-2.0,
         max_v=2.0,
         training=True,
         name=f"red-eurusd-h1-{columns}",
     )
 
-    data_file = "datas/EURUSD_H1 copy.csv"
+    data_file = "datas/EURUSD_H1.csv"
     predictor = Predictor(
         datafile=data_file,
         model=model,
