@@ -1,6 +1,7 @@
 """
 Сервер для обновления БД прогнозов
 """
+
 from tensorflow.keras import backend as K
 import tensorflow as tf
 import pytz
@@ -29,7 +30,9 @@ class Server(object):
         self.version = 1.2
         self.p = None
         self.ready = False
-        logger.info(f"Робот Аля v{self.version}, автор: Слеповичев И.И.")
+        logger.info(
+            f"Ð Ð¾Ð±Ð¾Ñ‚ Ð�Ð»Ñ� v{self.version}, Ð°Ð²Ñ‚Ð¾Ñ€: Ð¡Ð»ÐµÐ¿Ð¾Ð²Ð¸Ñ‡ÐµÐ² Ð˜Ð²Ð°Ð½ Ð˜Ð²Ð°Ð½Ð¾Ð²Ð¸Ñ‡"
+        )
         with open(configname) as config_file:
             data = json.load(config_file)
             self.dbname = data["dbname"]  # полное имс БД
@@ -63,14 +66,14 @@ class Server(object):
     def __init_mt5__(self):
         # подключимсс к MetaTrader 5
         if not mt5.initialize(path=self.mt5path):
-            logger.error("Ошибка подключпения к терминалу MT5")
+            logger.error("Ошибка подключения к терминалу MT5")
             mt5.shutdown()
             return False
         logger.info("Подключение к терминалу MT5, версия:" + str(mt5.version()))
         return True
 
     def __init_predictor__(self):
-        logger.info("Загрузка и инициализацис модели '%s'" % self.modelname)
+        logger.info("Загрузка и инициализация модели '%s'" % self.modelname)
         self.p = Predictor(
             datafile=None,
             model=self.modelname,
@@ -100,6 +103,8 @@ class Server(object):
         return rates
 
     def get_rates(self, count, start_pos=0):
+        if not self.is_mt5_ready():
+            return None
         mt5rates = mt5.copy_rates_from_pos(
             self.symbol, mt5.TIMEFRAME_H1, start_pos, count
         )
@@ -125,12 +130,13 @@ class Server(object):
     def compute(self, times: list, prices: list, verbose=0):
         assert len(times) != 0, f"Ошибка: пустой список котировок"
         assert len(prices) != 0, f"Ошибка: пустой список котировок"
+
         # count = len(opens) - self.input_width
         results = []
         # вычислсем прогноз
         output_data = self.p.predict(prices, verbose=verbose)
         count = output_data.shape[0]
-        # сформируем результирующий список кортежей длс записи в БД
+        # сформируем результирующий список кортежей для записи в БД
         for i in range(count):
             forecast = output_data[i].flatten()
             for j in range(forecast.shape[0]):
@@ -153,7 +159,10 @@ class Server(object):
                 results.append(db_row)
         return results
 
-    def compute_old(self):
+    def mean(self, a: list) -> float:
+        return sum(a) / len(a)
+
+    def __compute_old__(self):
         from_date = self.initialdate
         # определяем "крайнюю" дату для последующих вычислений
         date = dbcommon.db_get_lowdate(self.db)
@@ -233,17 +242,17 @@ class Server(object):
         return True
 
     def start(self):
-        self.train(epochs=32, lr=1e-4, batch_size=2 ** 12)  # Pretrain
+        self.train(epochs=32, lr=1e-5, batch_size=2 ** 6)  # Pretrain
         compute_timer = DelayTimer(self.compute_delay)
         train_timer = DelayTimer(self.train_delay, shift=5 * 60)
-        self.compute_old()  # обновление данных начинас с даты
-        logger.info(f"Запуcк таймера c периодом {self.compute_delay}")
+        self.compute_old()
+        logger.info(f"Запуск таймера с периодом {self.compute_delay}")
         while True:
             if compute_timer.elapsed():
                 rates = None
                 results = None
                 if self.is_mt5_ready():
-                    sleep(1)
+                    sleep(2)
                     rates = self.get_rates(self.input_width + 1)
                 if rates is None:
                     logger.debug("Отсутствуют новые котировки")
@@ -264,8 +273,8 @@ class Server(object):
                 sleep(1)
 
             if train_timer.elapsed():
-                logger.debug(f"Дообучение...")
-                self.train(epochs=64, lr=1e-4, batch_size=2 ** 12)
+                logger.debug(f"Ð”Ð¾Ð¾Ð±ÑƒÑ‡ÐµÐ½Ð¸Ðµ...")
+                self.train(epochs=32, lr=1e-5, batch_size=2 ** 6)
             else:
                 sleep(1)
 

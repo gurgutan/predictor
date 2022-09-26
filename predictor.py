@@ -125,7 +125,9 @@ class Predictor(object):
                 self.model.load_weights(ckpt)
                 if verbose > 0:
                     print(
-                        "Загружены веса последней контрольной точки " + self.model.name
+                        "Загружены веса последней контрольной точки "
+                        + self.model.name
+                        + self.model.name
                     )
             except Exception as e:
                 pass
@@ -209,14 +211,14 @@ if __name__ == "__main__":
         input_width,
         label_width,
         columns=columns,
-        lr=1e-4,
+        lr=1e-5,
         min_v=-2.0,
         max_v=2.0,
         training=True,
-        name=f"tired-usdchfh1-{columns}",
+        name=f"red-eurusdh1-{columns}",
     )
 
-    data_file = "datas/USDEUR_H1.csv"
+    data_file = "datas/EURUSD_H1.csv"
     predictor = Predictor(
         datafile=data_file,
         model=model,
