@@ -6,7 +6,7 @@ import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 logging.basicConfig(
@@ -22,8 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    cmd_types = {"--help": "help", "-h": "help",
-                 "--run": "start", "-r": "start"}
+    cmd_types = {"--help": "help", "-h": "help", "--run": "start", "-r": "start"}
     if len(sys.argv) == 1:
         print("Для справки используйте '-h'")
         server = Server()
@@ -36,10 +35,10 @@ def main():
             commands.append(cmd_types[param])
 
     for cmd in commands:
-        if(cmd == "help"):
+        if cmd == "help":
             logger.info(__doc__)
             sys.exit(0)
-        elif(cmd == "start"):
+        elif cmd == "start":
             server = Server()
             if server.ready:
                 server.start()
@@ -67,4 +66,5 @@ if __name__ == "__main__":
 # +10. Добавить логирование
 # +11. Переподключение к mt5 в случае потери связи
 # 12. Подготовка релизной версии: predictor+model+DB+MT5+Expert
-# 13. Подготовка контейнера docker с релизом для установки на ubuntu (https://github.com/itishermann/docker-mt5)
+# 13. Подготовка контейнера docker с релизом для установки на ubuntu
+# (https://github.com/itishermann/docker-mt5)

@@ -10,7 +10,6 @@ from timer import DelayTimer
 from time import sleep
 import pandas as pd
 import datetime as dt
-import sqlite3
 import json
 from predictor import Predictor
 import dbcommon
@@ -27,16 +26,15 @@ logger = logging.getLogger(__name__)
 class Server(object):
     def __init__(self):
         configname = "config.json"
-        self.version = 1.1
+        self.version = 1.2
         self.p = None
         self.ready = False
-        logger.info(
-            f"Робот Аля v{self.version}, автор: Слеповичев Иван Иванович")
+        logger.info(f"Робот Аля v{self.version}, автор: Слеповичев И.И.")
         with open(configname) as config_file:
             data = json.load(config_file)
-            self.dbname = data["dbname"]  # полное имя БД
+            self.dbname = data["dbname"]  # полное имс БД
             self.initialdate = dt.datetime.fromisoformat(data["initialdate"])
-            self.modelname = data["modelname"]  # полное имя модели (с путем)
+            self.modelname = data["modelname"]  # полное имс модели (с путем)
             self.symbol = data["symbol"]  # символ инструмента
             self.timeunit = data["timeunit"]
             self.mt5path = data["mt5path"]
@@ -58,29 +56,28 @@ class Server(object):
         logger.info("Открытие БД " + self.dbname)
         self.db = dbcommon.db_open(self.dbname)
         if self.db is None:
-            logger.error("Ошибка открытия БД '%s':" % self.dbname)
+            logger.error("Ошибка открытис БД '%s':" % self.dbname)
             return False
         return True
 
     def __init_mt5__(self):
-        # подключимся к MetaTrader 5
+        # подключимсс к MetaTrader 5
         if not mt5.initialize(path=self.mt5path):
             logger.error("Ошибка подключпения к терминалу MT5")
             mt5.shutdown()
             return False
-        logger.info("Подключение к терминалу MT5, версия:" +
-                    str(mt5.version()))
+        logger.info("Подключение к терминалу MT5, версия:" + str(mt5.version()))
         return True
 
     def __init_predictor__(self):
-        logger.info("Загрузка и инициализация модели '%s'" % self.modelname)
+        logger.info("Загрузка и инициализацис модели '%s'" % self.modelname)
         self.p = Predictor(
             datafile=None,
             model=self.modelname,
             input_width=self.input_width,
             label_width=self.label_width,
             shift=self.shift,
-            batch_size=4096
+            batch_size=4096,
         )
         return True
 
@@ -90,8 +87,7 @@ class Server(object):
         rates_count = 0
         while rates_count < self.input_width + 1:
             mt5rates = mt5.copy_rates_range(
-                self.symbol, mt5.TIMEFRAME_H1, from_date, dt.datetime.now(
-                    tz=timezone)
+                self.symbol, mt5.TIMEFRAME_H1, from_date, dt.datetime.now(tz=timezone)
             )
             if mt5rates is None:
                 logger.error("Ошибка:" + str(mt5.last_error()))
@@ -105,19 +101,24 @@ class Server(object):
 
     def get_rates(self, count, start_pos=0):
         mt5rates = mt5.copy_rates_from_pos(
-            self.symbol, mt5.TIMEFRAME_H1, start_pos, count)
+            self.symbol, mt5.TIMEFRAME_H1, start_pos, count
+        )
         if mt5rates is None:
             logger.error("Ошибка:" + str(mt5.last_error()))
             return None
-        rates = pd.DataFrame(mt5rates, columns=[
-            "time",
-            "open",
-            "high",
-            "low",
-            "close",
-            "tickvol",
-            "spread",
-            "real_volume"])
+        rates = pd.DataFrame(
+            mt5rates,
+            columns=[
+                "time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "tickvol",
+                "spread",
+                "real_volume",
+            ],
+        )
         # logging.debug("Получено " + str(len(rates)) + " котировок")
         return rates
 
@@ -126,10 +127,10 @@ class Server(object):
         assert len(prices) != 0, f"Ошибка: пустой список котировок"
         # count = len(opens) - self.input_width
         results = []
-        # вычисляем прогноз
+        # вычислсем прогноз
         output_data = self.p.predict(prices, verbose=verbose)
         count = output_data.shape[0]
-        # сформируем результирующий список кортежей для записи в БД
+        # сформируем результирующий список кортежей длс записи в БД
         for i in range(count):
             forecast = output_data[i].flatten()
             for j in range(forecast.shape[0]):
@@ -232,17 +233,17 @@ class Server(object):
         return True
 
     def start(self):
-        self.train(epochs=32, lr=1e-5, batch_size=2**6)  # Pretrain
+        self.train(epochs=32, lr=1e-4, batch_size=2 ** 12)  # Pretrain
         compute_timer = DelayTimer(self.compute_delay)
-        train_timer = DelayTimer(self.train_delay, shift=5*60)
-        self.compute_old()  # обновление данных начиная с даты
-        logger.info(f"Запуск таймера с периодом {self.compute_delay}")
+        train_timer = DelayTimer(self.train_delay, shift=5 * 60)
+        self.compute_old()  # обновление данных начинас с даты
+        logger.info(f"Запуcк таймера c периодом {self.compute_delay}")
         while True:
             if compute_timer.elapsed():
                 rates = None
                 results = None
                 if self.is_mt5_ready():
-                    sleep(2)
+                    sleep(1)
                     rates = self.get_rates(self.input_width + 1)
                 if rates is None:
                     logger.debug("Отсутствуют новые котировки")
@@ -255,7 +256,7 @@ class Server(object):
                     else:
                         # Запись в БД
                         dbcommon.db_replace(self.db, results)
-                        # Вывод на экран
+                        # Вывод на скран
                         _, rprice, _, _, _, price, _, _, _ = results[-1]
                         d = round((price - rprice), 5)
                         logger.debug(f"delta={d}")
@@ -264,7 +265,7 @@ class Server(object):
 
             if train_timer.elapsed():
                 logger.debug(f"Дообучение...")
-                self.train(epochs=32, lr=1e-5, batch_size=2**6)
+                self.train(epochs=64, lr=1e-4, batch_size=2 ** 12)
             else:
                 sleep(1)
 

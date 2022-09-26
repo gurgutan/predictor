@@ -12,6 +12,7 @@ import math
 import pandas as pd
 import numpy as np
 import os
+
 # import shutil
 from subprocess import call
 
@@ -65,13 +66,13 @@ class Predictor(object):
             self.model = model
         else:
             print(
-                "Ошибка загрузки модели модели. \n" +
-                "Параметр model должен быть либо строкой, либо моделью keras"
+                "Ошибка загрузки модели модели. \n"
+                + "Параметр model должен быть либо строкой, либо моделью keras"
             )
 
     def __call__(self, data):
         # x = self.dataloader.make_input(data)
-        return self.model(data[-self.dataloader.input_width - 1:])
+        return self.model(data[-self.dataloader.input_width - 1 :])
 
     def load_model(self, filename, lr=1e-5):
         # self.model = keras.models.load_model(self.name, custom_objects={
@@ -124,8 +125,7 @@ class Predictor(object):
                 self.model.load_weights(ckpt)
                 if verbose > 0:
                     print(
-                        "Загружены веса последней контрольной точки " +
-                        self.model.name
+                        "Загружены веса последней контрольной точки " + self.model.name
                     )
             except Exception as e:
                 pass
@@ -185,7 +185,7 @@ class Predictor(object):
 
     def copy_model(self, dst_folder):
         src = "models/" + self.model.name
-        call(['cp', '-arvu', src, dst_folder])
+        call(["cp", "-arvu", src, dst_folder])
         # shutil.copy(src, dst_folder)
 
 
@@ -216,7 +216,7 @@ if __name__ == "__main__":
         name=f"tired-usdchfh1-{columns}",
     )
 
-    data_file = "datas/USDCHF_H1.csv"
+    data_file = "datas/USDEUR_H1.csv"
     predictor = Predictor(
         datafile=data_file,
         model=model,
@@ -244,7 +244,7 @@ if __name__ == "__main__":
             train_ratio=1.0 - 1.0 * dataset_segment,
             val_ratio=dataset_segment,
             test_ratio=0,
-            nrows=2**16
+            nrows=2 ** 16,
         )
         history = predictor.fit(
             use_tensorboard=False,
