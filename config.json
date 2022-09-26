@@ -1,6 +1,6 @@
 {
     "dbname": "D:/Dev/DB/predictions.sqlite",
-    "mt5path": "D:/Dev/Metatrader 5 (VTB Forex)/terminal64.exe",
+    "mt5path": "d:/Dev/Alpari MT5/terminal64.exe",
     "initialdate": "2012-01-01T00:00:00",
     "modelname": "models/red-eurusd-h1-32",
     "symbol": "EURUSD",

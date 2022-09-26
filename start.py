@@ -1,13 +1,13 @@
 import os
+from server import Server
+import logging
+import getopt
+import sys
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-from server import Server
-import logging
-import getopt
-import sys
 
 logging.basicConfig(
     handlers=(
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 def main():
     cmd_types = {"--help": "help", "-h": "help", "--run": "start", "-r": "start"}
     if len(sys.argv) == 1:
-        print("Длѝ ѝправки иѝпользуйте '-h'")
+        print("Для справки используйте '-h'")
         server = Server()
         if server.ready:
             server.start()
@@ -46,7 +46,7 @@ def main():
                 print("Сервер не запущен из-за ошибки")
                 sys.exit(3)
         else:
-            print("Длѝ ѝправки иѝпользуйте '-h'")
+            print("Для справки используйте '-h'")
 
 
 if __name__ == "__main__":

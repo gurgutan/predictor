@@ -30,9 +30,7 @@ class Server(object):
         self.version = 1.2
         self.p = None
         self.ready = False
-        logger.info(
-            f"Ð Ð¾Ð±Ð¾Ñ‚ Ð�Ð»Ñ� v{self.version}, Ð°Ð²Ñ‚Ð¾Ñ€: Ð¡Ð»ÐµÐ¿Ð¾Ð²Ð¸Ñ‡ÐµÐ² Ð˜Ð²Ð°Ð½ Ð˜Ð²Ð°Ð½Ð¾Ð²Ð¸Ñ‡"
-        )
+        logger.info(f"Робот Аля v{self.version}, автор: Слеповичев И.И.")
         with open(configname) as config_file:
             data = json.load(config_file)
             self.dbname = data["dbname"]  # полное имс БД
@@ -49,13 +47,13 @@ class Server(object):
             self.label_width = data["label_width"]
             self.sample_width = data["sample_width"]
             self.shift = data["shift"]
-        if self.__init_db__() and self.__init_mt5__() and self.__init_predictor__():
+        if self.init_db() and self.init_mt5() and self.init_predictor():
             self.ready = True
         else:
             logger.error("Ошибка инициализации сервера")
             self.ready = False
 
-    def __init_db__(self):
+    def init_db(self):
         logger.info("Открытие БД " + self.dbname)
         self.db = dbcommon.db_open(self.dbname)
         if self.db is None:
@@ -63,7 +61,7 @@ class Server(object):
             return False
         return True
 
-    def __init_mt5__(self):
+    def init_mt5(self):
         # подключимсс к MetaTrader 5
         if not mt5.initialize(path=self.mt5path):
             logger.error("Ошибка подключения к терминалу MT5")
@@ -72,7 +70,7 @@ class Server(object):
         logger.info("Подключение к терминалу MT5, версия:" + str(mt5.version()))
         return True
 
-    def __init_predictor__(self):
+    def init_predictor(self):
         logger.info("Загрузка и инициализация модели '%s'" % self.modelname)
         self.p = Predictor(
             datafile=None,
@@ -208,7 +206,7 @@ class Server(object):
     def is_mt5_ready(self):
         if not self.is_mt5_connected():
             logger.error("Ошибка подключения к МТ5:" + str(mt5.last_error()))
-            if not self.__init_mt5__():
+            if not self.init_mt5():
                 return False
         return True
 
@@ -242,7 +240,7 @@ class Server(object):
         return True
 
     def start(self):
-        self.train(epochs=32, lr=1e-5, batch_size=2 ** 6)  # Pretrain
+        self.train(epochs=32, lr=1e-5, batch_size=2 ** 13)  # Pretrain
         compute_timer = DelayTimer(self.compute_delay)
         train_timer = DelayTimer(self.train_delay, shift=5 * 60)
         self.compute_old()
@@ -273,8 +271,8 @@ class Server(object):
                 sleep(1)
 
             if train_timer.elapsed():
-                logger.debug(f"Ð”Ð¾Ð¾Ð±ÑƒÑ‡ÐµÐ½Ð¸Ðµ...")
-                self.train(epochs=32, lr=1e-5, batch_size=2 ** 6)
+                logger.debug(f"Дообучение...")
+                self.train(epochs=32, lr=1e-5, batch_size=2 ** 13)
             else:
                 sleep(1)
 
