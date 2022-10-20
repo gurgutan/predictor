@@ -16,8 +16,11 @@ import os
 # import shutil
 from subprocess import call
 
+
+# os.environ["ENV TF_ENABLE_ONEDNN_OPTS"] = "1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-os.environ["ENV TF_ENABLE_ONEDNN_OPTS"] = "1"
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 # from tensorflow.keras.utils import plot_model
@@ -52,7 +55,7 @@ class Predictor(object):
                 val_ratio=val_ratio,
                 test_ratio=test_ratio,
             )
-        elif type(datafile) == pd.core.frame.DataFrame:
+        elif type(datafile) == pd.core.frame.DataFrame:  # type: ignore
             self.dataloader.load_df(
                 datafile,
                 input_column="open",
@@ -113,16 +116,17 @@ class Predictor(object):
         start_fit_time = datetime.datetime.now()
         log_dir = "logs/fit/" + start_fit_time.strftime("%Y_%m_%d-%H_%M_%S")
         if use_checkpoints:
-            ckpt = "ckpt/" + self.model.name + ".ckpt"
+            ckpt_filename = "ckpt/" + self.model.name + ".ckpt"
             backup = keras.callbacks.ModelCheckpoint(
-                filepath=ckpt,
+                filepath=ckpt_filename,
                 monitor="loss",
                 save_weights_only=True,
                 save_best_only=True,
+                save_freq=1024,
             )
             callbacks.append(backup)
             try:
-                self.model.load_weights(ckpt)
+                self.model.load_weights(ckpt_filename)
                 if verbose > 0:
                     print(
                         "Загружены веса последней контрольной точки "
@@ -138,7 +142,7 @@ class Predictor(object):
         if use_early_stop:
             es = keras.callbacks.EarlyStopping(
                 monitor="val_loss",
-                patience=2 ** 4,
+                patience=2**4,
                 min_delta=1e-5,
                 restore_best_weights=True,
             )
@@ -195,27 +199,29 @@ class Predictor(object):
 # Точка входа
 # ===========================================================================
 if __name__ == "__main__":
-    batch_size = 2 ** 14
+    batch_size = 2**15
     for param in sys.argv:
         if param == "--gpu":
-            batch_size = 2 ** 13
+            batch_size = 2**12
         elif param == "--cpu":
-            batch_size = 2 ** 17
+            batch_size = 2**15
 
     dataset_segment = 1.0 / 4.0
-    input_width = 2 ** 6
+    input_width = 16
     label_width = 1
-    columns = 16
+    columns = 32
+    learning_rate = 1e-3
+    is_training = False
 
-    model = red(
+    model = t1(
         input_width,
         label_width,
         columns=columns,
-        lr=1e-5,
-        min_v=-2.0,
-        max_v=2.0,
-        training=True,
-        name=f"red-eurusdh1-{columns}",
+        lr=learning_rate,
+        min_v=-4.0,
+        max_v=4.0,
+        training=is_training,
+        dropout=1.0/16.0
     )
 
     data_file = "datas/EURUSD_H1.csv"
@@ -233,8 +239,8 @@ if __name__ == "__main__":
     # predictor.plot()
     predictor.model.summary()
     onednn_enabled = int(os.environ.get("TF_ENABLE_ONEDNN_OPTS", "0"))
-    print("\nWe are using Tensorflow version", tf.__version__)
-    print("MKL enabled :", onednn_enabled)
+    # print("MKL enabled :", onednn_enabled)
+    print("\nTensorflow version", tf.__version__)
 
     i = 0
     while True:
@@ -246,14 +252,16 @@ if __name__ == "__main__":
             train_ratio=1.0 - 1.0 * dataset_segment,
             val_ratio=dataset_segment,
             test_ratio=0,
-            nrows=2 ** 16,
+            nrows=2**16,
         )
         history = predictor.fit(
             use_tensorboard=False,
             use_early_stop=False,
+            use_checkpoints=True,
             batch_size=batch_size,
-            epochs=2 ** 10,
+            epochs=2**10,
         )
+
         predictor.save_model()
         # predictor.copy_model(
         # "smb://keenetic-smb.local/temp/dev/predictor.rc/models/")

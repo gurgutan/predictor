@@ -3,11 +3,14 @@ from matplotlib.pyplot import axes
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import losses, metrics
-from tensorflow.keras.layers import *
-from tensorflow.keras.models import Sequential
-from tensorflow.python.keras.layers.convolutional import Conv
+from tensorflow.keras.layers import Dense, LSTM, Concatenate, Lambda
+from tensorflow.keras.layers import Reshape, BatchNormalization, Conv1D
+from tensorflow.keras.layers import Input, Flatten, LeakyReLU, SeparableConv1D
+from tensorflow.keras.layers import Dropout, LayerNormalization, MultiHeadAttention
+# from keras.layers import Sequential
+# from tensorflow.python.keras.layers.convolutional import Conv
 from tensorflow.python.ops.gen_math_ops import Mul
-from tensorflow.keras.utils import to_categorical
+# from tensorflow.keras.utils import to_categorical
 
 from rbflayer import RBFLayer
 
@@ -438,6 +441,36 @@ class ClippedSCE(losses.Loss):
         return losses.sparse_categorical_crossentropy(n_true, clipped_y_pred)
 
 
+class ClippedCSE(tf.keras.losses.Loss):
+    def __init__(
+        self,
+        value_min=-1.0,
+        value_max=1.0,
+        count=8,
+        reduction=tf.keras.losses.Reduction.AUTO,
+        name="clipped_cse",
+    ) -> None:
+        super().__init__(reduction=reduction, name=name)
+        self.value_min = value_min
+        self.value_max = value_max
+        self.count = count
+        self.step = (self.count - 1) / (self.value_max - self.value_min)
+
+    def call(self, y_true, y_pred):
+        clipped_y_pred = tf.clip_by_value(
+            y_pred, self.value_min, self.value_max)
+        clipped_y_true = tf.clip_by_value(
+            y_true, self.value_min, self.value_max)
+        # n_pred = (clipped_y_pred - self.value_min) * self.step
+        indices = tf.cast((clipped_y_true - self.value_min)
+                          * self.step, tf.int32)
+        indices = tf.reshape(indices, [-1])
+        y_true_batch = tf.zeros_like(y_pred)
+        # np.arange(y_pred.shape[0])
+        y_true_batch[1, indices] = 1.0
+        return tf.losses.cosine_similarity(y_true_batch, clipped_y_pred)
+
+
 def dense_boost(
     input_width, out_width, columns=4, lr=1e-3, min_v=-1, max_v=1, name="d-boost"
 ):
@@ -527,90 +560,28 @@ def dense_boost(
     return model
 
 
-def mh_att(
-    input_width,
-    out_width,
-    columns=16,
-    lr=1e-4,
-    min_v=-2,
-    max_v=2,
-    training=True,
-    name="mhatt",
-):
-    if training:
-        dropout = 1.0 / 8.0
-    else:
-        dropout = 0
+def f_std(z):
+    return tf.math.reduce_std(z, 1, keepdims=True)
 
-    init_scale = 2 ** 8
-    kern_init = keras.initializers.RandomUniform(-init_scale, init_scale)
-    l2 = keras.regularizers.L2(l2=1e-10)
-    def f_std(z): return tf.math.reduce_std(z, 1, keepdims=True)
-    def f_mean(z): return tf.math.reduce_mean(z, 1, keepdims=True)
 
-    def f_vrange(z): return (
-        tf.math.reduce_max(z, 1, keepdims=True)
-        - tf.math.reduce_min(z, 1, keepdims=True)
-    )
-    def f_logtanh(x): return tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
-    def f_log(x): return tf.math.log(tf.exp(1.0) + tf.abs(x))
-    n = int(math.log2(input_width))
-    sample_width = min(4, input_width)
-    inputs = Input(shape=(input_width,))
-    y = BatchNormalization()(inputs)
-    x = [Lambda(lambda z: z[:, -(2 ** (i+1)):])(y) for i in range(n)]
-    u = Lambda(lambda z: z[:, -sample_width:])(y)
-    u = Dense(n)(u)
-    u = Reshape((-1, 1))(u)
-    means = [Lambda(f_mean, name=f"mean{i}")(x[i]) for i in range(n)]
-    m = Concatenate(1, name=f"concat_means")(means)
-    m = Reshape((-1, 1))(m)
-    stds = [Lambda(f_std, name=f"std{i}")(x[i]) for i in range(n)]
-    s = Concatenate(1, name=f"concat_stds")(stds)
-    s = Reshape((-1, 1))(s)
-    filters = 16
-    head_size = 32
-    num_heads = 256
-    kernel_size = 2
-    for i in range(6):
-        m = ConvAdaptiveKernelSize(
-            m, f_logtanh, filters, kernel_size, kern_init)
-        s = ConvAdaptiveKernelSize(
-            s, tf.nn.relu, filters, kernel_size, kern_init)
-        u = ConvAdaptiveKernelSize(
-            u, f_logtanh, filters, kernel_size, kern_init)
-    x = Concatenate(axis=-2)([s, m])
-    # x = BatchNormalization()(x)
-    for i in range(4):
-        x = transformer_encoder(x, u, head_size, num_heads, filters, dropout)
-    x = Flatten()(x)
-    rows_count = 4
-    units = 16
-    z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns)]
-    z = [Lambda(f_logtanh)(z[c]) for c in range(columns)]
-    for c in range(columns):
-        for r in range(rows_count - 1):
-            z[c] = Dense(units, name=f"d{c}-{r}")(z[c])
-            z[c] = BatchNormalization()(z[c])
-            z[c] = Lambda(f_logtanh)(z[c])
-        z[c] = Dense(out_width)(z[c])
-        # z[c] = Lambda(f_logtanh)(z[c])
-    x = Concatenate()(z)
-    x = Dense(out_width)(x)
-    # x = Lambda(f_logtanh)(x)
-    outputs = x
-    model = keras.Model(inputs, outputs, name=name)
-    MAE = keras.metrics.MeanAbsoluteError()
-    CMSE = ClippedMSE(min_v, max_v)
-    CMAE = ClippedMAE(min_v, max_v)
-    model.compile(
-        # loss=keras.losses.Huber(),
-        # loss=keras.losses.MeanSquaredError(),
-        loss=CMSE,
-        optimizer=keras.optimizers.Adam(learning_rate=lr),
-        metrics=[MAE],
-    )
-    return model
+def f_mean(z):
+    return tf.math.reduce_mean(z, 1, keepdims=True)
+
+
+def f_vrange(z):
+    return (tf.math.reduce_max(z, 1, keepdims=True) - tf.math.reduce_min(z, 1, keepdims=True))
+
+
+def f_log(x):
+    return tf.math.log(tf.exp(1.0) + tf.abs(x))
+
+
+def f_logtanh(x):
+    return tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)  # type: ignore
+
+
+def f_dct(x):
+    return tf.signal.dct(x, n=64, norm='ortho')
 
 
 def dense_att(
@@ -660,10 +631,9 @@ def dense_att(
 
     filters = 256
     for i in range(4):
-        m = ConvAdaptiveKernelSize(m, f_logtanh, filters, kernel_size, init)
-        s = ConvAdaptiveKernelSize(
-            s, tf.nn.softsign, filters, kernel_size, init)
-        u = ConvAdaptiveKernelSize(u, f_logtanh, filters, kernel_size, init)
+        m = ConvAdaptiveKernelSize(m,  tf.nn.tanh, filters, kernel_size, init)
+        s = ConvAdaptiveKernelSize(s, tf.nn.tanh, filters, kernel_size, init)
+        u = ConvAdaptiveKernelSize(u, tf.nn.tanh, filters, kernel_size, init)
     x = Concatenate(axis=-2)([m, s])
     x = BatchNormalization()(x)
     # x = Reshape((-1, 1))(x)
@@ -711,17 +681,6 @@ def MultiKernel(num_heads=1, head_size=8, out_size=8, dropout=0.1, activation="r
         )
     )
     return dense
-
-
-def ConvAdaptiveKernelSize(x, activation, filters=8, kernel_size=2, dropout=0.5, name=""):
-    k_size = kernel_size if x.shape[-2] >= kernel_size else x.shape[-2]
-    l2 = keras.regularizers.l2(1e-10)
-    x = Conv1D(filters, k_size, padding="valid")(x)
-    x = LayerNormalization()(x)
-    # x = BatchNormalization()(x)
-    x = Lambda(activation, name=f"lamda-{name}")(x)
-    # x = Dropout(rate=dropout)(x)
-    return x
 
 
 def tired(
@@ -799,27 +758,53 @@ def tired(
     return model
 
 
+def ConvAdaptiveKernelSize(x, activation, filters=8, kernel_size=2, dropout=0.5, name=""):
+    k_size = kernel_size if x.shape[-2] >= kernel_size else x.shape[-2]
+    l2 = keras.regularizers.l2(1e-10)  # type: ignore
+    x = Conv1D(filters, k_size, padding="valid")(x)
+    x = LayerNormalization()(x)
+    # x = BatchNormalization()(x)
+    x = Lambda(activation)(x)
+    # x = Dropout(rate=dropout)(x)
+    return x
+
+
+def transformer_encoder(inputs, head_size, num_heads, ff_dim, d=0.0):
+    l2 = keras.regularizers.L2(l2=1e-8)  # type: ignore
+    x = MultiHeadAttention(
+        key_dim=head_size, num_heads=num_heads, dropout=d
+        )(inputs, inputs)
+    x = Dropout(d)(x)
+    x = LayerNormalization(epsilon=1e-8)(x)
+    res = x + inputs
+    x = Conv1D(filters=ff_dim, kernel_size=1, activation="relu",
+    # x = Conv1D(filters=ff_dim, kernel_size=1, activation=tf.nn.softplus,
+               kernel_regularizer=l2, bias_regularizer=l2)(res)
+    x = Dropout(d)(x)
+    x = Conv1D(filters=inputs.shape[-1], kernel_size=1,
+               kernel_regularizer=l2, bias_regularizer=l2)(x)
+    x = LayerNormalization()(x)
+    return x + res
+
+
 def red(
     input_width,
     out_width,
     columns=16,
     lr=1e-2,
-    min_v=-2,
-    max_v=2,
+    min_v=-2.0,
+    max_v=2.0,
     training=True,
     name="red",
 ):
     if training:
-        dropout = 1.0 / 16.0
+        dropout = 1.0 / 256.0
     else:
         dropout = 0
-
     init = keras.initializers.RandomUniform(-1024, 1024)
-    l2 = keras.regularizers.L2(l2=1e-10)
+    l2 = keras.regularizers.L2(l2=1e-10)  # type: ignore
     dct_length = input_width
-    def f_mean(z): return tf.math.reduce_mean(z, 1, keepdims=True)
-    def f_logtanh(x): return tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
-    def f_dct(x): return tf.signal.dct(x, n=dct_length, norm='ortho')
+
     # def f_dct(x): return tf.signal.mdct(
     # x, frame_length = 8, norm = 'ortho', pad_end = True)
     n = int(math.log2(input_width))
@@ -830,8 +815,8 @@ def red(
     # m = Concatenate(name=f"concat_means")(m)
     # m = Dense(filters)(m)
     # m = Reshape((1, -1))(m)
-    f = Dense(64)(inputs)
-    f = Lambda(f_dct, name=f"dct")(f)
+    # f = Dense(64)(inputs)
+    f = Lambda(f_dct, name=f"dct")(inputs, dct_length)
     f = Reshape((-1, 1))(f)
     i = 1
     while f.shape[-2] > 1:
@@ -843,11 +828,11 @@ def red(
     # x = Flatten()(f)
     # x = Dense(64)(x)
     x = Reshape((-1, 1))(f)
-    x = LSTM(64, return_sequences=True, dropout=dropout, name="lstm-1")(x)
+    x = LSTM(128, return_sequences=True, dropout=dropout, name="lstm-1")(x)
     x = Flatten()(x)
-    x = Dense(64, name=f"d-in-0")(x)
-    rows_count = 8
-    units = 16
+    x = Dense(32, name=f"d-in-0")(x)
+    rows_count = 4
+    units = 32
     z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns)]
     z = [Lambda(f_logtanh, name=f"logtanh-in-{c}")(z[c])
          for c in range(columns)]
@@ -874,99 +859,6 @@ def red(
         metrics=[MAE],
     )
     return model
-
-
-def red2(
-    input_width,
-    out_width,
-    columns=16,
-    lr=1e-2,
-    min_v=-2,
-    max_v=2,
-    training=True,
-    name="red2",
-
-
-):
-    if training:
-        dropout = 1/2  # 1.0 / 32.0
-    else:
-        dropout = 0
-
-    init = keras.initializers.RandomUniform(-1024, 1024)
-    l2 = keras.regularizers.L2(l2=1e-10)
-    dct_length = input_width
-    def f_mean(z): return tf.math.reduce_mean(z, 1, keepdims=True)
-    def f_logtanh(x): return tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
-    def f_dct(x): return tf.signal.dct(x, n=dct_length)
-    n = int(math.log2(input_width))
-    filters = 32
-    inputs = Input(shape=(input_width,))
-    # key = [Lambda(lambda z: z[:, -(2 ** (i+1)) :])(inputs) for i in range(n)]
-    # m = [Lambda(f_mean, name=f"mean{i}")(key[i]) for i in range(n)]
-    # m = Concatenate(name=f"concat_means")(m)
-    # m = Dense(filters)(m)
-    # m = Reshape((1, -1))(m)
-    f = Lambda(f_dct, name=f"dct")(inputs)
-    f = Reshape((-1, 1))(f)
-    f = Conv1D(256, 1)(f)
-    for i in range(10):
-        # m = ConvAdaptiveKernelSize(m, f_logtanh, filters, 4, init)
-        f = ConvAdaptiveKernelSize(f, tf.nn.tanh, filters, 4, dropout)
-        # f = Dropout(rate=dropout)(f)
-    # x = Multiply()([m, f])
-    x = Reshape((-1, 1))(f)
-    x = LSTM(128, return_sequences=True, dropout=dropout,
-             kernel_regularizer=l2, bias_regularizer=l2)(x)
-    x = Flatten()(x)
-    x = Dense(32)(x)
-    rows_count = 4
-    units = 16
-    z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns)]
-    z = [Lambda(f_logtanh)(z[c]) for c in range(columns)]
-    for c in range(columns):
-        for r in range(rows_count - 1):
-            z[c] = Dense(
-                units, name=f"d{c}-{r}", kernel_regularizer=l2, bias_regularizer=l2)(z[c])
-            z[c] = BatchNormalization()(z[c])
-            z[c] = Lambda(f_logtanh)(z[c])
-        z[c] = Dense(out_width)(z[c])
-        # z[c] = Lambda(f_logtanh)(z[c])
-    x = Concatenate()(z)
-    x = Dense(out_width)(x)
-    # x = Activation(tf.nn.tanh)(x)
-    # x = Lambda(f_logtanh)(x)
-    outputs = x
-    model = keras.Model(inputs, outputs, name=name)
-    MAE = keras.metrics.MeanAbsoluteError()
-    THE = TanhE()
-    CMAE = ClippedMAE(min_v, max_v)
-    model.compile(
-        # loss=keras.losses.Huber(),
-        # loss=keras.losses.MeanSquaredError(),
-        loss=THE,
-        optimizer=keras.optimizers.Adam(learning_rate=lr),
-        metrics=[MAE],
-    )
-    return model
-
-
-def transformer_encoder(inputs, head_size, num_heads, ff_dim, dropout=0):
-    l2 = keras.regularizers.L2(l2=1e-8)
-    def f_logtanh(x): return tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)
-    x = MultiHeadAttention(key_dim=head_size, num_heads=num_heads, dropout=dropout)(
-        inputs, inputs
-    )
-    x = LayerNormalization(epsilon=1e-8)(x)
-    res = x + inputs
-    # Feed Forward Part
-    x = Conv1D(filters=ff_dim, kernel_size=1, activation=tf.nn.softplus,
-               kernel_regularizer=l2, bias_regularizer=l2)(res)
-    x = Dropout(dropout)(x)
-    x = Conv1D(filters=inputs.shape[-1], kernel_size=1,
-               kernel_regularizer=l2, bias_regularizer=l2)(x)
-    x = LayerNormalization()(x)
-    return x + res
 
 
 def red1(
@@ -1000,7 +892,7 @@ def red1(
     f = Lambda(f_dct, name=f"dct")(f)
     f = Reshape((1, -1))(f)
     for i in range(8):
-        f = transformer_encoder(f, 64, 64, filters, dropout=dropout)
+        f = transformer_encoder(f, 64, 64, filters, d=dropout)
     # x = Reshape((-1, 1))(f)
     # x = LSTM(64, return_sequences=True, dropout=dropout)(x)
     x = Flatten()(f)
@@ -1036,34 +928,130 @@ def red1(
     return model
 
 
-class ClippedCSE(tf.keras.losses.Loss):
-    def __init__(
-        self,
-        value_min=-1.0,
-        value_max=1.0,
-        count=8,
-        reduction=tf.keras.losses.Reduction.AUTO,
-        name="clipped_cse",
-    ) -> None:
-        super().__init__(reduction=reduction, name=name)
-        self.value_min = value_min
-        self.value_max = value_max
-        self.count = count
-        self.step = (self.count - 1) / (self.value_max - self.value_min)
+def t1(
+    input_width,
+    out_width,
+    columns=16,
+    lr=1e-2,
+    min_v=-2.0,
+    max_v=2.0,
+    training=True,
+    dropout=0.5,
+    name="t1",
+):
+    inputs = Input(shape=(input_width,))
+    x = Lambda(f_dct, name=f"dct")(inputs, input_width)
+    x = Reshape((1, -1))(x)
+    filters = 64
+    head_size = 16
+    num_heads = 256
+    name = f"t-{filters}-{head_size}-{num_heads}-{columns}"
+    for i in range(4):
+        x = transformer_encoder(x, head_size, num_heads, filters, dropout)
+    x = Flatten()(x)
+    x = Dense(16, name=f"d-in-0")(x)
+    rows_count = 4
+    units = 16
+    z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns)]
+    z = [Lambda(f_logtanh, name=f"logtanh-in-{c}")(z[c])
+         for c in range(columns)]
+    for c in range(columns):
+        for r in range(rows_count - 1):
+            z[c] = Dense(units, name=f"d{c}-{r}")(z[c])
+            z[c] = BatchNormalization()(z[c])
+            z[c] = Lambda(f_logtanh, name=f"logtanh-{c}-{r}")(z[c])
+        z[c] = Dense(out_width)(z[c])
+        # z[c] = Lambda(f_logtanh)(z[c])
+    x = Concatenate()(z)
+    x = Dense(out_width)(x)
+    # x = Lambda(f_logtanh)(x)
+    outputs = x
+    model = keras.Model(inputs, outputs, name=name)
+    MAE = keras.metrics.MeanAbsoluteError()
+    CMSE = ClippedMSE(min_v, max_v)
+    CMAE = ClippedMAE(min_v, max_v)
+    model.compile(
+        # loss=keras.losses.Huber(),
+        # loss=keras.losses.MeanSquaredError(),
+        loss=CMSE,
+        optimizer=keras.optimizers.Adam(learning_rate=lr),
+        metrics=[MAE],
+    )
+    return model
 
-    def call(self, y_true, y_pred):
-        clipped_y_pred = tf.clip_by_value(
-            y_pred, self.value_min, self.value_max)
-        clipped_y_true = tf.clip_by_value(
-            y_true, self.value_min, self.value_max)
-        # n_pred = (clipped_y_pred - self.value_min) * self.step
-        indices = tf.cast((clipped_y_true - self.value_min)
-                          * self.step, tf.int32)
-        indices = tf.reshape(indices, [-1])
-        y_true_batch = tf.zeros_like(y_pred)
-        # np.arange(y_pred.shape[0])
-        y_true_batch[1, indices] = 1.0
-        return tf.losses.cosine_similarity(y_true_batch, clipped_y_pred)
+
+def mh_att(
+    input_width,
+    out_width,
+    columns=16,
+    lr=1e-4,
+    min_v=-2.0,
+    max_v=2.0,
+    training=True,
+    name="mhatt",
+):
+    if training:
+        dropout = 1.0 / 64.0
+    else:
+        dropout = 0.0
+
+    init_scale = 2 ** 8
+    kern_init = keras.initializers.RandomUniform(-init_scale, init_scale)
+    l2 = keras.regularizers.L2(l2=1e-10)  # type: ignore
+    n = int(math.log2(input_width))
+    sample_width = min(4, input_width)
+    inputs = Input(shape=(input_width,))
+    y = BatchNormalization()(inputs)
+    x = [Lambda(lambda z: z[:, -(2 ** (i+1)):])(y) for i in range(n)]
+    u = Lambda(lambda z: z[:, -sample_width:])(y)
+    u = Dense(n)(u)
+    u = Reshape((-1, 1))(u)
+    means = [Lambda(f_mean, name=f"mean{i}")(x[i]) for i in range(n)]
+    m = Concatenate(1, name=f"concat_means")(means)
+    m = Reshape((-1, 1))(m)
+    stds = [Lambda(f_std, name=f"std{i}")(x[i]) for i in range(n)]
+    s = Concatenate(1, name=f"concat_stds")(stds)
+    s = Reshape((-1, 1))(s)
+    filters = 16
+    head_size = 32
+    num_heads = 256
+    kernel_size = 2
+    for i in range(6):
+        m = ConvAdaptiveKernelSize(m, tf.nn.tanh, filters, kernel_size, kern_init)
+        s = ConvAdaptiveKernelSize(s, tf.nn.relu, filters, kernel_size, kern_init)
+        u = ConvAdaptiveKernelSize(u, tf.nn.tanh, filters, kernel_size, kern_init)
+    x = Concatenate(axis=-2)([s, m])
+    # x = BatchNormalization()(x)
+    for i in range(4):
+        x = transformer_encoder(x, u, head_size, num_heads, filters, dropout)
+    x = Flatten()(x)
+    rows_count = 4
+    units = 16
+    z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns)]
+    z = [Lambda(f_logtanh)(z[c]) for c in range(columns)]
+    for c in range(columns):
+        for r in range(rows_count - 1):
+            z[c] = Dense(units, name=f"d{c}-{r}")(z[c])
+            z[c] = BatchNormalization()(z[c])
+            z[c] = Lambda(f_logtanh)(z[c])
+        z[c] = Dense(out_width)(z[c])
+        # z[c] = Lambda(f_logtanh)(z[c])
+    x = Concatenate()(z)
+    x = Dense(out_width)(x)
+    # x = Lambda(f_logtanh)(x)
+    outputs = x
+    model = keras.Model(inputs, outputs, name=name)
+    MAE = keras.metrics.MeanAbsoluteError()
+    CMSE = ClippedMSE(min_v, max_v)
+    CMAE = ClippedMAE(min_v, max_v)
+    model.compile(
+        # loss=keras.losses.Huber(),
+        # loss=keras.losses.MeanSquaredError(),
+        loss=CMSE,
+        optimizer=keras.optimizers.Adam(learning_rate=lr),
+        metrics=[MAE],
+    )
+    return model
 
 
 def prob_block(inputs, out_width, name="p"):

@@ -28,7 +28,7 @@ class Server(object):
     def __init__(self):
         configname = "config.json"
         self.version = 1.2
-        self.p = None
+        # self.p = None
         self.ready = False
         logger.info(f"Робот Аля v{self.version}, автор: Слеповичев И.И.")
         with open(configname) as config_file:
@@ -63,11 +63,11 @@ class Server(object):
 
     def init_mt5(self):
         # подключимсс к MetaTrader 5
-        if not mt5.initialize(path=self.mt5path):
+        if not mt5.initialize(path=self.mt5path):  # type: ignore
             logger.error("Ошибка подключения к терминалу MT5")
-            mt5.shutdown()
+            mt5.shutdown()  # type: ignore
             return False
-        logger.info("Подключение к терминалу MT5, версия:" + str(mt5.version()))
+        logger.info("Подключение к MT5, версия:" + str(mt5.version()))
         return True
 
     def init_predictor(self):
@@ -160,7 +160,7 @@ class Server(object):
     def mean(self, a: list) -> float:
         return sum(a) / len(a)
 
-    def __compute_old__(self):
+    def compute_old(self):
         from_date = self.initialdate
         # определяем "крайнюю" дату для последующих вычислений
         date = dbcommon.db_get_lowdate(self.db)
@@ -174,15 +174,12 @@ class Server(object):
             logger.error("Отсутствуют новые котировки")
             return
         times = rates["time"].to_list()
-        prices = rates["open"].to_list()
+        prices = rates["open"].to_list()        
         results = self.compute(times, prices, verbose=1)
         if results is None:
             return
         # logging.info("Вычислено %d " % len(results))
         dbcommon.db_replace(self.db, results)
-
-    def mean(self, a: list) -> float:
-        return sum(a) / len(a)
 
     def is_mt5_connected(self):
         info = mt5.account_info()
@@ -210,7 +207,7 @@ class Server(object):
                 return False
         return True
 
-    def train(self, epochs=8, lr=1e-4, batch_size=2 ** 10) -> bool:
+    def train(self, epochs=8, lr=1e-4, batch_size=2**10) -> bool:
         self.p.dataloader.batch_size = batch_size
         df = self.get_rates(self.train_rates_count, start_pos=0)
         if df is None:
@@ -226,7 +223,7 @@ class Server(object):
         )
         K.set_value(self.p.model.optimizer.learning_rate, lr)
         self.p.fit(
-            batch_size=2 ** 16,
+            batch_size=2**16,
             epochs=epochs,
             use_tensorboard=False,
             use_early_stop=False,
@@ -239,42 +236,45 @@ class Server(object):
         logger.info("Модель сохранена")
         return True
 
+    def predict(self):
+        rates = None
+        results = None
+        if self.is_mt5_ready():
+            rates = self.get_rates(self.input_width + 1)
+        else:
+            logger.debug("Отсутствуют подключение к MT5")
+            return
+        if rates is None:
+            logger.debug("Отсутствуют новые котировки")
+            return
+        times = rates["time"].to_list()
+        prices = rates["open"].to_list()
+        # усредняем последнюю цену
+        prices[-1] = (prices[-2] + prices[-1]) / 2.0
+        results = self.compute(times, prices, verbose=0)
+        if results is None or len(results) == 0:
+            logger.error("Ошибка вычислений")
+            return
+        # Запись в БД
+        dbcommon.db_replace(self.db, results)
+        # Вывод на экран
+        _, rprice, _, _, _, price, _, _, _ = results[-1]
+        d = round((price - rprice), 5)
+        logger.debug(f"delta={d}")
+
     def start(self):
-        self.train(epochs=32, lr=1e-5, batch_size=2 ** 13)  # Pretrain
+        self.train(epochs=2**8, lr=1e-5, batch_size=2**15)  # Pretrain
         compute_timer = DelayTimer(self.compute_delay)
         train_timer = DelayTimer(self.train_delay, shift=5 * 60)
         self.compute_old()
         logger.info(f"Запуск таймера с периодом {self.compute_delay}")
         while True:
             if compute_timer.elapsed():
-                rates = None
-                results = None
-                if self.is_mt5_ready():
-                    sleep(2)
-                    rates = self.get_rates(self.input_width + 1)
-                if rates is None:
-                    logger.debug("Отсутствуют новые котировки")
-                else:
-                    times = rates["time"].to_list()
-                    prices = rates["open"].to_list()
-                    results = self.compute(times, prices, verbose=0)
-                    if results is None or len(results) == 0:
-                        logger.error("Ошибка вычислений")
-                    else:
-                        # Запись в БД
-                        dbcommon.db_replace(self.db, results)
-                        # Вывод на скран
-                        _, rprice, _, _, _, price, _, _, _ = results[-1]
-                        d = round((price - rprice), 5)
-                        logger.debug(f"delta={d}")
-            else:
-                sleep(1)
-
+                self.predict()
             if train_timer.elapsed():
                 logger.debug(f"Дообучение...")
-                self.train(epochs=32, lr=1e-5, batch_size=2 ** 13)
-            else:
-                sleep(1)
+                self.train(epochs=2**8, lr=1e-5, batch_size=2**15)
+            sleep(1)
 
 
 # ====================================================
