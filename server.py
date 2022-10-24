@@ -250,7 +250,7 @@ class Server(object):
         times = rates["time"].to_list()
         prices = rates["open"].to_list()
         # усредняем последнюю цену
-        prices[-1] = (prices[-2] + prices[-1]) / 2.0
+        # prices[-1] = (prices[-2] + prices[-1]) / 2.0
         results = self.compute(times, prices, verbose=0)
         if results is None or len(results) == 0:
             logger.error("Ошибка вычислений")
@@ -263,7 +263,7 @@ class Server(object):
         logger.debug(f"delta={d}")
 
     def start(self):
-        self.train(epochs=2**8, lr=1e-5, batch_size=2**15)  # Pretrain
+        self.train(epochs=2**11, lr=1e-5, batch_size=2**15)  # Pretrain
         compute_timer = DelayTimer(self.compute_delay)
         train_timer = DelayTimer(self.train_delay, shift=5 * 60)
         self.compute_old()
@@ -273,7 +273,7 @@ class Server(object):
                 self.predict()
             if train_timer.elapsed():
                 logger.debug(f"Дообучение...")
-                self.train(epochs=2**8, lr=1e-5, batch_size=2**15)
+                self.train(epochs=2**8, lr=1e-4, batch_size=2**15)
             sleep(1)
 
 

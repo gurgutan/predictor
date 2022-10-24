@@ -14,6 +14,7 @@ class Dataloader:
         input_width,
         label_width,
         shift=1,
+        clip_by_value=4.0,
         train_ratio=0.6,
         val_ratio=0.2,
         test_ratio=0.2,
@@ -34,7 +35,7 @@ class Dataloader:
         self.batch_size = batch_size
         self.scale_coef = 1000.0
         self.bias = 0.0
-        self.clip_value = 2.0
+        self.clip_value = clip_by_value
 
     def load_tsv(
         self,
@@ -191,7 +192,7 @@ class Dataloader:
         ds = d / std - mean
         ds = np.clip(ds, -self.clip_value, self.clip_value)
         # ds = np.clip(ds, -std * self.clip_value, std * self.clip_value)
-        print(f"std={std}, mean={mean}")
+        print(f"std={round(std,6)}, mean={round(mean,6)}")
         return ds
 
     def inverse_transform(self, output_data):

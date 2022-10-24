@@ -34,6 +34,7 @@ class Predictor(object):
         input_width,
         label_width,
         shift=None,
+        clip_by_value=4.0,
         train_ratio=0.8,
         val_ratio=0.1,
         test_ratio=0.1,
@@ -45,6 +46,7 @@ class Predictor(object):
             input_width=input_width,
             label_width=label_width,
             shift=shift,
+            clip_by_value=clip_by_value,
             batch_size=batch_size,
         )
         if type(datafile) == str:
@@ -131,7 +133,6 @@ class Predictor(object):
                     print(
                         "Загружены веса последней контрольной точки "
                         + self.model.name
-                        + self.model.name
                     )
             except Exception as e:
                 pass
@@ -192,14 +193,14 @@ class Predictor(object):
     def copy_model(self, dst_folder):
         src = "models/" + self.model.name
         call(["cp", "-arvu", src, dst_folder])
-        # shutil.copy(src, dst_folder)
+        # shutil.16copy(src, dst_folder)
 
 
 # ===========================================================================
 # Точка входа
 # ===========================================================================
 if __name__ == "__main__":
-    batch_size = 2**15
+    batch_size = 2**13
     for param in sys.argv:
         if param == "--gpu":
             batch_size = 2**12
@@ -207,21 +208,23 @@ if __name__ == "__main__":
             batch_size = 2**15
 
     dataset_segment = 1.0 / 4.0
-    input_width = 16
+    input_width = 32
     label_width = 1
     columns = 32
     learning_rate = 1e-3
     is_training = False
+    clip_value = 2.0
+    dropout = 1.0/2.0
 
     model = t1(
         input_width,
         label_width,
         columns=columns,
         lr=learning_rate,
-        min_v=-4.0,
-        max_v=4.0,
+        min_v=-clip_value,
+        max_v=clip_value,
         training=is_training,
-        dropout=1.0/16.0
+        dropout=dropout
     )
 
     data_file = "datas/EURUSD_H1.csv"
@@ -230,6 +233,7 @@ if __name__ == "__main__":
         model=model,
         input_width=input_width,
         label_width=label_width,
+        clip_by_value=clip_value,
         train_ratio=1.0 - 1.0 * dataset_segment,
         val_ratio=dataset_segment,
         test_ratio=0,

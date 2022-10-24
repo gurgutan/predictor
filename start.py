@@ -22,31 +22,34 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    cmd_types = {"--help": "help", "-h": "help", "--run": "start", "-r": "start"}
-    if len(sys.argv) == 1:
-        print("Для справки используйте '-h'")
-        server = Server()
-        if server.ready:
-            server.start()
-        return 0
-    commands = []
-    for param in sys.argv:
-        if param in cmd_types:
-            commands.append(cmd_types[param])
+    server = Server()
+    if server.ready:
+        server.start()
+    # cmd_types = {"--help": "help", "-h": "help", "--run": "start", "-r": "start"}
+    # if len(sys.argv) == 1:
+    #     print("Для справки используйте '-h'")
+    #     server = Server()
+    #     if server.ready:
+    #         server.start()
+    #     return 0
+    # commands = []
+    # for param in sys.argv:
+    #     if param in cmd_types:
+    #         commands.append(cmd_types[param])
 
-    for cmd in commands:
-        if cmd == "help":
-            logger.info(__doc__)
-            sys.exit(0)
-        elif cmd == "start":
-            server = Server()
-            if server.ready:
-                server.start()
-            else:
-                print("Сервер не запущен из-за ошибки")
-                sys.exit(3)
-        else:
-            print("Для справки используйте '-h'")
+    # for cmd in commands:
+    #     if cmd == "help":
+    #         logger.info(__doc__)
+    #         sys.exit(0)
+    #     elif cmd == "start":
+    #         server = Server()
+    #         if server.ready:
+    #             server.start()
+    #         else:
+    #             print("Сервер не запущен из-за ошибки")
+    #             sys.exit(3)
+    #     else:
+    #         print("Для справки используйте '-h'")
 
 
 if __name__ == "__main__":

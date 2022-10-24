@@ -363,8 +363,8 @@ def spectral(input_width, out_width, lr=1e-3):
 class ClippedMSE(losses.Loss):
     def __init__(
         self,
-        value_min=-1.0,
-        value_max=1.0,
+        value_min=-2.0,
+        value_max=2.0,
         reduction=losses.Reduction.AUTO,
         name="clipped_mse",
     ) -> None:
@@ -771,14 +771,14 @@ def ConvAdaptiveKernelSize(x, activation, filters=8, kernel_size=2, dropout=0.5,
 
 def transformer_encoder(inputs, head_size, num_heads, ff_dim, d=0.0):
     l2 = keras.regularizers.L2(l2=1e-8)  # type: ignore
+    x = LayerNormalization(epsilon=1e-8)(inputs)
     x = MultiHeadAttention(
-        key_dim=head_size, num_heads=num_heads, dropout=d
-        )(inputs, inputs)
-    x = Dropout(d)(x)
+        key_dim=head_size, num_heads=num_heads, dropout=d,
+        )(x, inputs)
+    # x = Dropout(d)(x)
     x = LayerNormalization(epsilon=1e-8)(x)
     res = x + inputs
     x = Conv1D(filters=ff_dim, kernel_size=1, activation="relu",
-    # x = Conv1D(filters=ff_dim, kernel_size=1, activation=tf.nn.softplus,
                kernel_regularizer=l2, bias_regularizer=l2)(res)
     x = Dropout(d)(x)
     x = Conv1D(filters=inputs.shape[-1], kernel_size=1,
@@ -939,24 +939,26 @@ def t1(
     dropout=0.5,
     name="t1",
 ):
+    filters = 256
+    head_size = 256
+    num_heads = 64
+    rows = 4
+    name = f"t-{filters}-{head_size}-{num_heads}-{rows}"
     inputs = Input(shape=(input_width,))
     x = Lambda(f_dct, name=f"dct")(inputs, input_width)
+    x = Dense(64, name=f"d-0")(x)
     x = Reshape((1, -1))(x)
-    filters = 64
-    head_size = 16
-    num_heads = 256
-    name = f"t-{filters}-{head_size}-{num_heads}-{columns}"
-    for i in range(4):
+    for i in range(rows):
         x = transformer_encoder(x, head_size, num_heads, filters, dropout)
     x = Flatten()(x)
-    x = Dense(16, name=f"d-in-0")(x)
-    rows_count = 4
+    x = Dense(num_heads, name=f"d-1")(x)
+    rows = 4
     units = 16
     z = [Dense(units, name=f"d-in{c}-{0}")(x) for c in range(columns)]
     z = [Lambda(f_logtanh, name=f"logtanh-in-{c}")(z[c])
          for c in range(columns)]
     for c in range(columns):
-        for r in range(rows_count - 1):
+        for r in range(rows - 1):
             z[c] = Dense(units, name=f"d{c}-{r}")(z[c])
             z[c] = BatchNormalization()(z[c])
             z[c] = Lambda(f_logtanh, name=f"logtanh-{c}-{r}")(z[c])
@@ -969,9 +971,11 @@ def t1(
     model = keras.Model(inputs, outputs, name=name)
     MAE = keras.metrics.MeanAbsoluteError()
     CMSE = ClippedMSE(min_v, max_v)
-    CMAE = ClippedMAE(min_v, max_v)
+    # CMAE = ClippedMAE(min_v, max_v)
+    keras.mixed_precision.set_global_policy('mixed_float16')
     model.compile(
-        # loss=keras.losses.Huber(),
+        # loss=keras.losses.LogCosh(),
+        # loss=keras.losses.MeanSquaredLogarithmicError(),
         # loss=keras.losses.MeanSquaredError(),
         loss=CMSE,
         optimizer=keras.optimizers.Adam(learning_rate=lr),
