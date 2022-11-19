@@ -124,15 +124,14 @@ class Predictor(object):
                 monitor="loss",
                 save_weights_only=True,
                 save_best_only=True,
-                save_freq=1024,
+                save_freq=2 ** 9,
             )
             callbacks.append(backup)
             try:
                 self.model.load_weights(ckpt_filename)
                 if verbose > 0:
                     print(
-                        "Загружены веса последней контрольной точки "
-                        + self.model.name
+                        "Загружены веса последней контрольной точки " + self.model.name
                     )
             except Exception as e:
                 pass
@@ -143,7 +142,7 @@ class Predictor(object):
         if use_early_stop:
             es = keras.callbacks.EarlyStopping(
                 monitor="val_loss",
-                patience=2**4,
+                patience=2 ** 4,
                 min_delta=1e-5,
                 restore_best_weights=True,
             )
@@ -200,21 +199,22 @@ class Predictor(object):
 # Точка входа
 # ===========================================================================
 if __name__ == "__main__":
-    batch_size = 2**13
+    batch_size = 2 ** 15 + 2 ** 12
     for param in sys.argv:
         if param == "--gpu":
-            batch_size = 2**12
+            batch_size = 2 ** 14 + 2 ** 13
         elif param == "--cpu":
-            batch_size = 2**15
+            batch_size = 2 ** 15
 
-    dataset_segment = 1.0 / 4.0
+    dataset_segment = 1.0 / 8.0
+    dataset_rows = 2 ** 16
     input_width = 32
     label_width = 1
     columns = 32
     learning_rate = 1e-3
     is_training = False
     clip_value = 2.0
-    dropout = 1.0/2.0
+    dropout = 1.0 / 2.0
 
     model = t1(
         input_width,
@@ -224,7 +224,7 @@ if __name__ == "__main__":
         min_v=-clip_value,
         max_v=clip_value,
         training=is_training,
-        dropout=dropout
+        dropout=dropout,
     )
 
     data_file = "datas/EURUSD_H1.csv"
@@ -256,14 +256,14 @@ if __name__ == "__main__":
             train_ratio=1.0 - 1.0 * dataset_segment,
             val_ratio=dataset_segment,
             test_ratio=0,
-            nrows=2**16,
+            nrows=dataset_rows,
         )
         history = predictor.fit(
             use_tensorboard=False,
             use_early_stop=False,
             use_checkpoints=True,
             batch_size=batch_size,
-            epochs=2**10,
+            epochs=2 ** 11,
         )
 
         predictor.save_model()

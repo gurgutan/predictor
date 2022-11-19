@@ -227,7 +227,7 @@ class Server(object):
             epochs=epochs,
             use_tensorboard=False,
             use_early_stop=False,
-            use_checkpoints=False,
+            use_checkpoints=True,
             verbose=1,
             use_multiprocessing=True,
         )
@@ -263,17 +263,21 @@ class Server(object):
         logger.debug(f"delta={d}")
 
     def start(self):
-        self.train(epochs=2**11, lr=1e-5, batch_size=2**15)  # Pretrain
-        compute_timer = DelayTimer(self.compute_delay)
-        train_timer = DelayTimer(self.train_delay, shift=5 * 60)
+        epochs = 384
+        lr = 1e-3
+        batch_size = 2**15
+        # Pretrain
+        self.train(epochs=epochs*8, lr=lr, batch_size=batch_size)
+        predict_timer = DelayTimer(self.compute_delay, shift=30)
+        train_timer = DelayTimer(self.train_delay, shift=5*60)
         self.compute_old()
         logger.info(f"Запуск таймера с периодом {self.compute_delay}")
         while True:
-            if compute_timer.elapsed():
+            if predict_timer.elapsed():
                 self.predict()
             if train_timer.elapsed():
                 logger.debug(f"Дообучение...")
-                self.train(epochs=2**8, lr=1e-4, batch_size=2**15)
+                self.train(epochs=epochs, lr=lr, batch_size=batch_size)
             sleep(1)
 
 

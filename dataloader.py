@@ -26,12 +26,10 @@ class Dataloader:
         self.shift = shift
         self.total_window_size = self.input_width + self.shift
         self.input_slice = slice(0, self.input_width)
-        self.input_indices = np.arange(self.total_window_size)[
-            self.input_slice]
+        self.input_indices = np.arange(self.total_window_size)[self.input_slice]
         self.label_start = self.total_window_size - self.label_width
         self.labels_slice = slice(self.label_start, None)
-        self.label_indices = np.arange(self.total_window_size)[
-            self.labels_slice]
+        self.label_indices = np.arange(self.total_window_size)[self.labels_slice]
         self.batch_size = batch_size
         self.scale_coef = 1000.0
         self.bias = 0.0
@@ -45,7 +43,7 @@ class Dataloader:
         val_ratio=0.2,
         test_ratio=0.2,
         verbose=1,
-        nrows=0
+        nrows=0,
     ):
         dataframe = pd.read_csv(
             tsv_filename,
@@ -67,10 +65,10 @@ class Dataloader:
                 "tickvol",
                 "vol",
                 "spread",
-            ]
+            ],
         )
-        if(nrows > 0):
-            if(nrows > dataframe[input_column].size):
+        if nrows > 0:
+            if nrows > dataframe[input_column].size:
                 nrows = dataframe[input_column].size
             self.data = dataframe[-nrows:]
         else:
@@ -86,9 +84,9 @@ class Dataloader:
             -(train_size + val_size + test_size), -(train_size + val_size)
         )
 
-        self.train_df = self.data[input_column][train_slice]
-        self.val_df = self.data[input_column][val_slice]
-        self.test_df = self.data[input_column][test_slice]
+        self.train_df = self.data[input_column].iloc[train_slice]
+        self.val_df = self.data[input_column].iloc[val_slice]
+        self.test_df = self.data[input_column].iloc[test_slice]
         if verbose == 1:
             print(self.__sizes__())
             print(self.__repr__())
@@ -96,7 +94,7 @@ class Dataloader:
 
     def load_df(
         self,
-        df: pd.core.frame.DataFrame,
+        df: pd.core.frame.DataFrame,  # type: ignore
         input_column="open",
         train_ratio=0.6,
         val_ratio=0.2,
@@ -192,11 +190,11 @@ class Dataloader:
         ds = d / std - mean
         ds = np.clip(ds, -self.clip_value, self.clip_value)
         # ds = np.clip(ds, -std * self.clip_value, std * self.clip_value)
-        print(f"std={round(std,6)}, mean={round(mean,6)}")
+        print(f"length={len(data)} std={round(std,6)} mean={round(mean,6)}")
         return ds
 
     def inverse_transform(self, output_data):
-        d = (output_data + self.bias)*self.scale_coef
+        d = (output_data + self.bias) * self.scale_coef
         # d = (output_data - self.bias) / self.scale_coef
         return d
 
