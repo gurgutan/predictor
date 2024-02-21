@@ -78,7 +78,8 @@ TanhE [models.TanhE() - тангенциальная MSE],
 Гауссова MSE [models.esum2() - ]
 ROCAUC для категориальной модели
 **Регуляризация:** L1, L2, BatchNormalization, LayerNormalization, Dropout
-**Активации:**: Помимо классических, также используются
+**Активации:**: 
+Помимо классических, также используются
 ```python
 def f_log(x):
     return tf.math.log(tf.exp(1.0) + tf.abs(x))
@@ -87,7 +88,8 @@ def f_logtanh(x):
     return tf.math.log(tf.exp(1.0) + tf.abs(x)) * tf.tanh(x)  # type: ignore
 ```
 
-**Предобработки:** Эксперименты с различными преобразованиями в разных моделях:
+**Предобработки:**
+Эксперименты с различными преобразованиями в разных моделях:
 Скользящее среднее
 ```python
 def moving_average(a, n=3):
