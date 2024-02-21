@@ -88,7 +88,8 @@ class Server(object):
         rates_count = 0
         while rates_count < self.input_width + 1:
             mt5rates = mt5.copy_rates_range(
-                self.symbol, mt5.TIMEFRAME_H1, from_date, dt.datetime.now(tz=timezone)
+                self.symbol, mt5.TIMEFRAME_H1, from_date, dt.datetime.now(
+                    tz=timezone)
             )
             if mt5rates is None:
                 logger.error("Ошибка:" + str(mt5.last_error()))
@@ -174,7 +175,7 @@ class Server(object):
             logger.error("Отсутствуют новые котировки")
             return
         times = rates["time"].to_list()
-        prices = rates["open"].to_list()        
+        prices = rates["open"].to_list()
         results = self.compute(times, prices, verbose=1)
         if results is None:
             return
@@ -263,6 +264,7 @@ class Server(object):
         logger.debug(f"delta={d}")
 
     def start(self):
+        # количество эпох обучение в каждом цикле планировщика
         epochs = 384
         lr = 1e-3
         batch_size = 2**15
@@ -270,6 +272,7 @@ class Server(object):
         self.train(epochs=epochs*8, lr=lr, batch_size=batch_size)
         predict_timer = DelayTimer(self.compute_delay, shift=30)
         train_timer = DelayTimer(self.train_delay, shift=5*60)
+        # вычисление прогнозов за "прошедший период"
         self.compute_old()
         logger.info(f"Запуск таймера с периодом {self.compute_delay}")
         while True:
